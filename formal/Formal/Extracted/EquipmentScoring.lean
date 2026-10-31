@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 94cfe54dfff4ad204c3d944f16520da536f159f6c065a44fd56eb55ad516ce2f) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 84e96262aa19e98ed0c0c680a2f15e6a304b27b7f2648a74be23f19161342cdf) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipmentScoring
@@ -35,17 +35,17 @@ def weapon_score_combat_pure (elements : List String) (attack : List (String × 
   let non_tool_bonus := (if (decide (subtype = "tool")) then 0 else 1)
   ((RULER_SCALE * (weapon_score_raw_pure elements attack critical_strike monster_resistance)) + non_tool_bonus)
 
-/-- Extracted from `weapon_score_pure` (line 147). -/
+/-- Extracted from `weapon_score_pure` (line 146). -/
 def weapon_score_pure (elements : List String) (attack : List (String × Int)) (subtype : String) (critical_strike : Int) (monster_resistance : List (String × Int)) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) :
     Int :=
   ((weapon_score_combat_pure elements attack subtype critical_strike monster_resistance) + (gear_score_efficiency_pure wisdom prospecting inventory_space haste))
 
-/-- Extracted from `gather_score_pure` (line 169). -/
+/-- Extracted from `gather_score_pure` (line 168). -/
 def gather_score_pure (skill_effects : List (String × Int)) (skill : String) :
     Int :=
   (_dictGetD skill_effects skill 0)
 
-/-- Extracted from `armor_score_combat_pure` (line 179). -/
+/-- Extracted from `armor_score_combat_pure` (line 178). -/
 def armor_score_combat_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (monster_resistance : List (String × Int)) (player_attack : List (String × Int)) (dmg : Int) (dmg_elements : List (String × Int)) (critical_strike : Int) (hp_restore : Int) (hp_bonus : Int) (lifesteal : Int) (combat_buff : Int) :
     Int :=
   let defense := 0
@@ -63,7 +63,7 @@ def armor_score_combat_pure (elements : List String) (resistance : List (String 
   let flat_combat := (((hp_restore + hp_bonus) + lifesteal) + combat_buff)
   (RULER_SCALE * (((200 * defense) + offense) + (200 * flat_combat)))
 
-/-- Extracted from `armor_score_pure` (line 230). -/
+/-- Extracted from `armor_score_pure` (line 229). -/
 def armor_score_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (monster_resistance : List (String × Int)) (player_attack : List (String × Int)) (dmg : Int) (dmg_elements : List (String × Int)) (critical_strike : Int) (hp_restore : Int) (hp_bonus : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (lifesteal : Int) (combat_buff : Int) :
     Int :=
   ((armor_score_combat_pure elements resistance monster_attack monster_resistance player_attack dmg dmg_elements critical_strike hp_restore hp_bonus lifesteal combat_buff) + (gear_score_efficiency_pure wisdom prospecting inventory_space haste))

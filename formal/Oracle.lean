@@ -203,15 +203,6 @@ def runEquipCapValue (isEquippable isDominated : Int) : Json :=
 def runConsumableCapValue (hpRestore : Int) : Json :=
   Json.mkObj [("consumable_cap", Json.num (consumableCapValue hpRestore))]
 
-/-- Evaluate the extracted `strategic_value_pure` (efficiency-weighted scorer,
-    #16). args layout (10 ints): combat_raw, wisdom, prospecting,
-    inventory_space, haste, combat_weight, wisdom_weight, prospecting_weight,
-    inventory_weight, haste_weight. Returns the Lean-computed strategic value. -/
-def runStrategicValue (args : Array Json) : Json :=
-  Json.mkObj [("value", Json.num (Extracted.StrategicValue.strategic_value_pure
-    (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3) (intArg args 4)
-    (intArg args 5) (intArg args 6) (intArg args 7) (intArg args 8) (intArg args 9)))]
-
 /-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
     args layout: equippable(0/1), slotCount, peer_count, then for each
     peer: fitsAllSlots(0/1), strictlyHigher(0/1), coversSkillEffects(0/1),
@@ -283,7 +274,7 @@ def runRankValue (args : Array Json) : Json :=
 
 /-- Evaluate the HAND `Formal.GearValue.rankCombat` and `rankEfficiency` — the
     two terms the ONE gear ruler is the SUM of, and the pair the ECONOMICS layer
-    (`strategic_value`) reads. Replaces the retired `runCombatRaw`, whose
+    (an economics layer) reads. Replaces the retired `runCombatRaw`, whose
     subject (a flat 8-stat sum) no longer exists.
 
     args layout (25 ints): isWeapon(0/1), isTool(0/1), the standard 18-int item
@@ -3076,8 +3067,6 @@ def runOne (item : Json) : Json :=
   else if kind == "equip_cap_value" then
     -- args: [equippable(0/1), dominated(0/1)]
     runEquipCapValue (intArg args 0) (intArg args 1)
-  else if kind == "strategic_value" then
-    runStrategicValue args
   else if kind == "rank_components" then
     -- args: [isWeapon(0/1), isTool(0/1), 18-int item block, flatCombat,
     --        wisdom, prospecting, inventorySpace, haste]

@@ -2679,25 +2679,6 @@ RANK_ADVERSARY_MUTATIONS = [
 ]
 
 
-# strategic_value SYMMETRIC-BOUND mutations. The bound must clamp BOTH ends:
-# live items carry negative efficiency stats (obsidian_battleaxe
-# inventory_space -25), so a one-sided cap leaves the block's span unbounded
-# below and the order-embedding stops being one. OWN run_group — killed by
-# tests/test_ai/test_tiers_strategic_value.py.
-STRATEGIC_BOUND_MUTATIONS = [
-    ("strategic_value: drop the lower bound (span unbounded below)",
-     "        if efficiency_part < -efficiency_budget:\n"
-     "            efficiency_part = -efficiency_budget",
-     "        if False:\n"
-     "            efficiency_part = -efficiency_budget"),
-    ("strategic_value: drop the upper bound (span unbounded above)",
-     "        if efficiency_part > efficiency_budget:\n"
-     "            efficiency_part = efficiency_budget",
-     "        if False:\n"
-     "            efficiency_part = efficiency_budget"),
-]
-
-
 # slot_occupancy mutations -- the ONE authority rule for slot occupancy. Every
 # clause is a dominance requirement whose loss lets the acquisition path
 # pre-empt `pick_loadout` on a swap the picker reverses, i.e. re-opens the
@@ -3260,38 +3241,6 @@ SKILL_GRINDABLE_MUTATIONS = [
 ]
 
 
-
-STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
-
-# strategic_value mutations -- anchors for the EXTRACTED strategic_value_pure
-# (efficiency-weighted cross-slot scorer, #16). Killed by the differential test
-# formal/diff/test_strategic_value_diff.py, which asserts exact-integer agreement
-# with the proved Lean core Extracted.StrategicValue.strategic_value_pure plus
-# the nonneg + per-stat monotonicity contracts (Bridges9). Each substring is
-# code-unique (the docstring deliberately avoids the `stat * weight` tokens).
-STRATEGIC_VALUE_MUTATIONS = [
-    # drop the haste contribution -- diverges whenever haste>0 and haste_weight>0.
-    ("strategic_value: drop haste term",
-     "        + haste * haste_weight",
-     "        + haste * 0"),
-    # drop the prospecting contribution.
-    ("strategic_value: drop prospecting term",
-     "        + prospecting * prospecting_weight",
-     "        + prospecting * 0"),
-    # swap the inventory weight for the combat weight -- diverges when the two
-    # derived rates differ (they always do: combat dominates).
-    ("strategic_value: inventory weight becomes combat weight",
-     "        + inventory_space * inventory_weight",
-     "        + inventory_space * combat_weight"),
-    # flip the wisdom term's sign -- diverges and breaks nonneg under wisdom>0.
-    ("strategic_value: negate wisdom term",
-     "        + wisdom * wisdom_weight",
-     "        - wisdom * wisdom_weight"),
-    # combat product becomes a sum -- diverges unless combat_raw or weight is 0/1.
-    ("strategic_value: combat product becomes sum",
-     "        combat_raw * combat_weight",
-     "        combat_raw + combat_weight"),
-]
 
 
 # recipe_closure mutations -- old strings matched to current recipe_closure.py text
@@ -9617,8 +9566,6 @@ _ALL_SRCS = [
     GATHER_STEP_TARGET_SRC,
     # Gather-batching epic — closure rebatcher.
     INTERMEDIATE_BATCH_SRC,
-    # #16 — efficiency-weighted strategic_value scorer.
-    STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
@@ -13496,8 +13443,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
     run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
               "tests/test_ai/test_skill_grindable.py", survivors)
-    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
-              "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
@@ -14334,8 +14279,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
-              "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,

@@ -1212,34 +1212,6 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.tool_value_abs_gather                       -- tool_value = |gather_score| (cross-core duality)
 #check @Extracted.Bridges.tool_value_neg_gather_on_tools              -- tool domain: max tool_value ≡ min gather_score
 
--- StrategicValue: efficiency-weighted cross-slot priority scorer (#16,
--- PLAN_acquisition_timing.md); extracted from
--- src/artifactsmmo_cli/ai/tiers/strategic_value.py, proved against the hand
--- model Formal/StrategicValue.lean and bridged in Formal/Extracted/Bridges9.lean.
--- Separate from equip_value (combat scorer) — re-weights non-combat efficiency
--- stats so bags/runes get a meaningful, non-1:1 cross-slot value.
-#check @Formal.StrategicValue.combatOf                                -- combat input = GearValue.rankCombat (a TERM of the one ruler)
-#check @Formal.StrategicValue.combatOf_eq_rankCombat                  -- combatOf is definitionally GearValue.rankCombat
-#check @Formal.StrategicValue.combatOf_add_efficiency_eq_rankValue    -- combat input + efficiency term reconstruct the ruler exactly
-#check @Formal.StrategicValue.clampEff                                -- symmetric efficiency bound (live items carry NEGATIVE efficiency)
-#check @Formal.StrategicValue.clampEff_mem                            -- the bound holds: |clampEff| ≤ budget
-#check @Formal.StrategicValue.clampEff_id                             -- inside the budget the bound is the identity
-#check @Formal.StrategicValue.strategicValue_nonneg                   -- hand: nonneg stats+weights ⇒ nonneg (gap-bound precond)
-#check @Formal.StrategicValue.strategicValue_mono_combatRaw           -- hand: monotone in combat_raw
-#check @Formal.StrategicValue.strategicValue_mono_wisdom              -- hand: monotone in wisdom
-#check @Formal.StrategicValue.strategicValue_mono_prospecting         -- hand: monotone in prospecting
-#check @Formal.StrategicValue.strategicValue_mono_inventorySpace      -- hand: monotone in inventory_space (bags)
-#check @Formal.StrategicValue.strategicValue_mono_haste               -- hand: monotone in haste
-#check @Formal.StrategicValue.pure_bag_scores_positive               -- witness: pure bag (inv 35) → 1750
-#check @Formal.StrategicValue.combat_weight_dominates_efficiency     -- witness: combat ×1000 outranks bag ×1
-#check @Extracted.Bridges.strategic_value_bridge                      -- extracted = hand strategicValue, ∀ inputs
-#check @Extracted.Bridges.strategic_value_nonneg_extracted            -- nonneg transferred onto extracted def
-#check @Extracted.Bridges.strategic_value_mono_combatRaw_extracted    -- combat_raw monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_wisdom_extracted       -- wisdom monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_prospecting_extracted  -- prospecting monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted -- inventory_space monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_haste_extracted        -- haste monotone (transferred)
-
 -- RefusalFact required roles (categorical refusals as model facts, Phase 5-1;
 -- src/artifactsmmo_cli/ai/refusal_fact_core.py):
 #check @Formal.RefusalFact.equipped_holds_iff_worn          -- 485 holds exactly while worn

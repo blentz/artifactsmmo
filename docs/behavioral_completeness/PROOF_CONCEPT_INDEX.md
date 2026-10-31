@@ -103,7 +103,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | SkillXpPositive | crafting, gathering, planner | safety |
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
-| StrategicValue | items, characters | safety, monotonicity |
 | StrategyTraversal | crafting, planner | reachability, totality |
 | StuckDetector | core | safety |
 | Synergy | synergy | safety, boundedness |

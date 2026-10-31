@@ -408,12 +408,6 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("_beats", "skill_grind_selection_pure"),
         structures=("GrindCandidate",),
     ),
-    ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/strategic_value.py",
-        output=f"{GENERATED_DIR}/StrategicValue.lean",
-        core_name="StrategicValue",
-        functions=("strategic_value_pure",),
-    ),
 )
 
 

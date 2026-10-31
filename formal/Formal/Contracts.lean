@@ -79,11 +79,9 @@ import Formal.GameDataAccessors
 import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.GearBuildTermination
-import Formal.StrategicValue
 import Formal.GearTaxonomy
 import Formal.GearValue
 import Formal.ArbiterSelect
-import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -2960,43 +2958,6 @@ example : ∀ (g : Formal.StrategyTraversal.Graph), Formal.StrategyTraversal.Wel
       (steps.foldl Formal.Liveness.GearBuildTermination.markSat g).isSat t = true :=
   @Formal.Liveness.GearBuildTermination.grounded_builds_target
 
--- StrategicValue (#16): the extracted efficiency-weighted scorer's code-binding
--- contracts. The bridge is a FULL pointwise equality (extracted flat-arg core =
--- hand structured model, ∀ inputs); nonneg/monotone are TRANSFERRED onto the
--- extracted def. Weakening any (dropping a hypothesis, narrowing to a bounded
--- domain, flipping ≤) fails to elaborate against the proof term.
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW : Int),
-    Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW
-      = Formal.StrategicValue.strategicValue
-        ⟨combatRaw, wisdom, prospecting, inventorySpace, haste⟩
-        ⟨combatW, wisdomW, prospectingW, inventoryW, hasteW⟩ :=
-  @Extracted.Bridges.strategic_value_bridge
--- NONNEG: nonneg stats AND nonneg weights ⇒ nonneg score (ObjectiveGap gap-bound
--- precondition). Dropping any of the ten nonneg hypotheses fails to elaborate.
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW : Int),
-    0 ≤ combatRaw → 0 ≤ wisdom → 0 ≤ prospecting → 0 ≤ inventorySpace → 0 ≤ haste →
-    0 ≤ combatW → 0 ≤ wisdomW → 0 ≤ prospectingW → 0 ≤ inventoryW → 0 ≤ hasteW →
-    0 ≤ Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW :=
-  @Extracted.Bridges.strategic_value_nonneg_extracted
--- MONOTONE in inventory_space (bags), with nonneg inventory weight — the #16
--- load-bearing direction (a bigger bag never lowers strategic value).
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW x' : Int),
-    0 ≤ inventoryW → inventorySpace ≤ x' →
-    Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW
-      ≤ Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting x' haste
-        combatW wisdomW prospectingW inventoryW hasteW :=
-  @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted
-
 /-! ### GearTaxonomy role contracts (pure gear-classification core).
 
 Fully-qualified — `Formal.GearTaxonomy` is NOT opened. These pin the four
@@ -3031,7 +2992,7 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
   @Formal.GearTaxonomy.combatGear_subset_equippable
 
 -- GearValue. rankValue_decomp: THE PARTITION. The one gear ruler IS the sum of
--- the two terms the ECONOMICS layer (strategic_value) weighs, so
+-- the two terms an economics layer would weigh, so
 -- the acquisition score cannot contain a stat the ruler does not, cannot drop one
 -- it does, and cannot count one twice. REPLACES the retired rawSum_decomp, whose
 -- subject (the flat 8-stat combatRaw sum, a second ruler in all but name) no
