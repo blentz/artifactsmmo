@@ -13,8 +13,9 @@ polarities required:
 
 * `gearProgress` restores adequacy EXACTLY at zero: `loadoutAdequate == (gearGap == 0)`
   at every bound state (production: `held = not missing`);
-* `rearmE` re-arms the gap at `GEAR_CAP` (read from `CycleStepE.lean`): every bound
-  gap is at most that;
+* `rearmE` re-arms the gap at `GEAR_CAP` (read from `CycleStepE.lean`), which is
+  production's gear slot count (`len(gear_objective._GEAR_SLOTS)`, asserted equal):
+  `missing` holds at most one piece per slot, so every bound gap is at most that;
 * `perceptionRefreshE`: an adequate state passes through to the fight (production:
   root `ReachCharLevel`, grind target `m*`); an inadequate one arms a NON-fight
   objective step (production: no grind target, root not a level-up);
@@ -23,9 +24,10 @@ polarities required:
   exactly one (a productive one), never raises it, keeps `m*`, and adequacy follows
   the gap to zero. At least one productive cycle must be seen.
 
-What it does NOT bind: `rearmE`'s reset on a level-up is the model's worst case
-(a fresh `GEAR_CAP` gap); production recomputes `L*` and may hold it at once. The
-model is pessimistic there, which a differential over single states cannot pin.
+What it does NOT bind: `rearmE`'s reset on a level-up to a fresh `GEAR_CAP` gap.
+Since `GEAR_CAP` is the gear slot count no `L*` misses more pieces, so the reset is a
+true worst case for the gap; production recomputes `L*` and may hold it at once,
+which a differential over single states cannot pin.
 """
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
-from artifactsmmo_cli.ai.gear_objective import gear_objective
+from artifactsmmo_cli.ai.gear_objective import _GEAR_SLOTS, gear_objective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -74,6 +76,12 @@ def _bound_states() -> list[tuple[str, WorldState]]:
     return out
 
 
+def test_gear_cap_is_the_gear_slot_count() -> None:
+    """`GEAR_CAP` is production's gear slot count: the most pieces any `L*` can
+    miss (one per slot), so the model's rollover reset is a true worst case."""
+    assert _gear_cap() == len(_GEAR_SLOTS)
+
+
 def test_the_bound_fields_satisfy_the_e_tower_invariants() -> None:
     gd = shared_world(BUNDLE)
     cap = _gear_cap()
@@ -85,6 +93,7 @@ def test_the_bound_fields_satisfy_the_e_tower_invariants() -> None:
         adequate, gap = objective.held, len(objective.missing)
         assert adequate == (gap == 0), name
         assert gap <= cap, (name, gap, cap)
+        assert len(objective.missing) <= len({piece.slot for piece in objective.missing}), name
         if state.task_type == "monsters" and state.task_code:
             continue
         ctx = attached(state, gd, CTX, None)
