@@ -1,6 +1,6 @@
-"""Pure core for `Player._winnable_farm_target` (`ai/player.py`).
+"""Pure core for the cycle's grind target (`gear_objective_context.farm_target`).
 
-The three-tier cascade that picks which monster the combat-driving goals
+The two-arm cascade that picks which monster the combat-driving goals
 should target each cycle:
 
   1. `task_monster` — the active task's monster. The SUPPLIER
@@ -9,9 +9,10 @@ should target each cycle:
   2. `path_monster` IF `path_winnable` — the gear objective's `m*`
      (`gear_objective.gear_objective`), winnable exactly while its `L*` is
      held: no fight is chosen for XP while a piece of `L*` is missing (spec
-     2026-10-18 §6.2).
-  3. `pick_winnable` — the player passes None (spec 2026-10-18 §2.4: `m*` is
-     the only XP fight), so a missing `L*` piece leaves no target.
+     2026-10-18 §2.4, §6.2). Otherwise there is no target.
+
+Plan C Task 4 deleted the third arm (a windowed winnable-monster picker the
+player had already stopped supplying): `m*` is the only XP fight.
 
 The decision is total (always returns a value, possibly `None`) and is
 the EXACT precedence used by the production planner to retarget combat.
@@ -37,25 +38,23 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CascadeInputs:
-    """Minimal projection of `Player` state used by the cascade."""
+    """Minimal projection of the cycle used by the cascade."""
 
     task_monster: str | None
     path_monster: str | None
     path_winnable: bool
-    pick_winnable: str | None
 
 
 def winnable_farm_target_pure(inputs: CascadeInputs) -> str | None:
-    """Return the next combat target per the documented 3-tier cascade.
+    """Return the next combat target per the documented two-arm cascade.
 
     Precedence (highest first):
       1. `task_monster` if set (its winnability is the SUPPLIER's
          guarantee — see the module docstring).
-      2. `path_monster` if set AND `path_winnable`.
-      3. `pick_winnable` (may itself be `None` if nothing is winnable).
+      2. `path_monster` if set AND `path_winnable`; otherwise `None`.
     """
     if inputs.task_monster is not None:
         return inputs.task_monster
     if inputs.path_monster is not None and inputs.path_winnable:
         return inputs.path_monster
-    return inputs.pick_winnable
+    return None

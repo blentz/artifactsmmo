@@ -881,7 +881,8 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
 
--- CombatTargetExistence (Phase G3; P0 2026-06-09 window-preferred + fallback):
+-- CombatTargetExistence (Phase G3; the windowed picker, kept for GearTierLeveling
+-- pending a ruling, and the two-arm grind target since plan C Task 4):
 #check @Formal.CombatTargetExistence.pickWinnable_some_of_exists
 #check @Formal.CombatTargetExistence.pickBest_some_of_acc_some
 #check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
@@ -890,6 +891,8 @@ open Formal.PriorityBand
 #check @Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
+#check @Formal.CombatTargetExistence.winnableFarmTarget_none_no_task
+#check @Formal.CombatTargetExistence.winnableFarmTarget_eq_cascade
 
 -- ActionApplicability (Phase G4):
 #check @Formal.ActionApplicability.fightApplicable_false_of_no_locations
@@ -929,7 +932,8 @@ open Formal.PriorityBand
 
 -- LivenessChain (Phase G6 capstone):
 #check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
-#check @Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
+#check @Formal.LivenessChain.chain_none_implies_target_or_applicability_blocked
+#check @Formal.LivenessChain.chain_emits_fight_nonvacuous
 
 -- RankingComposition / PersonalityGrounding rows RETIRED (Phase 4b Task 3):
 -- the composite `_value = base_prior * marginal * balancing` ranker they bridged
@@ -1403,7 +1407,6 @@ open Formal.PriorityBand
 -- reverse direction. Manifest is a CURATED list of headline roles, so large
 -- modules contribute their concluding results, not every internal lemma.
 -- EquipmentProfile (the constant COMBAT-axis selector):
-#check @Formal.EquipmentProfile.planGate_forces_combat       -- combat-inadequate ⇒ COMBAT, for every root category
 #check @Formal.EquipmentProfile.never_utility                -- the selector never chooses the retired UTILITY axis
 #check @Formal.EquipmentProfile.isUtilityObjective_false     -- is_utility_objective is a constant false
 -- InventoryRoom (slot-vs-quantity admission; the 497-livelock core):
@@ -1586,11 +1589,10 @@ open Formal.PriorityBand
 #check @Formal.StrategyTraversal.actStepShared_none_preserves_unvisited
 #check @Formal.StrategyTraversal.actStepShared_sound
 #check @Formal.StrategyTraversal.actionable_step_shared_sound
--- WinnableCascade (6):
+-- WinnableCascade (5):
+#check @Formal.WinnableCascade.none_when_path_not_winnable
 #check @Formal.WinnableCascade.path_result_was_winnable
 #check @Formal.WinnableCascade.path_wins_when_winnable
-#check @Formal.WinnableCascade.pick_wins_when_no_path
-#check @Formal.WinnableCascade.pick_wins_when_path_not_winnable
 #check @Formal.WinnableCascade.task_wins
 #check @Formal.WinnableCascade.totality
 -- GearObjective (spec 2026-10-18 §2.3/§2.4 — the achievable-set fixed point and the

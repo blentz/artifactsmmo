@@ -66,10 +66,10 @@ def is_utility_objective(root: MetaGoal) -> bool:
     return False
 
 
-def profile_for(root: MetaGoal, band_adequate: bool) -> ProfileKind:
+def profile_for(root: MetaGoal) -> ProfileKind:
     """The active equipment profile for pursuing `root`. Skill-level roots — the
     only former utility-axis pursuit — were retired in P3b, so no pursuit selects
     UTILITY anymore; every root is COMBAT-axis (an item's own combat/utility
     nature is decided by the scorer, not this selector). Pure/total."""
-    del root, band_adequate
+    del root
     return ProfileKind.COMBAT

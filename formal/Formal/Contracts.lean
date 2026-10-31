@@ -2033,15 +2033,16 @@ example : Formal.GameDataAccessors.predictWinLite_buggy [] [] "unknown_monster" 
     = true :=
   Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true
 
-/-! ### Phase-11 (Target A): Player._winnable_farm_target cascade -/
+/-! ### Phase-11 (Target A): the grind-target cascade (`farm_target`, two arms
+since plan C Task 4) -/
 
-/-- Statement-pin: task tier wins outright (winnable check bypassed). -/
+/-- Statement-pin: task arm wins outright (winnable check bypassed). -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (t : String),
     i.taskMonster = some t →
     Formal.WinnableCascade.winnableFarmTargetPure i = some t :=
   @Formal.WinnableCascade.task_wins
 
-/-- Statement-pin: path tier wins when task absent and path is winnable. -/
+/-- Statement-pin: path arm wins when task absent and path is winnable. -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.taskMonster = none →
     i.pathMonster = some p →
@@ -2049,30 +2050,20 @@ example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     Formal.WinnableCascade.winnableFarmTargetPure i = some p :=
   @Formal.WinnableCascade.path_wins_when_winnable
 
-/-- Statement-pin: pick tier wins when path absent. -/
-example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
-    i.taskMonster = none →
-    i.pathMonster = none →
-    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
-  @Formal.WinnableCascade.pick_wins_when_no_path
-
-/-- Statement-pin: pick tier wins when path is present but not winnable
-(safety: cascade never returns a non-winnable path monster). -/
+/-- Statement-pin: no target when task absent and the path is not winnable
+(no fight is chosen for XP while a piece of `L*` is missing). -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
     i.taskMonster = none →
     i.pathWinnable = false →
-    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
-  @Formal.WinnableCascade.pick_wins_when_path_not_winnable
+    Formal.WinnableCascade.winnableFarmTargetPure i = none :=
+  @Formal.WinnableCascade.none_when_path_not_winnable
 
-/-- Statement-pin: contrapositive safety — if the cascade returns a path
-monster that is not in the pick fallback, the path must have been
-winnable. -/
+/-- Statement-pin: safety — a result with no task is the path monster, and
+the path was winnable. -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.taskMonster = none →
-    i.pathMonster = some p →
     Formal.WinnableCascade.winnableFarmTargetPure i = some p →
-    i.pickWinnable ≠ some p →
-    i.pathWinnable = true :=
+    i.pathMonster = some p ∧ i.pathWinnable = true :=
   @Formal.WinnableCascade.path_result_was_winnable
 
 /-! ### RealizableLoadout (Phase-15, revised 2026-06-11): full `pick_loadout`

@@ -20,22 +20,18 @@ def isUtilityObjective : RootCategory → Bool
   | .charLevel => false
   | .gear => false
 
-/-- `profile_for` is a constant COMBAT for every root and adequacy (utility axis
-retired in P3b — an item's own combat/utility nature is decided by the scorer,
-not this selector). Pure/total. -/
-def profileFor (_cat : RootCategory) (_bandAdequate : Bool) : ProfileKind :=
+/-- `profile_for` is a constant COMBAT for every root (utility axis retired in
+P3b — an item's own combat/utility nature is decided by the scorer, not this
+selector). Pure/total. Plan C Task 4 deleted its band-adequacy parameter with
+the adequacy verdict it read (and `planGate_forces_combat`, which was stated
+over it). -/
+def profileFor (_cat : RootCategory) : ProfileKind :=
   .combat
-
-/-- PLAN-GATE INVARIANT: combat-inadequate ⇒ COMBAT, for every root category.
-Now a corollary of the constant selector, retained as the combat floor the whole
-design rests on. -/
-theorem planGate_forces_combat (cat : RootCategory) :
-    profileFor cat false = .combat := rfl
 
 /-- The selector NEVER chooses UTILITY: every root is COMBAT-axis (the retired
 utility axis). -/
-theorem never_utility (cat : RootCategory) (adequate : Bool) :
-    profileFor cat adequate ≠ .utility := by
+theorem never_utility (cat : RootCategory) :
+    profileFor cat ≠ .utility := by
   show ProfileKind.combat ≠ ProfileKind.utility
   decide
 
@@ -44,13 +40,11 @@ theorem isUtilityObjective_false (cat : RootCategory) :
     isUtilityObjective cat = false := by
   cases cat <;> rfl
 
-/-- The constant selector pins every one of the 4 remaining cases explicitly so
-a future edit that broke the constant COMBAT selector fails the build. -/
+/-- The constant selector pins both remaining cases explicitly so a future
+edit that broke the constant COMBAT selector fails the build. -/
 example :
-    profileFor .charLevel true = .combat ∧
-    profileFor .gear true = .combat ∧
-    profileFor .charLevel false = .combat ∧
-    profileFor .gear false = .combat := by
+    profileFor .charLevel = .combat ∧
+    profileFor .gear = .combat := by
   decide
 
 end Formal.EquipmentProfile

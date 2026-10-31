@@ -26,7 +26,6 @@ tier 1 for cause 2 and say so where it matters. Live data behaves like neither
 extreme — `plan Robby` at L30 targets L30-tier gear — which is recorded in
 `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`."""
 
-import json
 from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
@@ -41,14 +40,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import (
-    _structural_candidates,
-    decide_tree,
-    has_structural_upgrade,
-)
-from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
-from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
@@ -318,25 +311,6 @@ class TestStepDeclineInTheWalk:
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
 # never reach) ----------------------------------------------------------
 
-class TestHasStructuralUpgrade:
-    """has_structural_upgrade: the tier-aware adequacy leg (2026-07-07 live
-    shadow finding — filled COPPER slots at L14 must NOT read as adequate)."""
-
-    def test_true_when_positive_gain_upgrade_reachable(self):
-        gd = _bundle()
-        state = scenario_state(SCENARIOS["l10_weapon_upgrade"], gd)
-        assert has_structural_upgrade(state, gd,
-                                      CharacterObjective.from_game_data(gd))
-
-    def test_true_for_filled_but_underleveled_set(self):
-        """Full copper set, higher-tier targets exist: NOT adequate —
-        the exact live-review correction (slots filled ≠ at-band-tier)."""
-        gd = _bundle()
-        state = scenario_state(SCENARIOS["l10_copper_adequate"], gd)
-        assert has_structural_upgrade(state, gd,
-                                      CharacterObjective.from_game_data(gd))
-
-
 class TestSyntheticBranches:
     def test_xp_branch_fires_when_gear_wants_nothing(self):
         """REWRITTEN Task 5 (ruling Y) on a HELD shape: the character wears its
@@ -359,98 +333,3 @@ class TestSyntheticBranches:
         assert d.fallback_roots == []
         assert d.fallback_steps == []
         assert len(d.ranking) == 1  # trunk row only
-
-    def test_candidate_builders_skip_unknown_item_stats(self):
-        """`_structural_candidates` is computed from the OBJECTIVE's own bound
-        game_data (baked in at `from_game_data` time), not the `game_data`
-        parameter it separately receives. If the two ever diverge,
-        `item_stats(code)` can miss and the builder must skip the code rather
-        than crash. An empty `GameData` makes every code the objective offers
-        unknown, exercising the `stats is None: continue` guard.
-
-        WAVE 3a re-pointed this at `objective_candidates`, which concatenated
-        this builder with `_utility_candidates`' matching guard. WAVE 3b
-        deleted `_utility_candidates` and `objective_candidates` themselves
-        (zero production callers — `decide_tree` stopped reading them in
-        wave 3a and the last diagnostic reader, `commands/objective.py`, was
-        retired in wave 3b), so this test now calls `_structural_candidates`
-        directly and only pins its own guard."""
-        gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
-        objective = CharacterObjective.from_game_data(gd_full)
-        state = scenario_state(SCENARIOS["l1_fresh"], gd_full)
-        assert objective.near_term_gear(state), "sanity: real bundle offers structural candidates"
-        assert _structural_candidates(state, gd_full, objective), \
-            "sanity: the SAME call is non-empty against the matching catalogue"
-        assert _structural_candidates(state, GameData(), objective) == []
-
-
-# --- The weapon-slot winnability guard in `_structural_candidates` ------------
-#
-# Coverage of that guard's `continue` used to ride on the achievability
-# acceptance witness, which wave 3b deleted along with `_achievability_map`. The
-# guard itself is LIVE — it is the fire_bow fix, where a damage-type-blind ruler
-# ground weaponcrafting toward a combat DOWNGRADE — so it gets a direct test
-# rather than incidental coverage. Both directions are asserted: a weapon that
-# unlocks nothing is dropped, and the SAME weapon on the SAME sheet is admitted
-# once a monster exists that only it can beat.
-
-
-def _weapon_guard_gd(with_fire_mob: bool) -> GameData:
-    """`stone_axe` (earth 20) and `flame_rod` (fire 40), one or two monsters.
-
-    `earth_mob` has no resistances, so the axe alone already beats it.
-    `fire_mob` resists earth 100, so the axe does zero damage to it and only the
-    rod unlocks it. Same shape as `tests/test_ai/test_weapon_winnability`'s
-    fixture — that suite pins the metric, this one pins the tree's use of it."""
-    gd = GameData()
-    gd._item_stats = {
-        "stone_axe": ItemStats(code="stone_axe", level=1, type_="weapon",
-                               attack={"earth": 20}),
-        "flame_rod": ItemStats(code="flame_rod", level=1, type_="weapon",
-                               attack={"fire": 40}),
-    }
-    gd._monster_level = {"earth_mob": 1}
-    gd._monster_hp = {"earth_mob": 30}
-    gd._monster_attack = {"earth_mob": {}}
-    gd._monster_resistance = {"earth_mob": {}}
-    if with_fire_mob:
-        gd._monster_level["fire_mob"] = 1
-        gd._monster_hp["fire_mob"] = 30
-        gd._monster_attack["fire_mob"] = {}
-        gd._monster_resistance["fire_mob"] = {"earth": 100}
-    fill_monster_stat_defaults(gd)
-    return gd
-
-
-def _weapon_guard_state():
-    """Empty weapon slot, `stone_axe` CARRIED (so `predict_win` may use it) and
-    `flame_rod` BANKED (so it is attainable-now for the sheet, but is not part
-    of the owned combat pool). That split is what makes the rod a real candidate
-    whose marginal winnability is the only thing left deciding it."""
-    return make_state(inventory={"stone_axe": 1}, bank_items={"flame_rod": 1})
-
-
-def test_a_weapon_that_unlocks_no_monster_is_dropped_from_the_candidates():
-    """THE GUARD. `flame_rod` wins the weapon slot on the damage-type-blind
-    ruler (attack 40 against the axe's 20) and is attainable now, so it reaches
-    `_structural_candidates`. It beats nothing the carried axe already beats, so
-    it must not become a gear root — the live fire_bow case."""
-    gd = _weapon_guard_gd(with_fire_mob=False)
-    objective = CharacterObjective.from_game_data(gd)
-    state = _weapon_guard_state()
-    assert objective.near_term_gear(state).get("weapon_slot") == "flame_rod", \
-        "sanity: the sheet must actually offer the rod, or the guard is untested"
-    assert marginal_weapon_winnability("flame_rod", state, gd) == 0
-    assert [c.code for c in _structural_candidates(state, gd, objective)] == []
-
-
-def test_the_same_weapon_survives_once_it_unlocks_a_monster():
-    """NON-VACUITY. Identical sheet, identical state; the only change is a
-    monster that resists earth, which the rod beats and the axe cannot. The
-    candidate now survives, so the empty list above is the guard firing rather
-    than the candidate never having been built."""
-    gd = _weapon_guard_gd(with_fire_mob=True)
-    objective = CharacterObjective.from_game_data(gd)
-    state = _weapon_guard_state()
-    assert marginal_weapon_winnability("flame_rod", state, gd) > 0
-    assert [c.code for c in _structural_candidates(state, gd, objective)] == ["flame_rod"]

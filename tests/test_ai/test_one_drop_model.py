@@ -191,8 +191,8 @@ def _player(state, game_data, history) -> GamePlayer:  # type: ignore[no-untyped
 def test_the_player_hands_one_evidence_to_the_actions_and_the_context(
         tmp_path, state, game_data) -> None:
     """Built once a cycle from the store (`_refresh_learned_drops`), the very
-    value the factory's gathers and fights carry and the pricing context
-    (`_band_context`) reads, so the planner and the walk read one model."""
+    value the factory's gathers and fights carry and the cycle's context
+    (`_last_ctx`) reads, so the planner and the walk read one model."""
     store = _store(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     player = _player(state, game_data, store)
     with pytest.raises(ValueError, match="no drop evidence"):
@@ -204,7 +204,6 @@ def test_the_player_hands_one_evidence_to_the_actions_and_the_context(
     carried = [a.learned_drops for a in player._build_actions()
                if isinstance(a, GatherAction | FightAction)]
     assert carried and all(drops is evidence for drops in carried)
-    assert player._band_context("chicken").learned_drops is evidence
     # The trace's plan tree prices through `_last_ctx`, before any decision.
     assert player._last_ctx.learned_drops is evidence
 
@@ -246,8 +245,9 @@ def test_the_players_other_prices_read_the_cycles_evidence(
 def test_every_pricing_context_carries_the_cycle_clock(state, game_data, monkeypatch) -> None:
     """Ruling FR-IA: the player stamps the cycle clock once (`_stamp_cycle`),
     and every context it derives from `NO_PROFILE_CONTEXT` carries it through
-    `_timed`, never the module's import instant: the band candidate's context
-    and the consumable price's."""
+    `_timed`, never the module's import instant: the consumable price's and the
+    role board's (ruling C-1: the band candidate's context went with plan C
+    Task 4)."""
     stamp = datetime(2099, 1, 1, tzinfo=UTC)
 
     class _Clock(datetime):
@@ -260,9 +260,11 @@ def test_every_pricing_context_carries_the_cycle_clock(state, game_data, monkeyp
     monkeypatch.setattr(player_mod, "datetime", _Clock)
     player._stamp_cycle()
     assert player._cycle_now == stamp != NO_PROFILE_CONTEXT.now
-    assert player._band_context("chicken").now == stamp
+    assert player._timed(NO_PROFILE_CONTEXT).now == stamp
     seen: list[datetime] = []
     monkeypatch.setattr(player_mod, "acquisition_actions",
                         lambda code, qty, at, gd, ctx, **kw: seen.append(ctx.now) or 1)
     player._consumable_price("small_health_potion")
-    assert seen and set(seen) == {stamp}
+    assert seen == [stamp]
+    player._work_of_item({"small_pearls": 1}, state, game_data)
+    assert seen == [stamp, stamp]

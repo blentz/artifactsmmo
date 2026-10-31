@@ -125,12 +125,7 @@ class TestIsUtilityObjective:
 
 
 class TestProfileFor:
-    def test_plan_gate_forces_combat_when_inadequate(self):
-        # ¬band_adequate ⇒ COMBAT, for EVERY root type (the floor):
+    def test_every_root_is_combat(self):
+        # P3b: every root is COMBAT-axis now.
         for root in (_XP, _GEAR):
-            assert profile_for(root, band_adequate=False) is ProfileKind.COMBAT
-
-    def test_combat_objective_when_adequate_is_combat(self):
-        # P3b: every root is COMBAT-axis now, adequate or not.
-        assert profile_for(_XP, band_adequate=True) is ProfileKind.COMBAT
-        assert profile_for(_GEAR, band_adequate=True) is ProfileKind.COMBAT
+            assert profile_for(root) is ProfileKind.COMBAT

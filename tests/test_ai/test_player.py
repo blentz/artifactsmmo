@@ -317,15 +317,6 @@ class TestArbiterSelection:
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
 
-    def test_band_party_prices_a_boss_party_as_the_band_prices_a_loop(self):
-        """`_band_party` hands `best_party_loop` the band's prices and food menu:
-        a character with no `party` gets no party loop."""
-        player = GamePlayer(character="hero")
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        player.seed_offline(make_state(level=5), make_game_data_mock())
-        assert player._band_party("chicken") is None
-
     def test_plan_from_state_decides_with_the_same_arguments_as_the_live_band(self):
         """Regression (runtime activation), re-pointed by wave 3a. The original
         pinned `enable_synergy=True`, a parameter the flip deleted. The RULE it
@@ -394,31 +385,6 @@ class TestArbiterSelection:
         crafting_target = step.code if isinstance(decision.chosen_step, ObtainItem) else None
         player.state = replace(state, crafting_target=crafting_target)
         assert player.state.crafting_target is None
-
-    def test_selection_context_marks_risky_target(self, monkeypatch):
-        """A grind target won below SECURE_WIN at max HP is risky (USER
-        2026-10-15: below 75% we probably need better gear); a secure one is
-        not; no target is never risky. Asked of the RESTED state on BARE gear
-        (`combat.unpotioned`): worn potions never hide a gear upgrade."""
-        player = self._with_strategy(make_game_data_mock(), level=3)
-        player.state = replace(player.state, hp=1, utility1_slot_quantity=40)
-        asked: list[tuple[int, int]] = []
-
-        def _secure(verdict):
-            def _fake(state, game_data, monster):
-                asked.append((state.hp, state.utility1_slot_quantity))
-                return verdict
-            return _fake
-
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: "chicken")
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
-            assert player._selection_context().combat_risky is True
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(True)):
-            assert player._selection_context().combat_risky is False
-        assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: None)
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
-            assert player._selection_context().combat_risky is False
 
     def test_selection_context_carries_combat_monster(self, monkeypatch):
         player = self._with_strategy(make_game_data_mock(), level=3)
@@ -569,8 +535,8 @@ def _seed_outcomes(store: LearningStore, state: WorldState, gd: GameData, monste
 
 
 class TestWinnable:
-    """_is_winnable / _pick_winnable_monster driven by the real predict_win
-    estimator and a real LearningStore win-rate veto (no mocking)."""
+    """_is_winnable driven by the real predict_win estimator and a real
+    LearningStore win-rate veto (no mocking)."""
 
     def _player(self, gd: GameData, state, history=None) -> GamePlayer:
         player = GamePlayer(character="hero", history=history)
@@ -617,27 +583,6 @@ class TestWinnable:
             assert self._player(gd, state, history=store)._is_winnable("chicken") is True
         finally:
             store.close()
-
-    def test_pick_returns_highest_level_winnable(self):
-        """Player at level 5 → FightAction window [4,7]. wolf(L4) qualifies;
-        chicken(L1) is below the window and excluded by the level filter;
-        titan(L8) is above the window. wolf is the only candidate."""
-        gd = _winnable_gd({
-            "chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}},
-            "wolf": {"level": 4, "hp": 10, "attack": {"fire": 1}},
-            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},  # unwinnable
-        })
-        state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
-        assert self._player(gd, state)._pick_winnable_monster() == "wolf"
-
-    def test_pick_none_when_nothing_winnable(self):
-        gd = _winnable_gd({
-            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},
-            "colossus": {"level": 9, "hp": 100000, "attack": {"fire": 1}},
-        })
-        state = make_state(level=10, max_hp=100, attack={"fire": 50}, initiative=50)
-        assert self._player(gd, state)._pick_winnable_monster() is None
-
 
 class TestWaitForCooldown:
     def test_no_wait_when_state_is_none(self):

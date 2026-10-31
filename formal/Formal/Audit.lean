@@ -755,6 +755,8 @@ open Formal.PriorityBand
 #print axioms Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
+#print axioms Formal.CombatTargetExistence.winnableFarmTarget_none_no_task
+#print axioms Formal.CombatTargetExistence.winnableFarmTarget_eq_cascade
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_no_locations
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_no_inv_room
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_low_hp
@@ -787,7 +789,8 @@ open Formal.PriorityBand
 #print axioms Formal.StepDispatch.gatherTarget_root_when_feasible
 #print axioms Formal.StepDispatch.gatherTarget_step_not_harder_than_root
 #print axioms Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
-#print axioms Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
+#print axioms Formal.LivenessChain.chain_none_implies_target_or_applicability_blocked
+#print axioms Formal.LivenessChain.chain_emits_fight_nonvacuous
 #print axioms Formal.CycleInvariants.cycle_executes_exactly_one
 #print axioms Formal.CycleInvariants.fight_strictly_raises_xp_when_positive
 #print axioms Formal.CycleInvariants.rest_raises_hp_when_subfull
@@ -1083,7 +1086,6 @@ open Formal.PriorityBand
 #print axioms Formal.GePostPricing.buy_price_le_ceiling
 #print axioms Formal.GePostPricing.sell_price_le_best_minus_one
 #print axioms Formal.GePostPricing.buy_price_ge_best_plus_one
-#print axioms Formal.EquipmentProfile.planGate_forces_combat
 #print axioms Formal.EquipmentProfile.never_utility
 #print axioms Formal.EquipmentProfile.isUtilityObjective_false
 #print axioms InventoryRoom.hasRoom_false_of_no_slot
@@ -1240,10 +1242,9 @@ open Formal.PriorityBand
 #print axioms Formal.StrategyTraversal.actStepShared_none_preserves_unvisited
 #print axioms Formal.StrategyTraversal.actStepShared_sound
 #print axioms Formal.StrategyTraversal.actionable_step_shared_sound
+#print axioms Formal.WinnableCascade.none_when_path_not_winnable
 #print axioms Formal.WinnableCascade.path_result_was_winnable
 #print axioms Formal.WinnableCascade.path_wins_when_winnable
-#print axioms Formal.WinnableCascade.pick_wins_when_no_path
-#print axioms Formal.WinnableCascade.pick_wins_when_path_not_winnable
 #print axioms Formal.WinnableCascade.task_wins
 #print axioms Formal.WinnableCascade.totality
 #print axioms Formal.GearObjective.layers_terminate

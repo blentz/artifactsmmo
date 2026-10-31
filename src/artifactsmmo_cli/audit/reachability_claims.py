@@ -57,10 +57,11 @@ VERIFICATION asks the real graph, built from `ast` over all of src/:
     `tiers/skill_grind_target.is_obtainable`). A METHOD counts attribute
     references, which is the only way a method is ever called.
 
-A TRUE claim passes and is meant to: `player.py`'s `_tree_band_adequate` says
-"nothing calls this method any more — a deliberate deferral", which is true,
-and `tiers/progression_tree_core.potion_type_weight` is retained with no caller
-on purpose. Recording that truthfully is the behaviour this census rewards.
+A TRUE claim passes and is meant to: `tiers/objective.py` says
+`CharacterObjective.utility_potion_targets` "has NO PRODUCTION CALLER", which is
+true, and `tiers/progression_tree_core.potion_type_weight` is retained with no
+caller on purpose. Recording that truthfully is the behaviour this census
+rewards.
 """
 
 import ast
@@ -73,10 +74,11 @@ from dataclasses import dataclass
 # claims" reads identically whether the matcher is working or broken.
 #
 # The bound is TIGHT ON PURPOSE — it is exactly the population carried:
-# `player._tree_band_adequate` and `tiers/progression_tree_core
-# .potion_type_weight`, both verified true. (`tiers/skill_grind_target
-# .is_obtainable` was the third until 2026-09-27, when it became the grind's
-# production obtainability walk and its no-caller note was retired.) The decidable population in this repo is small (~20
+# `tiers/objective.CharacterObjective.utility_potion_targets` and
+# `tiers/progression_tree_core.potion_type_weight`, both verified true.
+# (`tiers/skill_grind_target.is_obtainable` left on 2026-09-27, when it became
+# the grind's production obtainability walk; `player._tree_band_adequate` was
+# deleted with its claim by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely
 # dead. Rewording one of the two costs a deliberate edit here, which is the

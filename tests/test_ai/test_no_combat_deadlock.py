@@ -8,16 +8,18 @@ window-only `_pick_winnable_monster` returned None forever, so
 `objective_step_goal(ReachCharLevel)` never produced a combat goal and the
 bot never fought.
 
-These tests lock the fixed chain end-to-end against the trace state:
+These tests lock the fixed chain against the trace state:
 
-  1. picker returns yellow_slime (highest-level winnable, via the xp>0
-     liveness fallback);
-  2. FightAction for that target is applicable (the xp>0 lower gate
-     admits below-window monsters);
-  3. objective_step_goal yields a combat goal (GrindCharacterXPGoal).
+  1. FightAction for a below-window winnable target is applicable (the xp>0
+     lower gate admits below-window monsters);
+  2. objective_step_goal yields a combat goal (GrindCharacterXPGoal).
+
+The player's windowed pick (`_pick_winnable_monster`) is gone since plan C
+Task 4: the grind target is `farm_target`'s. `pick_winnable_monster_pure`
+keeps its applicability property test below.
 
 No mocking of the units under test: real GameData catalog stats, the real
-predict_win-backed `_is_winnable`, the real picker, action, and dispatch.
+predict_win-backed `_is_winnable`, action, and dispatch.
 """
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -91,14 +93,6 @@ class TestNoCombatDeadlock:
         assert player._is_winnable("yellow_slime") is True
         assert player._is_winnable("sheep") is False
 
-    def test_picker_falls_back_to_highest_winnable(self) -> None:
-        """The window [3,6] holds no winnable monster (sheep loses); the
-        liveness fallback returns yellow_slime — the highest-level winnable
-        XP-positive monster. The old picker returned None forever here."""
-        gd = _trace_game_data()
-        player = _player(gd, _trace_state())
-        assert player._pick_winnable_monster() == "yellow_slime"
-
     def test_fight_action_applicable_for_fallback_target(self) -> None:
         """Picker→action consistency: the fallback target passes
         FightAction.is_applicable (xp>0 lower gate, level+2 suicide guard,
@@ -111,14 +105,15 @@ class TestNoCombatDeadlock:
         assert fight.is_applicable(state, gd) is True
 
     def test_objective_step_goal_yields_combat_goal(self) -> None:
-        """The full dead chain revived: ReachCharLevel + the picker's
-        fallback target dispatches to GrindCharacterXPGoal instead of the
-        old `combat_monster is None → return None` dead end."""
+        """The full dead chain revived: ReachCharLevel + a below-window
+        winnable target dispatches to GrindCharacterXPGoal instead of the
+        old `combat_monster is None → return None` dead end. (The target is
+        the grind target `farm_target` names; the player's windowed pick that
+        found it here was deleted in plan C Task 4.)"""
         gd = _trace_game_data()
         state = _trace_state()
-        player = _player(gd, state)
-        target = player._pick_winnable_monster()
-        assert target is not None
+        target = "yellow_slime"
+        assert _player(gd, state)._is_winnable(target) is True
         ctx = SelectionContext(
             bank_accessible=False, bank_required_level=10,
             bank_unlock_monster=None, initial_xp=state.xp,
@@ -128,26 +123,10 @@ class TestNoCombatDeadlock:
         assert isinstance(goal, GrindCharacterXPGoal)
         assert goal._target_monster == "yellow_slime"
 
-    def test_fallback_skips_overleveled_monster(self) -> None:
-        """Picker→action consistency: a winnable monster ABOVE level+2 is
-        never a fallback target (FightAction's suicide guard would reject
-        it and re-create the dead-target → empty-plan cascade)."""
-        gd = _trace_game_data()
-        gd._monster_level = {"chicken": 1, "weak_giant": 9}
-        gd._monster_hp = {"chicken": 60, "weak_giant": 10}
-        gd._monster_attack = {"chicken": {"air": 4}, "weak_giant": {"air": 1}}
-        gd._monster_resistance = {"chicken": {}, "weak_giant": {}}
-        gd._monster_critical_strike = {"chicken": 0, "weak_giant": 0}
-        gd._monster_initiative = {"chicken": 0, "weak_giant": 0}
-        gd._monster_locations = {"chicken": [(0, 1)], "weak_giant": [(0, 9)]}
-        player = _player(gd, _trace_state())
-        assert player._is_winnable("weak_giant") is True  # stats say beatable
-        assert player._pick_winnable_monster() == "chicken"
-
-    def test_fallback_requires_positive_xp(self) -> None:
+    def test_zero_xp_fight_is_not_applicable(self) -> None:
         """A winnable monster whose kill grants zero XP (char out-levels it
-        by 11+) is not a fallback target — fighting it serves no leveling
-        objective and FightAction's xp gate would reject it.
+        by 11+) is no XP fight — fighting it serves no leveling objective and
+        FightAction's xp gate rejects it.
 
         The fixture was level 11 against a level-1 chicken — diff exactly 10,
         which the store replay shows pays in full (372 observed fights). It
@@ -172,26 +151,10 @@ class TestNoCombatDeadlock:
         assert player._is_winnable("chicken") is True
         assert gd.xp_per_kill("chicken", 11) > 0
         assert gd.xp_per_kill("chicken", 12) == 0
-        assert player._pick_winnable_monster() is None
         # Action-level: a DEFAULT fight (no drop_farm) keeps the xp gate — the
         # drop-farm bypass must never leak into plain xp-grind fights.
         fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(state, gd) is False
-
-    def test_true_deadlock_still_returns_none(self) -> None:
-        """When nothing winnable grants XP the picker honestly returns None
-        (gear progression is the only path). Sheep-only catalog: in-window
-        but a stat-certain loss."""
-        gd = GameData()
-        gd._monster_level = {"sheep": 5}
-        gd._monster_hp = {"sheep": 120}
-        gd._monster_attack = {"sheep": {"air": 14}}
-        gd._monster_resistance = {"sheep": {}}
-        gd._monster_critical_strike = {"sheep": 0}
-        gd._monster_initiative = {"sheep": 0}
-        gd._monster_locations = {"sheep": [(0, 3)]}
-        player = _player(gd, _trace_state())
-        assert player._pick_winnable_monster() is None
 
     def test_every_picker_target_is_applicable(self) -> None:
         """Picker ⟷ applicability consistency: every monster that

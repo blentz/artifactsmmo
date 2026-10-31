@@ -63,12 +63,12 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.world_state import WorldState
-from formal.diff.test_winnable_across_band_diff import (
+from formal.sim.winnable_witness import (
     BASE_STATS_PATH,
     SNAPSHOT_PATH,
-    _game_data_from_snapshot,
-    _item_stats_from_snapshot,
-    _snapshot_has_combat_fields,
+    game_data_from_snapshot,
+    item_stats_from_snapshot,
+    snapshot_has_combat_fields,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "Formal/Liveness/GameDataFixture.lean"
@@ -130,10 +130,10 @@ def _holding_state(level: int, base_row: dict[str, Any],
 
 def _setup():
     snapshot = json.loads(Path(SNAPSHOT_PATH).read_text())
-    if not _snapshot_has_combat_fields(snapshot):
+    if not snapshot_has_combat_fields(snapshot):
         pytest.skip("snapshot predates the combat-field capture")
-    stats = _item_stats_from_snapshot(snapshot)
-    gd = _game_data_from_snapshot(snapshot, stats)
+    stats = item_stats_from_snapshot(snapshot)
+    gd = game_data_from_snapshot(snapshot, stats)
     base = json.loads(Path(BASE_STATS_PATH).read_text())
     return snapshot, stats, gd, base
 

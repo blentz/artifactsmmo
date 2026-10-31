@@ -181,7 +181,6 @@ FLEET_CLIMBER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climber.py
 FLEET_PIECES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_pieces.py"
 GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_context.py"
-PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
 TRANSITION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "transition.py"
@@ -1576,9 +1575,6 @@ ONE_DROP_MODEL_PLAYER_MUTATIONS = [
     ("player: the trace's context keeps no evidence",
      "        self._last_ctx = replace(self._last_ctx, learned_drops=self._learned_drops)\n",
      ""),
-    ("player: the band context prices the prior",
-     "                                   learned_drops=self._cycle_learned_drops()))",
-     "                                   learned_drops=LearnedDrops.empty()))"),
     ("player: the consumable price prices the prior",
      "                                  learned_drops=self._cycle_learned_drops()))\n        batch",
      "                                  learned_drops=LearnedDrops.empty()))\n        batch"),
@@ -2776,53 +2772,6 @@ SLOT_OCCUPANCY_MUTATIONS = [
 ]
 
 
-# Target-naming occupancy mutations. The deferral that keeps an owned,
-# contested candidate out of the ranking (so it can neither burn a cooldown nor
-# sit there as a permanently-unservable root) moved into
-# `slot_occupancy.defers_to_picker` on 2026-09-20, when the SECOND walk that
-# names gear roots -- `CharacterObjective.gear_targets_with_blockers` -- was
-# found to have never had it (live HAL: 1,464 equips, 2026-09-08..09-20). The
-# predicate's own clauses are mutated here; each CALL SITE gets its own group
-# below so a survivor names the walk that stopped asking.
-OCCUPANCY_PREDICATE_MUTATIONS = [
-    ("slot_occupancy: defer even an UNOWNED candidate",
-     "    if not owned:\n"
-     "        return False",
-     "    if False:\n"
-     "        return False"),
-    # SURVIVED every run from c7f35044 until 2026-08-15, with a test named for
-    # the exact property sitting in the bound file the whole time:
-    # test_a_banked_copy_counts_as_owned. It was VACUOUS. The board banked a
-    # `piggy_armor` against a worn `mushmush_jacket`, and the pursuit_value
-    # unification had since inverted that pair (gain -82_799_980), so the
-    # `gain > 0` check dropped the candidate before ownership was consulted and
-    # `== []` held with the bank clause deleted. The pair is now the
-    # positive-gain one, with vacuity guards on both the gain and may_displace.
-    ("slot_occupancy: ownership ignores the bank",
-     "    owned = (state.inventory.get(code, 0) > 0\n"
-     "             or (state.bank_items or {}).get(code, 0) > 0)",
-     "    owned = state.inventory.get(code, 0) > 0"),
-    ("slot_occupancy: defer on an EMPTY slot",
-     "    if incumbent is None:\n"
-     "        return False",
-     "    if incumbent is None:\n"
-     "        return True"),
-    ("slot_occupancy: drop the dominance deferral",
-     "    return not may_displace(candidate_stats, incumbent_stats)",
-     "    return False"),
-]
-
-TREE_OCCUPANCY_MUTATIONS = [
-    ("progression_tree: drop the occupancy deferral",
-     "        if defers_to_picker(code, slot, state, game_data):\n"
-     "            continue",
-     "        if False:\n"
-     "            continue"),
-]
-
-# The hole this group exists for: the objective's gear-target walk feeds
-# `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, whose winner
-# `obtain_item_routing._equippable_goal` commits to without asking again.
 # Region-edge admission. No goal admits `MapTransitionAction` (tag "movement")
 # and the planner rejects any action whose `travel_region` differs from the
 # character's, so off-region content was emitted, applicable and unreachable --
@@ -4250,9 +4199,9 @@ EXPAND_BANK_GOAL_MUTATIONS = [
 ]
 
 
-# winnable_cascade mutations (Phase 11 Target A: 3-tier combat-target
-# precedence cascade extracted from Player._winnable_farm_target). The
-# differential test must kill every reordering of the tiers.
+# winnable_cascade mutations (Phase 11 Target A: the combat-target precedence
+# cascade; two arms since plan C Task 4 deleted the pick arm). The
+# differential test must kill every reordering of the arms.
 WINNABLE_CASCADE_MUTATIONS = [
     # Mutation 1: ignore task_monster (drop tier 1 entirely).
     ("winnable_cascade: skip task tier (drop early-return)",
@@ -4263,17 +4212,11 @@ WINNABLE_CASCADE_MUTATIONS = [
     ("winnable_cascade: invert path winnable check",
      "    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n",
      "    if inputs.path_monster is not None and not inputs.path_winnable:\n        return inputs.path_monster\n"),
-    # Mutation 3: swap tier 2 and tier 3 — return pick_winnable first,
-    # demoting the path projection. Violates the documented precedence.
-    ("winnable_cascade: swap path and pick tiers",
-     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
-     "        return inputs.path_monster\n"
-     "    return inputs.pick_winnable\n",
-     "    if inputs.pick_winnable is not None:\n"
-     "        return inputs.pick_winnable\n"
-     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
-     "        return inputs.path_monster\n"
-     "    return None\n"),
+    # Mutation 3: the unheld path monster is still returned (an XP fight while
+    # a piece of L* is missing).
+    ("winnable_cascade: an unwinnable path monster is the target",
+     "        return inputs.path_monster\n    return None\n",
+     "        return inputs.path_monster\n    return inputs.path_monster\n"),
 ]
 
 
@@ -7582,7 +7525,7 @@ GATHERING_PASSIVE_MUTATIONS = [
 # pins every (root, adequacy) case against Lean profileFor's constant COMBAT.
 EQUIPMENT_PROFILE_MUTATIONS = [
     # flip the constant selector to UTILITY: every pursuit wrongly selects the
-    # utility profile. Caught by every (root, adequacy) case in the diff test.
+    # utility profile. Caught by every root case in the diff test.
     ("profiles: constant selector flipped to utility",
      "    return ProfileKind.COMBAT",
      "    return ProfileKind.UTILITY"),
@@ -8983,6 +8926,18 @@ CYCLE_CLOCK_PLAYER_MUTATIONS = [
     ("cycle clock: the cycle is never stamped (ruling FR-IA)",
      "        self._cycle_now = datetime.now(tz=timezone.utc)\n\n    def _timed(",
      "        pass\n\n    def _timed("),
+    # Ruling C-1 (plan C Task 4): the band candidate's context went with the
+    # band; the stamp is pinned on the two surviving derived contexts.
+    ("cycle clock: the consumable price keeps the import instant (ruling C-1)",
+     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
+     "                                  bank_accessible=",
+     "        ctx = (replace(NO_PROFILE_CONTEXT,\n"
+     "                                  bank_accessible="),
+    ("cycle clock: role-demand pricing keeps the import instant (ruling C-1)",
+     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=self._cycle_learned_drops()))\n",
+     "        ctx = (replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=self._cycle_learned_drops()))\n"),
 ]
 # Ruling T14e-m6: doors at any depth. Killed by
 # tests/test_ai/test_key_door_route.py.
@@ -12356,21 +12311,6 @@ BAND_LOADOUT_MUTATIONS = [
      "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
      "                                    + best().rate.consumed_seconds)\n"),
 ]
-# The grind target's risk (USER 2026-10-15). Killed by
-# tests/test_ai/test_player.py.
-BAND_PICK_MUTATIONS = [
-    # Re-anchored Task 5 (ruling W): the step moved to
-    # `ai/gear_objective_context.attach_gear_objective`.
-    ("ctx: a risky target is never marked",
-     "        combat_risky=(combat_monster is not None\n",
-     "        combat_risky=(False\n"),
-    ("ctx: risk is asked at the current hp",
-     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
-     "                      and not secure_win(unpotioned(state),\n"),
-    ("ctx: risk drinks the worn potions",
-     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
-     "                      and not secure_win(replace(state, hp=state.max_hp),\n"),
-]
 # One gear objective per cycle names the grind target (spec 2026-10-18 §2.4,
 # §6.2). Killed by tests/test_ai/test_player_gear_objective.py.
 # Task 5 (ruling W) moved the step into the shared
@@ -12394,8 +12334,8 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
      "            else gear_keep_for(state, game_data, history, combat_monster),\n",
      "            else gear_keep_for(state, game_data, history, task_monster),\n"),
     ("ctx: the L* pieces leave the keep (ruling AM)",
-     "            objective),\n",
-     "            None),\n"),
+     "            objective))\n",
+     "            None))\n"),
     ("log line: a held objective reads as a missing piece (F8)",
      "    if objective.held:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n",
      "    if False:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n"),
@@ -14530,8 +14470,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(BAND_TARGET_SRC, BAND_LOADOUT_MUTATIONS,
               "tests/test_ai/test_band_target.py", survivors)
-    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, BAND_PICK_MUTATIONS,
-              "tests/test_ai/test_player.py", survivors)
     run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
     run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS,
@@ -14652,13 +14590,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
-    # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
-    # run_group so a survivor names the exact authority that stopped deferring.
+    # Equip-loop closure (2026-08-04): the slot-occupancy dominance rule.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(SLOT_OCCUPANCY_SRC, OCCUPANCY_PREDICATE_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_CROSSING_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)

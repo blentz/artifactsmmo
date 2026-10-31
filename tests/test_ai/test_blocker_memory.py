@@ -1,16 +1,12 @@
 """Tests for persistent blocker memory + ReachUnlockLevelGoal."""
 
 
-from fractions import Fraction
 
-import artifactsmmo_cli.ai.learning.projections as proj
-import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry
-from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     MAX_ACHIEVABLE_GAP,
@@ -19,16 +15,9 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import (
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tiers.band_target import BandTarget
-from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-
-TIMING = committed_timing()[0]
-"""The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
 
 
 class TestBlockerPersistence:
@@ -196,216 +185,3 @@ class TestReachUnlockLevelGapGate:
         assert goal.priority(make_state(level=7), GameData()) == PRIORITY_WHEN_BLOCKER_ACTIVE
         # Reached — satisfied
         assert goal.priority(make_state(level=10), GameData()) == 0.0
-
-
-class TestPickWinnableMonster:
-    """The picker returns the highest-level monster the combat-stat estimator
-    says we beat, minus any vetoed by an observed low win-rate. Returns None
-    when nothing is winnable so combat-driving goals stay silent."""
-
-    def _player_with_monsters(self, tmp_path, level: int, monster_levels: dict[str, int],
-                              monster_hp: dict[str, int] | None = None):
-        """Build a player whose monsters carry real combat stats. Each monster
-        defaults to a beatable hp=10 / fire-attack=1; `monster_hp` overrides per
-        code (a huge HP wall makes a monster unwinnable inside the 100-turn cap).
-        The player is a capable fire attacker."""
-        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        player = GamePlayer(character="hero", history=store)
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
-        gd._monster_level = monster_levels
-        gd._monster_locations = {c: [(i, 0)] for i, c in enumerate(gd._monster_level)}
-        hp_overrides = monster_hp or {}
-        for code in monster_levels:
-            gd._monster_hp[code] = hp_overrides.get(code, 10)
-            gd._monster_attack[code] = {"fire": 1}
-            gd._monster_resistance[code] = {}
-            gd._monster_critical_strike[code] = 0
-            gd._monster_initiative[code] = 0
-        player.game_data = gd
-        player.state = make_state(level=level, character="hero",
-                                  max_hp=100, attack={"fire": 50}, initiative=50)
-        return player, store
-
-    def test_no_records_picks_highest_level_winnable(self, tmp_path):
-        # ogre is an unwinnable HP wall; yellow_slime is the highest beatable.
-        player, store = self._player_with_monsters(
-            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3, "ogre": 10},
-            monster_hp={"ogre": 100000},
-        )
-        assert player._pick_winnable_monster() == "yellow_slime"
-        store.close()
-
-    def test_a_monster_with_no_spawn_is_not_picked(self, tmp_path):
-        """Only a monster that spawns somewhere now is a candidate: the action
-        factory builds no `FightAction` for an event monster that is not up
-        (live 2026-10-04, Robby's `full_moon_vampire`)."""
-        player, store = self._player_with_monsters(
-            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3},
-        )
-        assert player._pick_winnable_monster() == "yellow_slime"
-        del player.game_data._monster_locations["yellow_slime"]
-        assert player._pick_winnable_monster() == "chicken"
-        store.close()
-
-    def test_returns_none_when_nothing_winnable(self, tmp_path):
-        player, store = self._player_with_monsters(
-            tmp_path, level=1, monster_levels={"ogre": 10, "dragon": 20},
-            monster_hp={"ogre": 100000, "dragon": 100000},
-        )
-        assert player._pick_winnable_monster() is None
-        store.close()
-
-    def test_low_success_rate_excluded(self, tmp_path):
-        """A monster with observed losses below 0.5 win rate (with enough
-        samples) is dropped, even if it's the highest-level option.
-
-        Player at level 2 so chicken(L1) passes the FightAction level
-        window (max(1, 2-1)=1, 2+2=4); both monsters in [1,4] before
-        the win-rate veto removes yellow_slime."""
-        player, store = self._player_with_monsters(
-            tmp_path, level=2, monster_levels={"chicken": 1, "yellow_slime": 3},
-        )
-        # Six fights lost to yellow_slime at this level in the fight's loadout:
-        # the scoped loss veto's evidence (2026-10-05).
-        for _ in range(6):
-            store.record_combat_outcome(
-                combat_key("yellow_slime"),
-                fight_loadout(player.state, player.game_data, "yellow_slime"),
-                True, False, player.state.level)
-        # yellow_slime excluded due to low win rate; chicken (untested) wins.
-        assert player._pick_winnable_monster() == "chicken"
-        store.close()
-
-
-class TestPathAlignedMonster:
-    """Task 5.2 (2026-08-23): `_path_aligned_monster` delegates the DECISION
-    to `band_combat_target`, whose candidates are bounded to the next
-    uncleared tier's band. `cheapest_path_to_level`'s unbounded projection
-    (floor of level 1) still runs — when a store is available — so
-    `_last_path_plan` stays populated for the trace, but its own
-    `next_action_monster` recommendation is no longer read as the target.
-    These tests used to pin the OLD contract (path recommendation IS the
-    target); that contract is exactly what this task removes, so they are
-    rewritten to pin the delegation instead. `band_combat_target`'s own
-    banding/winnability/XP-tiebreak logic is covered in
-    `tests/test_ai/test_band_target.py` (task 5.1) and is monkeypatched away
-    here to keep this a unit test of the delegation, not a re-test of it."""
-
-    def test_delegates_to_band_combat_target(self, monkeypatch, tmp_path):
-        """The returned target is whatever `band_combat_target` says, and the
-        cheapest-path plan is still cached as a trace-only diagnostic.
-
-        Fix round 2 (coordinator finding, 2026-08-23): the FIRST version of
-        this test mocked `band_combat_target` to return `"yellow_slime"` —
-        exactly what the REAL, un-mocked `cheapest_path_to_level` projection
-        also picks for this fixture (verified directly below). A mock that
-        agrees with the code path it replaces tests nothing: reverting
-        `_path_aligned_monster` to `return
-        self._last_path_plan.next_action_monster` still passed this test.
-        The mock now returns `"chicken"`, which the real projection would
-        NOT pick (it picks `yellow_slime` — higher level, higher XP/cycle),
-        so only an actual delegation to `band_combat_target` can produce
-        `"chicken"` here."""
-        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
-        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        player = GamePlayer(character="hero", history=store)
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = GameData()
-        player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
-        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
-        player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
-        player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
-        # Harmless: `cheapest_path_to_level` charges each kill the Rest its damage
-        # forces, so it reads combat stats now. Zero damage keeps this case about
-        # the diagnostic projection running cleanly, not about its recommendation
-        # (which is no longer read).
-        player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
-        player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
-        player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
-        fill_monster_stat_defaults(player.game_data)
-        player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
-
-        # Sanity: the REAL projection picks yellow_slime, not chicken, for
-        # this fixture — confirmed directly, not assumed — so asserting
-        # "chicken" below can only be explained by the delegation.
-        real_plan = cheapest_path_to_level(
-            player.game_data.max_character_level, player.state, store, player.game_data, TIMING)
-        assert real_plan.next_action_monster == "yellow_slime", (
-            "fixture's real projection must disagree with the mock below "
-            f"for this test to say anything about the delegation; got "
-            f"{real_plan.next_action_monster!r}")
-
-        monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda *_: BandTarget("chicken", Fraction(1), True))
-        target = player._path_aligned_monster()
-        assert target is not None and target.monster == "chicken"
-        # Plan still cached for trace exposure, even though its own
-        # recommendation (yellow_slime) is not what decided the target above.
-        assert player._last_path_plan is not None
-        store.close()
-
-    def test_returns_none_when_band_has_no_target(self, monkeypatch, tmp_path):
-        """The projection being blocked no longer matters — only the band's
-        answer decides, and `None` (ladder finished or a gear wall) passes
-        straight through.
-
-        Fix round 2 (coordinator finding, 2026-08-23): the FIRST version of
-        this test used an `ogre`-only fixture whose REAL projection is ALSO
-        blocked with no recommendation — so a mocked None and a "the
-        delegation never even ran" None were indistinguishable; reverting
-        `_path_aligned_monster` to read `self._last_path_plan
-        .next_action_monster` still passed. Reuses the sibling test's
-        chicken/yellow_slime fixture instead, whose real projection is
-        verified non-None below, so the None asserted here can only come
-        from the mocked `band_combat_target`."""
-        monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
-        store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
-        player = GamePlayer(character="hero", history=store)
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = GameData()
-        player.game_data._monster_level = {"chicken": 1, "yellow_slime": 2}
-        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
-        player.game_data._monster_hp = {"chicken": 60, "yellow_slime": 70}
-        player.game_data._monster_type = {"chicken": "normal", "yellow_slime": "normal"}
-        player.game_data._monster_attack = {"chicken": {}, "yellow_slime": {}}
-        player.game_data._monster_resistance = {"chicken": {}, "yellow_slime": {}}
-        player.game_data._monster_critical_strike = {"chicken": 0, "yellow_slime": 0}
-        fill_monster_stat_defaults(player.game_data)
-        player.state = make_state(level=1, xp=0, max_xp=100, character="hero")
-
-        # Sanity: the REAL projection has a non-None recommendation for this
-        # fixture — confirmed directly, not assumed — so a None result below
-        # cannot be explained by the projection being blocked anyway.
-        real_plan = cheapest_path_to_level(
-            player.game_data.max_character_level, player.state, store, player.game_data, TIMING)
-        assert real_plan.next_action_monster is not None, (
-            "fixture must have a real, non-None projection recommendation "
-            "for this test to say anything about the delegation")
-
-        monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda state, game_data, history, price_of, loadout_of, party_of: None)
-        assert player._path_aligned_monster() is None
-        store.close()
-
-    def test_band_target_consulted_without_history(self, monkeypatch):
-        """No store wired: the diagnostic `cheapest_path_to_level` call is
-        skipped (it requires a store) and `_last_path_plan` stays unset, but
-        `band_combat_target` does not need a store and IS still consulted —
-        unlike the old projection-only tier, a missing store no longer
-        forces a fall-through to the windowed picker."""
-        player = GamePlayer(character="hero", history=None)
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = GameData()
-        player.game_data._monster_level = {"chicken": 1}
-        player.game_data._monster_locations = {c: [(i, 0)] for i, c in enumerate(player.game_data._monster_level)}
-        player.state = make_state(level=1, character="hero")
-        monkeypatch.setattr(player_mod, "band_combat_target",
-                            lambda *_: BandTarget("chicken", Fraction(1), True))
-        target = player._path_aligned_monster()
-        assert target is not None and target.monster == "chicken"
-        assert player._last_path_plan is None

@@ -2280,14 +2280,13 @@ def codeToOptStr : Int → Option String
 
 /-- Compute one winnable_cascade result via the SAME proved
 `winnableFarmTargetPure`.
-args: [taskCode, pathCode, pathWinnable(0/1), pickCode]
+args: [taskCode, pathCode, pathWinnable(0/1)]
     where *Code is the small-int encoding above. -/
 def runWinnableCascade (args : Array Json) : Json :=
   let i : Formal.WinnableCascade.CascadeInputs :=
     { taskMonster := codeToOptStr (intArg args 0)
       pathMonster := codeToOptStr (intArg args 1)
-      pathWinnable := intArg args 2 != 0
-      pickWinnable := codeToOptStr (intArg args 3) }
+      pathWinnable := intArg args 2 != 0 }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
 /-- Compute one combat_picker result via the SAME proved

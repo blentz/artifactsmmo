@@ -40,10 +40,6 @@ MISSING = GearObjective("wolf", {"helmet_slot": "iron_helm"}, Fraction(2), (PIEC
 HELD = GearObjective("wolf", {"helmet_slot": "iron_helm"}, Fraction(2), ())
 
 
-def _unasked(*_: object) -> None:
-    raise AssertionError("the band / windowed pick is no longer consulted")
-
-
 def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
             seen: list[SelectionContext]) -> GamePlayer:
     """A player whose objective is `objective`; `seen` collects the context the
@@ -53,10 +49,7 @@ def _player(monkeypatch: pytest.MonkeyPatch, objective: GearObjective | None,
     player._learned_drops = LearnedDrops.empty()
     player.state = make_state(task_code=None, task_total=0)
     player.game_data = GameData()
-    monkeypatch.setattr(player, "_path_aligned_monster", _unasked)
-    monkeypatch.setattr(player, "_pick_winnable_monster", _unasked)
     monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
-    monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
 
     def objective_of(state, game_data, ctx, history):  # type: ignore[no-untyped-def]
         seen.append(ctx)
@@ -97,7 +90,6 @@ def test_no_xp_monster_while_a_piece_is_missing(monkeypatch: pytest.MonkeyPatch)
     seen: list[SelectionContext] = []
     ctx = _player(monkeypatch, MISSING, seen)._selection_context()
     assert ctx.combat_monster is None
-    assert ctx.combat_risky is False and ctx.combat_propped is False
     assert seen[-1].combat_monster is None
 
 
@@ -133,15 +125,6 @@ def test_the_gear_keep_follows_the_final_target(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(ctx_mod, "gear_keep_for", keep)
     # ...plus the `L*` pieces (ruling AM).
     assert player._selection_context().gear_keep == {"kept_for_wolf": 1, "iron_helm": 1}
-
-
-def test_risk_is_judged_on_the_final_target(monkeypatch: pytest.MonkeyPatch) -> None:
-    asked: list[str] = []
-    player = _player(monkeypatch, HELD, [])
-    monkeypatch.setattr(ctx_mod, "secure_win",
-                        lambda state, gd, monster: asked.append(monster) is not None)
-    assert player._selection_context().combat_risky is True
-    assert asked == ["wolf"]
 
 
 def _timed(state: WorldState, gd: GameData) -> tuple[GearObjective | None, float, float]:
@@ -195,14 +178,12 @@ def test_a_new_targets_keep_replaces_the_task_keep(
     replaces the task keep it arrived with by one built for that target (none
     without a store), plus `L*`'s own pieces (ruling AM)."""
     monkeypatch.setattr(ctx_mod, "gear_objective", lambda *a: HELD)
-    monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
     ctx = replace(CTX, gear_keep={"task_gear": 1})
     out = ctx_mod.attach_gear_objective(make_state(task_code=None, task_total=0), GameData(),
                                         ctx, None)
     assert out.gear_objective is HELD
     assert out.combat_monster == "wolf"
     assert out.gear_keep == {"iron_helm": 1}
-    assert out.combat_risky is False
 
 
 def _gearing_store(tmp_path: Path) -> LearningStore:

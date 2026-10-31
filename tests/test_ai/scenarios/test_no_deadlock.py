@@ -219,9 +219,19 @@ def test_l10_gearcrafting_gap_combat_blocked_no_winnable_monster() -> None:
     level-window `blue_slime`. The scenario has no honest combat block, so the
     tripwire now pins the derived pick: the ramp below no longer isolates a
     combat-blocked closure, and its guarantee (no XP thrash) is asserted on the
-    derived outcome."""
+    derived outcome.
+
+    RE-DERIVED plan C Task 4: the windowed pick it pinned (`blue_slime`) was
+    deleted with the three-tier cascade. The outcome now pinned is the grind
+    target `farm_target` names: the gear objective has a target, `red_slime`,
+    so the character is not combat-blocked, and with `L*` missing pieces no
+    fight is chosen for XP (spec 2026-10-18 §6.2)."""
     player, _gd = _player(CRITERION_1_RAMP)
-    assert player._pick_winnable_monster() == "blue_slime"
+    player.plan_from_state()
+    objective = player._last_ctx.gear_objective
+    assert objective is not None and objective.monster == "red_slime"
+    assert not objective.held
+    assert player._last_ctx.combat_monster is None
 
 
 def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
@@ -290,8 +300,9 @@ def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> No
     below. Wave 4 owns finding a scenario that can witness the original claim.
 
     l20_dual_utility is band-adequate (no structural upgrade) with a
-    winnable monster (highwayman) in reach: the REAL `_tree_band_adequate`-
-    wired decision (not the bare decide_tree default) must pick the
+    winnable monster (highwayman) in reach: the REAL band-adequacy-wired
+    decision (not the bare decide_tree default; plan C Task 4 deleted that
+    verdict) must pick the
     char-level trunk, and the arbiter must plan a combat grind against it —
     never a skill/craft goal.
 
@@ -390,9 +401,13 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     `lifesteal_rune` is priced through gold earned by fighting, a finite price,
     so it orders ahead of the piece behind an unpriced climb."""
     player, _gd = _player(CRITERION_2_WALLED)
-    assert player._pick_winnable_monster() == "hellhound"
-    assert player._tree_band_adequate() is False
     report = player.plan_from_state()
+    # Plan C Task 4: the windowed pick (`hellhound`) and the band-adequacy
+    # verdict went with the three-tier cascade; `hellhound` is the objective's
+    # `m*`, and with a piece of `L*` missing there is no grind target.
+    assert player._last_ctx.gear_objective is not None
+    assert player._last_ctx.gear_objective.monster == "hellhound"
+    assert player._last_ctx.combat_monster is None
     assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(

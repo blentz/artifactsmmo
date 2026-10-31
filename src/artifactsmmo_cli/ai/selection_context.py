@@ -275,28 +275,6 @@ class SelectionContext:
     # that does not choose one: nothing is stocked for it.
     loadout: ChosenLoadout | None = None
 
-    # The grind target stands only on consumables (USER 2026-10-10, "loadout
-    # picks the monster"): `combat_monster` is the band's pick on its best
-    # loadout, and on BARE gear the cascade names no monster at all — no
-    # winnable task monster, nothing in the band winnable bare, no windowed
-    # pick. The gear decisions read this (`decisions.root.IsAFightBlockingMe`
-    # did, until plan C Task 2 deleted it) and never `loadout`, so a
-    # potion-propped win never hides a gear upgrade.
-    # False (the default) whenever bare gear has a fight, or there is no target.
-    # Since the gear objective names the grind target (`gear_objective` below)
-    # nothing sets it: the band pick it described is no longer the target, and
-    # a target that wins only on potions is `combat_risky` too.
-    combat_propped: bool = False
-
-    # The grind target wins below SECURE_WIN (USER 2026-10-15: below 75% we
-    # probably need better gear; `combat.secure_win`, asked at max HP on bare
-    # gear, `combat.unpotioned`): like a
-    # propped target it does not hide a gear upgrade (it did not from
-    # `decisions.root.IsAFightBlockingMe`, deleted in plan C Task 2). It is
-    # still fought when no gear is to be built. False whenever there is no
-    # target.
-    combat_risky: bool = False
-
     # Whether the held items task pays enough to defer the grind (spec
     # 2026-10-14 items-task-pays §2, `held_task_pays.held_task_pays`): its
     # gold or drops verdict, or skill XP the DAG demands at a better rate than

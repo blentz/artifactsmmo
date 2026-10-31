@@ -185,8 +185,9 @@ def test_a_GREY_task_monster_is_not_retargeted(tmp_path):
     `GrindCharacterXP(sheep)` priority 30.0, plan_len 0 in 3 nodes, for 12
     consecutive cycles of `Wait` — sheep is level 5 against HAL's 17, a gap of 12.
 
-    Tier 3 (`_pick_winnable_monster`) has always applied this filter. Tier 1 did
-    not, so the task could inject a target the action layer would always reject.
+    The windowed pick (`_pick_winnable_monster`, deleted in plan C Task 4) always
+    applied this filter. The task did not, so it could inject a target the action
+    layer would always reject.
     Same supplier/consumer mismatch the winnability gate fixed, one predicate
     over.
     """

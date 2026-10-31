@@ -39,11 +39,10 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import RULER_SCALE, armor_score
-from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker, may_displace
+from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.tiers.progression_tree import _structural_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -129,30 +128,6 @@ def _state(level: int, inventory: dict[str, int],
     )
 
 
-class _Objective:
-    """The two `CharacterObjective` members `_structural_candidates` reads.
-
-    A stub rather than the real objective because the tree's gear branch is
-    exactly these two calls, and building a full objective would drag the whole
-    attainability layer into a test about who owns a slot.
-    """
-
-    def __init__(self, targets: dict[str, str]) -> None:
-        self._targets = targets
-
-    def near_term_gear(self, state: WorldState) -> dict[str, str]:
-        return dict(self._targets)
-
-    def _item_value(self, code: str | None) -> int:
-        if not code:
-            return 0
-        stats = _ALL.get(code)
-        return pursuit_value(stats) if stats is not None else 0
-
-
-_ALL = {it.code: it for it in
-        (_LIFE_AMULET, _FIRE_AND_EARTH_AMULET, _MUSHMUSH_JACKET,
-         _ADVENTURER_VEST, _PIGGY_ARMOR)}
 
 
 # --- The four numbers -------------------------------------------------------
@@ -208,66 +183,11 @@ def test_both_authorities_put_the_same_amulet_in_robbys_slot() -> None:
                           state, gd)
     assert picked[_AMULET] == "fire_and_earth_amulet", picked
 
-    objective = _Objective({_AMULET: "life_amulet"})
-    assert _structural_candidates(state, gd, objective) == []
-
     goal = UpgradeEquipmentGoal(initial_equipment=state.equipment)
     assert goal.find_upgrade_target(state, gd) is None
 
 
 # --- The loop, closed -------------------------------------------------------
-
-def _alternate(state: WorldState, gd: GameData, objective: _Objective,
-               monster_atk: dict[str, int], monster_res: dict[str, int],
-               slot: str, legs: int = 8) -> list[str | None]:
-    """Run the observed cycle: the acquisition authority equips its target,
-    then the combat picker runs, repeatedly. Returns the slot's occupant after
-    every leg — a LOOP shows as alternating entries, closure as a constant
-    tail."""
-    seen: list[str | None] = [state.equipment[slot]]
-    for leg in range(legs):
-        if leg % 2 == 0:
-            candidates = _structural_candidates(state, gd, objective)
-            for cand in candidates:
-                state = replace(
-                    state,
-                    equipment={**state.equipment, cand.slot: cand.code})
-        else:
-            picked = pick_loadout(
-                Combat(monster_atk, monster_res, state.attack), state, gd)
-            state = replace(state, equipment=dict(picked))
-        seen.append(state.equipment[slot])
-    return seen
-
-
-def test_amulet_slot_reaches_a_fixed_point_instead_of_alternating() -> None:
-    """THE regression test for the observed loop. Pre-fix this sequence reads
-    ``[f&e, life, f&e, life, ...]`` — the tree's gain of 10000 re-equipping
-    `life_amulet` and `OptimizeLoadout(wolf)` reversing it. It must be constant
-    now, and constant at the amulet the fight actually wants."""
-    gd = _gd(_LIFE_AMULET, _FIRE_AND_EARTH_AMULET)
-    state = _state(21, {"life_amulet": 1},
-                   {_AMULET: "fire_and_earth_amulet"}, _BATTLEAXE_ATTACK)
-    objective = _Objective({_AMULET: "life_amulet"})
-
-    seen = _alternate(state, gd, objective, _WOLF_ATK, _WOLF_RES, _AMULET)
-    assert set(seen) == {"fire_and_earth_amulet"}, seen
-
-
-def test_the_loop_closes_from_the_other_starting_occupant_too() -> None:
-    """Closure must not depend on where the cycle happens to start. Beginning
-    with `life_amulet` worn, the picker moves the slot ONCE (to the amulet the
-    monster makes better) and it never moves again — one swap that buys damage,
-    not an unbounded alternation."""
-    gd = _gd(_LIFE_AMULET, _FIRE_AND_EARTH_AMULET)
-    state = _state(21, {"fire_and_earth_amulet": 1},
-                   {_AMULET: "life_amulet"}, _BATTLEAXE_ATTACK)
-    objective = _Objective({_AMULET: "life_amulet"})
-
-    seen = _alternate(state, gd, objective, _WOLF_ATK, _WOLF_RES, _AMULET)
-    assert seen[0] == "life_amulet", seen
-    assert set(seen[2:]) == {"fire_and_earth_amulet"}, seen
-
 
 def test_the_upgrade_goal_leg_of_the_loop_also_closes() -> None:
     """The OTHER producer of a displacing equip: `UpgradeEquipmentGoal`'s
@@ -303,125 +223,6 @@ def test_deferring_loses_nothing_the_picker_equips_it_when_it_helps() -> None:
     picked = pick_loadout(
         Combat(_ROSENBLOOD_ATK, _ROSENBLOOD_RES, _FOREST_WHIP_ATTACK), state, gd)
     assert picked[_BODY] == "piggy_armor", picked
-
-
-def test_an_unowned_target_is_still_pursued() -> None:
-    """The gate is scoped to items the character ALREADY HOLDS, where the only
-    remaining work is the contested equip. Acquiring gear he does not own is
-    real, terminating work and must stay proposed — otherwise closing the loop
-    would close gear progression with it."""
-    gd = _gd(_ADVENTURER_VEST, _MUSHMUSH_JACKET)
-    state = _state(21, {}, {_BODY: "adventurer_vest"}, _FOREST_WHIP_ATTACK)
-    objective = _Objective({_BODY: "mushmush_jacket"})
-    candidates = _structural_candidates(state, gd, objective)
-    assert [(c.slot, c.code) for c in candidates] == [(_BODY, "mushmush_jacket")]
-
-
-def test_a_dominating_owned_item_is_still_proposed() -> None:
-    """The gate admits what it can prove the picker agrees with. A strictly
-    better copy of the same shape (every stat >=) is a fixed point for every
-    monster, so the tree may still pre-empt the picker and equip it."""
-    better = ItemStats(code="better_amulet", level=10, type_="amulet",
-                       hp_bonus=40, dmg_elements={"fire": 5, "earth": 5})
-    _ALL[better.code] = better
-    try:
-        gd = _gd(_FIRE_AND_EARTH_AMULET, better)
-        state = _state(21, {"better_amulet": 1},
-                       {_AMULET: "fire_and_earth_amulet"}, _BATTLEAXE_ATTACK)
-        objective = _Objective({_AMULET: "better_amulet"})
-        candidates = _structural_candidates(state, gd, objective)
-        assert [(c.slot, c.code) for c in candidates] == [(_AMULET, "better_amulet")]
-
-        seen = _alternate(state, gd, objective, _WOLF_ATK, _WOLF_RES, _AMULET)
-        assert set(seen[1:]) == {"better_amulet"}, seen
-    finally:
-        del _ALL[better.code]
-
-
-def test_an_unknown_incumbent_is_not_gated() -> None:
-    """`game_data` with no stats for the worn code: `pick_loadout` displaces an
-    unknown incumbent unconditionally, so there is no disagreement to defer to
-    and the candidate stays. Mirrors the tree's own missing-stats handling
-    rather than inventing a third policy."""
-    gd = _gd(_LIFE_AMULET)          # nothing for the worn code
-    state = _state(21, {"life_amulet": 1},
-                   {_AMULET: "unknown_amulet"}, _BATTLEAXE_ATTACK)
-    objective = _Objective({_AMULET: "life_amulet"})
-    candidates = _structural_candidates(state, gd, objective)
-    assert [(c.slot, c.code) for c in candidates] == [(_AMULET, "life_amulet")]
-
-
-def test_a_banked_copy_counts_as_owned() -> None:
-    """Ownership for this gate is bag OR bank: a banked copy is one Withdraw
-    from the same contested equip, so it must be gated the same way.
-
-    RE-DERIVED 2026-08-15, from the mutation survivor `progression_tree:
-    ownership ignores the bank`. The two items were the other way round — a
-    BANKED `piggy_armor` against a worn `mushmush_jacket` — which the
-    pursuit_value unification turned into a gain of -82_799_980. The `gain > 0`
-    check then dropped the candidate before ownership was ever consulted, so
-    `== []` held with the bank clause deleted and the test proved nothing about
-    the bank. Same role swap `test_the_tree_leg_of_the_loop_closes_on_a_positive_
-    gain_swap` documents, arriving here late.
-
-    Now the pair is the positive-gain one that sibling rides, with the owned
-    copy moved from the bag to the BANK: every other filter passes the
-    candidate, so the empty result can only come from the ownership gate seeing
-    the bank."""
-    gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
-    state = _state(25, {}, {_BODY: "piggy_armor"}, _FOREST_WHIP_ATTACK)
-    banked = replace(state, bank_items={"mushmush_jacket": 1})
-    objective = _Objective({_BODY: "mushmush_jacket"})
-
-    # Vacuity guards: the candidate has to survive every OTHER filter, or the
-    # assertion at the end holds for a reason that is not the bank.
-    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR), (
-        "fixture drift: a non-positive gain drops the candidate before "
-        "ownership is consulted"
-    )
-    assert not may_displace(_MUSHMUSH_JACKET, _PIGGY_ARMOR), (
-        "fixture drift: a dominating candidate is admitted by design, so the "
-        "occupancy gate could not drop it however ownership reads"
-    )
-    # The SAME board with the copy held nowhere: the candidate IS proposed.
-    # This is the state the gate sees when ownership misses the bank, so it
-    # pins the difference below to the bank lookup and nothing else.
-    assert [(c.slot, c.code)
-            for c in _structural_candidates(state, gd, objective)] == [
-        (_BODY, "mushmush_jacket")]
-
-    assert _structural_candidates(banked, gd, objective) == []
-
-
-def test_the_tree_leg_of_the_loop_closes_on_a_positive_gain_swap() -> None:
-    """The deferral must hold where the monster-blind ruler genuinely PREFERS
-    the candidate, not only where the two rulers happen to tie.
-
-    Owned `mushmush_jacket` outranks the worn `piggy_armor` by 41_399_980 on
-    `pursuit_value` — a huge positive gain the tree would chase every cycle —
-    but it trades away 150 hp and all the fire resistance, so against a
-    400-FIRE hitter `pick_loadout` puts piggy straight back. Without the
-    deferral this alternates forever; with it, the tree proposes nothing and
-    the slot never moves. (Against a monster where the jacket IS better, the
-    picker equips it — see
-    `test_deferring_loses_nothing_the_picker_equips_it_when_it_helps`.)
-
-    The two items swapped ROLES here when Rank was unified onto `armor_score`
-    and `pursuit_value` followed it: the monster-blind ruler now prefers the
-    jacket's 10% GLOBAL damage over piggy's fire-and-earth-only resistance,
-    because the catalog-median adversary attacks in every element equally. The
-    LOOP being closed is identical — a monster-blind preference the
-    monster-relative picker reverses — only its direction changed."""
-    gd = _gd(_MUSHMUSH_JACKET, _PIGGY_ARMOR)
-    state = _state(25, {"mushmush_jacket": 1}, {_BODY: "piggy_armor"},
-                   _FOREST_WHIP_ATTACK)
-    objective = _Objective({_BODY: "mushmush_jacket"})
-
-    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR)
-    assert _structural_candidates(state, gd, objective) == []
-
-    seen = _alternate(state, gd, objective, _ROSENBLOOD_ATK, _ROSENBLOOD_RES, _BODY)
-    assert set(seen) == {"piggy_armor"}, seen
 
 
 # --- 170ed8d8's win, on BOTH rulers now -------------------------------------
@@ -596,69 +397,3 @@ def test_the_committed_upgrade_leg_of_the_loop_also_closes() -> None:
             Combat(_SHEEP_ATK, _SHEEP_RES, state.attack), state, gd)
         state = replace(state, equipment=dict(picked))
         assert state.equipment[leg] == "adventurer_pants", state.equipment
-
-
-def _gd_pants_world() -> GameData:
-    """The HAL board as a world the real `CharacterObjective` can walk.
-
-    Both pants need a route or `is_suppliable` drops them before occupancy is
-    ever consulted, and the assertion below would hold for the wrong reason.
-    """
-    # A recipe item carries its crafting skill, as every real one does: that is
-    # what makes it a craft route (a mint) to the obtain model.
-    gd = _gd(replace(_HARD_LEATHER_PANTS, crafting_skill="gearcrafting", crafting_level=20),
-             replace(_ADVENTURER_PANTS, crafting_skill="gearcrafting", crafting_level=15))
-    gd._crafting_recipes = {"hard_leather_pants": {"bar": 1},
-                            "adventurer_pants": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    gd._item_stats["bar"] = ItemStats(code="bar", level=1, type_="resource")
-    return gd
-
-
-def test_an_owned_piece_the_picker_would_swap_back_defers() -> None:
-    """The gate's deferral proper: an OWNED `hard_leather_pants` that does not
-    dominate the worn `adventurer_pants` is left to `pick_loadout`, so no walk
-    names it and the equip loop (live HAL, 1,464 equips 2026-09-08..09-20)
-    cannot start. The same board with no copy held does not defer: acquiring
-    it is real work."""
-    gd = _gd_pants_world()
-    leg = "leg_armor_slot"
-    state = _state(20, {"hard_leather_pants": 1},
-                   {leg: "adventurer_pants"}, _BATTLESTAFF_ATTACK)
-    assert may_displace(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS) is False
-    assert defers_to_picker("hard_leather_pants", leg, state, gd) is True
-    assert defers_to_picker("hard_leather_pants", leg, replace(state, inventory={}), gd) is False
-
-
-def test_an_empty_slot_is_filled_not_deferred() -> None:
-    """The deferral is about a DISAGREEMENT, and an empty slot has none.
-
-    `pick_loadout` will put the owned piece in an unoccupied slot whatever the
-    acquisition ruler thinks, so naming it as a target costs nothing and skips
-    an idle slot. Over-widening the gate to every owned item would silently
-    switch off the empty-slot fill that `EquipOwnedGoal` and the artifact
-    branch depend on.
-    """
-    gd = _gd_pants_world()
-    leg = "leg_armor_slot"
-    state = _state(20, {"hard_leather_pants": 1}, {leg: None},
-                   _BATTLESTAFF_ATTACK)
-    assert defers_to_picker("hard_leather_pants", leg, state, gd) is False
-
-
-def test_a_dominating_owned_candidate_is_not_deferred() -> None:
-    """The gate must stay a DEFERRAL, not a ban on owned gear.
-
-    `hard_leather_pants` over `old_pants` is stat-wise dominance, so
-    `pick_loadout` can never swap it back and the gate must not defer —
-    otherwise the character never upgrades a slot from anything it already
-    carries.
-    """
-    gd = _gd_pants_world()
-    gd._item_stats["old_pants"] = _OLD_PANTS
-    leg = "leg_armor_slot"
-    state = _state(20, {"hard_leather_pants": 1}, {leg: "old_pants"},
-                   _BATTLESTAFF_ATTACK)
-    assert may_displace(_HARD_LEATHER_PANTS, _OLD_PANTS) is True
-    assert defers_to_picker("hard_leather_pants", leg, state, gd) is False

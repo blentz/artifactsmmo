@@ -107,8 +107,8 @@ class MonsterCatalog:
         Returns 0 if monster is unknown (no level on file).
 
         EXACT integer arithmetic (mechanical-extraction discipline — this value
-        is in the decision path: band and loop rates rank by it, combat_picker gates
-        on it being positive). The documented formula is evaluated as a single
+        is in the decision path: loop rates rank by it, and the gear objective's
+        candidates gate on it being positive). The documented formula is evaluated as a single
         rational num/den with round-half-UP (a tie goes to the larger award), so
         the Lean mirror (`Formal.XpValue.xpPerKill`) is bit-identical and no
         float rounding can flip a ranking. penalty and multiplier are carried

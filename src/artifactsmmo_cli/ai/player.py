@@ -59,7 +59,7 @@ from artifactsmmo_cli.ai.bag_clear import (
     related_codes,
     roomy,
 )
-from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
+from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.combat import (
@@ -69,7 +69,6 @@ from artifactsmmo_cli.ai.combat import (
     predict_win,
     win_probability,
 )
-from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
@@ -147,7 +146,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
+from artifactsmmo_cli.ai.learning.projections import PathPlan
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
@@ -157,7 +156,6 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     gather_key,
     party_combat_key,
 )
-from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.objective_demand import objective_demand
@@ -165,7 +163,6 @@ from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_card import card_json, card_state
 from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
-from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
 from artifactsmmo_cli.ai.party_win import party_chosen_loadout, wears_party_loadout
 from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.plan_report import PlanReport
@@ -218,12 +215,10 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
-from artifactsmmo_cli.ai.tiers.band_target import BandTarget, band_combat_target
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
 )
-from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.root_group import root_group_of
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -801,29 +796,6 @@ class GamePlayer:
             print(f"[{self._now()}] [bag] {self._arbiter.last_bag_verdict}: the bag is full "
                   "and every stack is related to the plan or cannot move")
         return selected_goal, plan, goals_tried
-
-    def _tree_band_adequate(self) -> bool:
-        """The real progression-band adequacy verdict: a winnable monster
-        exists for the current loadout AND no positive-gain structural
-        upgrade is reachable. Pre-wave-3a this was wired into `decide_tree`'s
-        `band_adequate` parameter (via `StrategyEngine.decide`); THE FLIP
-        (wave 3a) removed that parameter along with the ranking it fed, and
-        nothing calls this method any more — a deliberate deferral (branch
-        review, wave-3a-final), not a bug this task fixes. The upgrade leg is
-        tier-aware
-        (2026-07-07 live-shadow correction: a full COPPER set at L14 read as
-        adequate under the old empty-armor-slot leg and the tree never
-        geared) and SUBSUMES the old empty-slot check — an empty slot is a
-        gain-from-zero candidate. Both legs are existing cores
-        (`_pick_winnable_monster`, `has_structural_upgrade`) — pure
-        composition, not new decision logic. Callers must have
-        state/game_data/objective seeded."""
-        assert self.state is not None
-        assert self.game_data is not None
-        assert self._objective is not None
-        return (self._pick_winnable_monster() is not None
-                and not has_structural_upgrade(self.state, self.game_data,
-                                               self._objective))
 
     def _plan_or_reuse(
         self,
@@ -2473,8 +2445,6 @@ class GamePlayer:
             # key back into GET /my/logs if the transcript is ever wanted — the
             # TUI fight modal reads the same key (see tui/screens/fight_screen).
             record["fight"] = fight.model_dump(exclude={"logs"})
-        if self.game_data is not None:
-            record["gear"] = {"adequate": self._pick_winnable_monster() is not None}
         if self._strategy is not None and self.game_data is not None:
             # Phase 4b (THE FLIP): `record["strategy"]` carries the
             # progression-tree decision — decide() delegates to decide_tree —
@@ -2915,70 +2885,6 @@ class GamePlayer:
             snapshot["path_blocked"] = plan.blocked
         return snapshot
 
-    def _path_aligned_monster(self) -> BandTarget | None:
-        """Return the band's pick — the winnable monster in the next uncleared
-        tier's band with the most XP per second over its best loadout — or
-        None if the ladder is finished, or the band holds nothing winnable (a
-        gear wall — see `band_target`'s module docstring; the two None cases
-        are deliberately not distinguished here).
-
-        G-I: `cheapest_path_to_level`'s candidate filter floors at level 1,
-        so its `next_action_monster` used to outrank the windowed picker at
-        tier 3 and left four of five live characters grinding 4-10 levels
-        below themselves. `band_combat_target` bounds candidates to the
-        character's current tier band instead, so a target far below the
-        character can never be drawn.
-        """
-        if self.game_data is None or self.state is None:
-            return None
-        # `cheapest_path_to_level` is still run and cached here (when a
-        # store is available) so `_last_path_plan` stays populated for the
-        # trace (projected_cycles, path_next_action, path_blocked). Its
-        # `next_action_monster` is a diagnostic ONLY now, never a decision
-        # input — the band target below decides, and it tolerates a missing
-        # store (`band_combat_target`'s `history` parameter is Optional).
-        if self.history is not None:
-            self._last_path_plan = cheapest_path_to_level(
-                self.game_data.max_character_level, self.state, self.history, self.game_data,
-                self._timing()[0],
-            )
-        return band_combat_target(self.state, self.game_data, self.history,
-                                  self._consumable_price, self._band_loadout, self._band_party)
-
-    def _band_loadout(self, monster: str) -> BestLoadout:
-        """`best_loadout` against one band monster, for `band_combat_target`'s
-        rank (USER 2026-10-10, "loadout picks the monster").
-
-        Priced as if `monster` were the grind target: a buy is converted at
-        the grind target's gold rate (`consumable_price.gold_per_second`), and
-        the band is choosing that target, so each candidate is priced at its
-        own — the rate the cycle's loadout (`fight_ahead_loadout`) will read
-        once it is chosen. The rest of the context is `_consumable_price`'s:
-        the full selection context is not built yet (it NEEDS this cycle's
-        combat target), and the obtain walk reads only bank access and the
-        siblings' skills from it."""
-        assert self.state is not None and self.game_data is not None
-        return best_loadout(self.state, self.game_data, self._band_context(monster), monster,
-                            self.history)
-
-    def _band_party(self, monster: str) -> PartyLoop | None:
-        """`best_party_loop` against one boss, for `band_combat_target`'s rank
-        (docs/PLAN_group_fights.md increment 3), priced as `_band_loadout`
-        prices a solo candidate."""
-        assert self.state is not None and self.game_data is not None
-        ctx = self._band_context(monster)
-        return best_party_loop(self.state, self.game_data, monster,
-                               candidate_potions(self.state, self.game_data, ctx, self.history),
-                               food_menu(self.state, self.game_data, ctx, self.history))
-
-    def _band_context(self, monster: str) -> SelectionContext:
-        """The pricing context of a band candidate (see `_band_loadout`)."""
-        return self._timed(replace(NO_PROFILE_CONTEXT,
-                                   bank_accessible=self._blockers.get("bank") is None,
-                                   sibling_skills=self._sibling_skills,
-                                   combat_monster=monster,
-                                   learned_drops=self._cycle_learned_drops()))
-
     def _stamp_cycle(self) -> None:
         """Read the cycle clock once, at the start of a cycle (ruling FR-IA)."""
         self._cycle_now = datetime.now(tz=timezone.utc)
@@ -3042,47 +2948,6 @@ class GamePlayer:
         assert self.state is not None and self.game_data is not None
         projected = replace(self.state, hp=self.state.max_hp)
         return is_winnable(projected, self.game_data, monster_code, self.history)
-
-    def _pick_winnable_monster(self) -> str | None:
-        """Window-preferred winnable monster, with a liveness fallback.
-
-        PREFERRED: highest-level `_is_winnable` monster inside the
-        FightAction level window [max(1, char_level-1), char_level+2].
-        Trace 2026-06-06 16:34: picker returned yellow_slime (lvl 2) for
-        Robby (lvl 4); FightAction.is_applicable rejected it (below the
-        old hard window) and the dead target cascaded into an empty plan.
-        Honoring the window at picker time prevents that cascade.
-
-        FALLBACK (P0 no-combat deadlock, 2026-06-09 live repro): at
-        level 4 the only stat-winnable monsters were chicken (L1) and
-        yellow_slime (L2) — both below the window, so the picker returned
-        None forever and no combat goal was ever constructed. When the
-        window holds no winnable monster, fall back to the highest-level
-        winnable monster that still grants XP (`xp_per_kill > 0`; the
-        documented curve zeroes out at char_level - monster_level >= 10)
-        and is under the char_level+2 suicide guard.
-        FightAction.is_applicable enforces the SAME xp>0 lower gate, so
-        any fallback target is level-applicable. Returns None only when
-        nothing winnable grants XP — then gear progression is the only
-        path, which is correct. Decision logic lives in the pure core
-        `combat_picker.pick_winnable_monster_pure` (Lean-diff-locked).
-
-        Candidates are the monsters that SPAWN somewhere now
-        (`GameData.monster_locations`): the action factory builds a
-        `FightAction` only for those, so an event monster that is not up is a
-        target nothing can fight (live 2026-10-04: Robby, `full_moon_vampire`).
-        """
-        assert self.game_data is not None
-        assert self.state is not None
-        game_data = self.game_data
-        char_level = self.state.level
-        return pick_winnable_monster_pure(
-            char_level,
-            [(code, level) for code, level in game_data.monster_levels.items()
-             if game_data.monster_locations(code)],
-            self._is_winnable,
-            lambda code: game_data.xp_per_kill(code, char_level) > 0,
-        )
 
     def _task_aligned_monster(self) -> str | None:
         """The active task's monster when it is a PURSUE monster-task AND winnable.

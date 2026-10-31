@@ -16,8 +16,10 @@ longer become roots or fallback roots, only equipment slots do) and the
 diagnostic CLI that read the concatenation directly was retired in wave 3b,
 leaving zero callers.
 
-Value semantics only — nothing here compares reprs with the Lean model
-(that lockstep lives at the pure-core level in progression_tree_core.py).
+Value semantics only — nothing here compares reprs with a Lean model.
+Plan C Task 4 deleted `_structural_candidates` and `has_structural_upgrade`,
+the band-adequacy leg whose last caller (`player._tree_band_adequate`) was
+already uncalled.
 
 `strategy` is imported as a MODULE (attribute access at call time) because
 the dependency is now circular: strategy.decide delegates to `decide_tree`
@@ -36,84 +38,13 @@ from fractions import Fraction
 # something imported `decisions.root` FIRST (wave 4 does, from a scenario
 # test). Binding the module defers the lookup to call time.
 from artifactsmmo_cli.ai.decisions import root as _root
-from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.meta_goal import StepDecline, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree_core import GearCandidate
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
-from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _structural_candidates(state: WorldState, game_data: GameData,
-                            objective: CharacterObjective) -> list[GearCandidate]:
-    """Semantics item 2 (structural slots): near-term gear whose pursuit_value
-    strictly beats the currently-equipped item, weight 1 (no scaling).
-
-    Scored on `pursuit_value` (combat-dominant efficiency budget), NOT the flat
-    `equip_value`. The ruler was chosen for the cross-slot GAIN ranking that
-    `focus_aging_order` ran (waves 3a/3b removed that ranker): it had to let a combat weapon outrank a
-    pure-utility artifact instead of chasing the prospecting artifact that flat
-    equip_value mistakenly scored highest (the cross-slot bug). It stays on
-    `pursuit_value` because the `gain > 0` predicate this list is now read
-    through — `has_structural_upgrade` — inherits the same question: an item
-    that is an upgrade only on the flat ruler is not one.
-    Both the candidate stats AND the current-equipped
-    baseline (`_item_value`, also pursuit_value) are on the SAME ruler, so
-    the gain is consistent.
-
-    OCCUPANCY DEFERRAL: a candidate the character ALREADY OWNS whose slot is
-    already OCCUPIED buys nothing but the equip itself, and that equip is
-    `pick_loadout`'s call, not this ruler's. `defers_to_picker` (see
-    `equipment/slot_occupancy`) admits it only when it dominates the incumbent
-    — otherwise the tree proposes a swap the combat picker reverses next cycle
-    (live 2026-08-04: `life_amulet` +10000 here, `fire_and_earth_amulet`
-    +42000 there, alternating forever). Dropping the candidate rather than
-    merely refusing the action also keeps it out of the ranking, so it cannot
-    sit there as a permanently-unservable root starving the interleave.
-
-    The predicate lives in `defers_to_picker`: it used to be inline here only,
-    and the old objective walk went ungated for a month (see its docstring)."""
-    candidates = []
-    for slot, code in objective.near_term_gear(state).items():
-        stats = game_data.item_stats(code)
-        if stats is None:
-            continue
-        # Weapon-slot winnability guard: pursuit_value/equip_value is damage-type
-        # BLIND, so it would arm a high-attack weapon that beats FEWER monsters
-        # (live: fire_bow, attack fire 17, over the equipped copper_axe, attack
-        # earth 5 — the local monsters resist fire, so the bot ground weaponcrafting
-        # toward a COMBAT DOWNGRADE). predict_win/pick_loadout is already
-        # damage-optimal PER MONSTER, so a weapon is worth grinding toward only if
-        # OWNING it unlocks a monster the character cannot beat now. Suppress a
-        # zero-marginal weapon target; every other slot keeps pursuit_value ranking.
-        if (stats.type_ == "weapon"
-                and marginal_weapon_winnability(code, state, game_data) <= 0):
-            continue
-        incumbent = state.equipment.get(slot)
-        if defers_to_picker(code, slot, state, game_data):
-            continue
-        current_value = objective._item_value(incumbent)
-        gain = Fraction(pursuit_value(stats) - current_value)
-        if gain > 0:
-            candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
-    return candidates
-
-
-def has_structural_upgrade(state: WorldState, game_data: GameData,
-                            objective: CharacterObjective) -> bool:
-    """True when a positive-gain STRUCTURAL upgrade is reachable — the
-    tier-aware leg of band adequacy (2026-07-07 live-shadow correction: a
-    FILLED slot holding under-tier gear must not read as adequate; an empty
-    slot is just the gain-from-zero special case). Utility/potion targets
-    deliberately excluded: consumable restock must never break adequacy or
-    the empty-slot churn loop re-enters through the branch switch."""
-    return bool(_structural_candidates(state, game_data, objective))
-
 
 # WAVE 3a deleted four private helpers from here — `_candidate_root`,
 # `_reach_by_identity`, `_gear_ranking_rows` and `_candidate_fallbacks`. All

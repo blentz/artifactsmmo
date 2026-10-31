@@ -14,7 +14,6 @@ from collections import Counter
 from contextlib import nullcontext
 from dataclasses import replace
 
-from artifactsmmo_cli.ai.combat import secure_win, unpotioned
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
@@ -31,9 +30,8 @@ def farm_target(task_monster: str | None, objective: GearObjective | None,
     monsters task's monster first, as always; otherwise `m*` of the cycle's
     gear objective while `L*` is held, and None while a piece of it is
     missing, so no fight is chosen for XP then (acquisition fights still pay
-    theirs). The proved cascade (`winnable_farm_target_pure`) keeps the
-    precedence: `m*` is its path tier, winnable exactly when held, and nothing
-    is picked below it.
+    theirs). The proved two-arm cascade (`winnable_farm_target_pure`) keeps the
+    precedence: `m*` is its path arm, winnable exactly when held.
 
     `fleet_waiting`: the crafter's role serves fleet pieces (§2.5,
     `ctx.fleet_pieces`), which count as missing pieces of its joint objective, so
@@ -42,7 +40,6 @@ def farm_target(task_monster: str | None, objective: GearObjective | None,
         task_monster=task_monster,
         path_monster=objective.monster if objective is not None else None,
         path_winnable=objective is not None and objective.held and not fleet_waiting,
-        pick_winnable=None,
     ))
 
 
@@ -103,8 +100,7 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
     `combat_monster` — the only grind target known before the objective — and
     its gear keep built for that monster. The objective is priced on that
     context; then the grind target is `farm_target`'s, the keep follows the
-    final target and keeps every `L*` piece (`with_objective_keep`), and the
-    risk is judged on it, bare of potions and at full hp.
+    final target and keeps every `L*` piece (`with_objective_keep`).
 
     The objective is priced inside one `search_cache` episode: every drop and
     gather route it prices reads the learned drop tally and slope
@@ -119,7 +115,4 @@ def attach_gear_objective(state: WorldState, game_data: GameData, ctx: Selection
         gear_keep=with_objective_keep(
             ctx.gear_keep if combat_monster == task_monster
             else gear_keep_for(state, game_data, history, combat_monster),
-            objective),
-        combat_risky=(combat_monster is not None
-                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),
-                                         game_data, combat_monster)))
+            objective))

@@ -1,9 +1,10 @@
 """Per-level WITNESS builder for the kernel `winnableAcrossBand_grounded` proof.
 
-The Task-1 sweep (`formal/diff/test_winnable_across_band_diff.py`) already
-verified, with production's real `is_winnable`, that `WinnableAcrossBand` holds
-49/49 over the live catalog under the best-full-obtainable-loadout + full-HP
-model. This module re-runs that exact production chain and, for each band level
+The Task-1 sweep (`formal/diff/test_winnable_across_band_diff.py`, retired in
+plan C Task 4) verified, with production's real `is_winnable`, that
+`WinnableAcrossBand` holds 49/49 over the live catalog under the
+best-full-obtainable-loadout + full-HP model. This module runs that production
+chain and, for each band level
 `L in [1, 49]`, records the WITNESS the kernel proof verifies:
 
   * the winning monster code chosen by `pick_winnable_monster_pure`;
@@ -44,6 +45,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 from typing import Any
 
 from artifactsmmo_cli.ai.combat import (
@@ -81,6 +83,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # Leveling band from `GearTierLeveling.InLevelingBand`: 1 <= L < 50.
 BAND_LO = 1
 BAND_HI = 50  # exclusive
+
+# The captured fixtures the witness reads (`snapshot_game_data.py`,
+# `capture_base_stats.py`).
+SIM_DIR = Path(__file__).resolve().parent
+BASE_STATS_PATH = SIM_DIR / "character_base_stats.json"
+SNAPSHOT_PATH = SIM_DIR / "game_data_snapshot.json"
 
 # item_stats keys that prove the snapshot carries combat fields (an OLD snapshot
 # has only level/type/crafting_* — no `attack`).
