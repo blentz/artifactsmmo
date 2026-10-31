@@ -1185,13 +1185,21 @@ def test_the_census_loadout_is_the_gear_objective() -> None:
 
 def test_the_geared_census_loadout_is_chosen_over_the_armory() -> None:
     """The geared cell owns every suppliable equippable at its level, so its
-    `L*` is chosen over all of them: a level-20 character holding the armory
-    wears the lifesteal rune it could not buy from nothing."""
+    `L*` is chosen over all of them: at level 20 it wears dreadful rings and a
+    lost_world_map the census character grown from nothing does not reach."""
     gd = _gd()
-    assert "rune_slot" not in census_gear(12, frozenset(), False, gd)
-    gear = census_gear(20, frozenset(), True, gd)
-    assert gear["rune_slot"] == "lifesteal_rune"
-    assert all(gd.item_stats(code).level <= 20 for code in gear.values())
+    grown = census_gear(20, frozenset(), False, gd)
+    geared = census_gear(20, frozenset(), True, gd)
+    assert (geared["ring1_slot"], geared["artifact1_slot"]) == ("dreadful_ring", "lost_world_map")
+    assert grown["ring1_slot"] != "dreadful_ring"
+    assert all(gd.item_stats(code).level <= 20 for code in geared.values())
+
+
+def test_the_census_character_crafts_at_its_level() -> None:
+    """The census character's skills grow with its level (crafting kept pace):
+    at level 20 its `L*` is the steel set a gearcrafter at 20 makes, where a
+    character still at skill 1 would wear the mushmush jacket."""
+    assert census_gear(20, frozenset(), False, _gd())["body_armor_slot"] == "steel_armor"
 
 
 def test_the_census_loadout_memo_is_per_catalogue_and_copied() -> None:
@@ -1251,7 +1259,9 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     """wool (from a grey sheep) buys the leaf `cloth`; every recipe cloth feeds
     has a near next tier, so the grey-farm policy refuses the sheep: the
     cloth is a purchase whose currency cannot be had — not a PLANNER_BUG,
-    which a grey-blind currency check called it (steel_armor, 2026-10-10)."""
+    which a grey-blind currency check called it (steel_armor, 2026-10-10). The
+    census character wears `L*` for `wolf`, the XP-paying monster at its level,
+    so the sheep is beatable and the grey policy is what refuses it."""
     gd = GameData()
     gd._item_stats = {
         "cloak": _craftable("cloak", "gearcrafting", 1),
@@ -1268,11 +1278,13 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     gd.world.npc_stock = {"tailor": {"cloth": 3}}
     gd.world.npc_tiles = {"tailor": (4, 4)}
     gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
-    gd._monster_locations = {"sheep": [(1, 0)]}
-    gd._monster_level = {"sheep": 1}
-    gd._monster_hp = {"sheep": 5}
+    gd._monster_locations = {"sheep": [(1, 0)], "wolf": [(0, 1)]}
+    gd._monster_level = {"sheep": 1, "wolf": 30}
+    gd._monster_hp = {"sheep": 5, "wolf": 5}
+    gd._monster_type = {"sheep": "normal", "wolf": "normal"}
     gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}
     _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     assert classify_gap("cloak", _cell(char_level=30), gd) is GapClass.PURCHASE_RECURSION
 
 
