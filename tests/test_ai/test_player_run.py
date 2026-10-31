@@ -1222,3 +1222,60 @@ def test_run_republishes_the_party_card_after_the_action():
                         patch.object(player, "_publish_party_card") as publish:
                     _run_one_action_with(player, RestAction(), post, "ok", client)
     publish.assert_any_call(post)
+
+
+def test_run_counts_a_gather_whose_drop_never_lands_toward_the_stall():
+    """The ticket farm (live 2026-10-31): through the REAL run() loop, a
+    successful `Gather(shrimp_spot->event_ticket)` that brings shrimp but no
+    ticket is no progress (`intention_progress.step_delivered`), so each
+    dry cycle counts toward the committed goal's stall."""
+    player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    client = MagicMock()
+    gather = GatherAction(resource_code="spruce_tree", drop_item_override="event_ticket",
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+    player._strategy = MagicMock()
+    player._strategy.decide.return_value = _StubDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.return_value = (goal, [gather], [])
+    player._arbiter._committed_repr = repr(goal)
+    initial_state = make_state(x=0, y=0, inventory={}, inventory_max=20,
+                               inventory_slots_max=20,
+                               skills={**make_state().skills, "woodcutting": 10})
+    dry = [replace(initial_state, inventory={"spruce_wood": n}) for n in (1, 2)]
+    executed = [0]
+
+    def fake_execute(action, client):
+        executed[0] += 1
+        return dry[executed[0] - 1], "ok", action
+
+    stalls: list[int] = []
+    ticks = [0]
+
+    def fake_tick(client):
+        ticks[0] += 1
+        stalls.append(player._intention_stall)
+        if ticks[0] > 2:
+            raise KeyboardInterrupt
+
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
+            with _patch_game_data_load():
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown"):
+                        with patch.object(player, "_maybe_periodic_refresh",
+                                          side_effect=fake_tick), \
+                                patch.object(player, "_reconcile_open_orders"):
+                            with patch.object(player, "_build_actions", return_value=[gather]):
+                                with patch.object(ctx_mod, "farm_target", return_value=None):
+                                    with patch.object(player, "_execute", side_effect=fake_execute):
+                                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                            with pytest.raises(KeyboardInterrupt):
+                                                player.run()
+
+    assert executed[0] == 2
+    assert stalls == [0, 1, 2]

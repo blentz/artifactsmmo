@@ -5455,6 +5455,23 @@ PRICED_ROUTE_CORE_MUTATIONS = [
      "                 for index in _fill_order(item, options, memo, free, charges))\n",
      "                 for index in range(len(routes)))\n"),
 ]
+# The ticket farm (live 2026-10-31): a leg whose planned drop did not land is
+# no progress, so a dry drop farm reaches the stall exit. Killed by
+# tests/test_ai/test_intention_progress.py and, at the run loop's call site,
+# tests/test_ai/test_player_run.py.
+STEP_DELIVERED_MUTATIONS = [
+    ("stall: an action planned for no drop never delivers",
+     "    if output is None:\n        return True\n",
+     "    if output is None:\n        return False\n"),
+    ("stall: a drop that did not land is delivered",
+     "    return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)\n",
+     "    return cache_holdings(after).get(item, 0) >= cache_holdings(before).get(item, 0)\n"),
+]
+STEP_DELIVERED_PLAYER_MUTATIONS = [
+    ("stall: the run loop counts any successful leg as progress",
+     "                                      new_state, outcome == \"ok\" and step_delivered(\n",
+     "                                      new_state, outcome == \"ok\" or 0 * step_delivered(\n"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -15041,6 +15058,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, STEP_DELIVERED_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(PLAYER_SRC, STEP_DELIVERED_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, TURN_ROTATION_DIFF_MUTATIONS,

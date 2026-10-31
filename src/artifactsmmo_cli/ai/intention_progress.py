@@ -4,13 +4,21 @@ docs/PLAN_decision_architecture_redesign.md).
 An intention ends on a fact. One such fact is that its progress has not moved
 for `STALL_CYCLES` of its own cycles; this module says what "moved" means.
 
-A cycle progresses when the committed goal's action SUCCEEDED or the quantity
-the goal exists to raise went up (character XP for a character grind, that
+A cycle progresses when the committed goal's action SUCCEEDED AND DELIVERED
+what it was planned for (`step_delivered`), or the quantity the goal exists to
+raise went up (character XP for a character grind, that
 skill's XP for a skill grind). Its plan comes from decomposition, whose legs are
 proved to deliver (`Formal.CommittedLoop.committed_loop_delivers`), so a
 successful leg is progress even before it pays XP. A stall is therefore
 `STALL_CYCLES` committed cycles with neither: a fight grind that keeps losing,
 or a leg that keeps failing.
+
+A DROP THAT HAS NOT LANDED IS NO DELIVERY (the ticket farm, live 2026-10-31).
+A gather or a fight planned for a drop (`plan_cache.step_output`) succeeds
+whether or not the drop lands: Robby's `Gather(shrimp_spot->event_ticket)`
+succeeded 266 times for one ticket (1 in 200), each counted as progress, so
+the stall exit never fired and every `BUDGET_CYCLES` turn handed the farm a
+full budget again. Such a cycle progresses only when the drop's count rose.
 
 WITNESSED 2026-10-04 (restart 12:19Z): the first rule counted only XP for a
 skill grind, and a crafting climb gathers for more than 20 cycles before its
@@ -29,10 +37,13 @@ import re
 from collections.abc import Mapping
 from dataclasses import replace
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.arbiter_select import BAND_FALLBACK_STEP, BAND_STEP, Candidate
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.plan_cache import cache_holdings, step_output
 from artifactsmmo_cli.ai.world_state import WorldState
 
 STALL_CYCLES = 20
@@ -71,9 +82,23 @@ def progress_measure(goal: Goal, state: WorldState) -> Measure | None:
     return None
 
 
+def step_delivered(action: Action, before: WorldState, after: WorldState,
+                   game_data: GameData) -> bool:
+    """Did `action` deliver what it was planned for: the drop of a gather or
+    of a planned fight (`plan_cache.step_output`, gold for a gold fight) rose
+    from `before` to `after`. An action planned for no drop delivers by
+    succeeding."""
+    output = step_output(action, game_data)
+    if output is None:
+        return True
+    item = output[0]
+    return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)
+
+
 def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:
     """Did one committed cycle move the intention forward: its action
-    succeeded, or its XP measure rose (a lost fight that still levelled up
+    succeeded and delivered (`ok`: `step_delivered` on a successful
+    outcome), or its XP measure rose (a lost fight that still levelled up
     counts)?"""
     if ok:
         return True

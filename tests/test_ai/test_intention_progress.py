@@ -1,7 +1,10 @@
 """The intention's progress measure (Phase 4-2a): what "moved" means for each
 goal family, and when an intention has stalled."""
 
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
@@ -10,6 +13,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     STALL_CYCLES,
     progress_measure,
     progressed,
+    step_delivered,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
@@ -123,3 +127,47 @@ def test_a_new_commitment_starts_its_own_count():
     player._arbiter._committed_repr = repr(second)
     player._track_intention(second, flat, flat, ok=False)
     assert player._arbiter._committed_repr == repr(second)
+
+
+def _shrimp_world() -> GameData:
+    gd = GameData()
+    gd.recipes_catalog.resource_drops = {"shrimp_spot": "shrimp"}
+    return gd
+
+
+def _ticket_gather() -> GatherAction:
+    return GatherAction(resource_code="shrimp_spot", drop_item_override="event_ticket",
+                        learned_drops=LearnedDrops.empty())
+
+
+def test_a_gather_whose_drop_did_not_land_delivers_nothing():
+    """The ticket farm (live 2026-10-31): `Gather(shrimp_spot->event_ticket)`
+    succeeds whether or not the 1-in-200 ticket lands. It delivers only when
+    the ticket count rose; a gather for the primary drop, or an action
+    planned for no drop, delivers by succeeding."""
+    gd = _shrimp_world()
+    dry = make_state(inventory={"shrimp": 1})
+    landed = make_state(inventory={"shrimp": 1, "event_ticket": 1})
+    assert not step_delivered(_ticket_gather(), make_state(), dry, gd)
+    assert step_delivered(_ticket_gather(), make_state(), landed, gd)
+    primary = GatherAction(resource_code="shrimp_spot", learned_drops=LearnedDrops.empty())
+    assert step_delivered(primary, make_state(), dry, gd)
+    assert step_delivered(RestAction(), make_state(), make_state(), gd)
+
+
+def test_a_dry_drop_farm_ends_on_the_stall_exit():
+    """25 shrimp gathers with no ticket: the committed farm is abandoned as
+    stalled on its twentieth dry cycle, not handed a full budget every turn."""
+    goal = GatherMaterialsGoal("event_ticket", {"event_ticket": 100})
+    player = _player_committed_to(goal)
+    gd = _shrimp_world()
+    before = make_state(inventory={"shrimp": 3})
+    after = make_state(inventory={"shrimp": 4})
+    ended = None
+    for cycle in range(1, 26):
+        ok = step_delivered(_ticket_gather(), before, after, gd)
+        player._track_intention(goal, before, after, ok=ok)
+        if player._arbiter._committed_repr is None:
+            ended = cycle
+            break
+    assert ended == STALL_CYCLES

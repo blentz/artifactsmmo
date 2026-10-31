@@ -136,6 +136,7 @@ from artifactsmmo_cli.ai.intention_progress import (
     progress_measure,
     progressed,
     record_turn,
+    step_delivered,
     turn_key,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -1442,8 +1443,13 @@ class GamePlayer:
                     outcome == "ok" or outcome == "error:cooldown"
                     or outcome == self.RATE_LIMITED_OUTCOME
                 )
+                # A successful leg planned for a drop that did not land moved
+                # nothing (`intention_progress.step_delivered`: the ticket
+                # farm, live 2026-10-31).
                 self._track_intention(selected_goal, prev_state_for_learning,
-                                      new_state, outcome == "ok")
+                                      new_state, outcome == "ok" and step_delivered(
+                                          executed_action, prev_state_for_learning,
+                                          new_state, game_data))
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action=action,
