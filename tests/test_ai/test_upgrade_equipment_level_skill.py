@@ -71,7 +71,7 @@ def test_relevant_actions_admits_the_ge_fill_for_the_goals_own_target() -> None:
     gd._ge_sell_orders = {"gear_shield": ("ord-shield", 40, 3)}
     gd._grand_exchange_location = (2, 2)
     state = _under_skill_state(gd)
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"), ge_fill=True)
     rel = goal.relevant_actions([], state, gd)
     fills = [a for a in rel if isinstance(a, GeFillSellOrderAction)]
     assert [(a.item_code, a.order_id, a.price, a.quantity) for a in fills] \
@@ -88,7 +88,7 @@ def test_no_ge_fill_admitted_when_no_order_stands() -> None:
     gd = _gd()
     gd._grand_exchange_location = (2, 2)
     state = _under_skill_state(gd)
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"), ge_fill=True)
     rel = goal.relevant_actions([], state, gd)
     assert not [a for a in rel if isinstance(a, GeFillSellOrderAction)]
 
@@ -103,6 +103,6 @@ def test_no_ge_fill_admitted_when_the_target_is_already_held() -> None:
         ScenarioCharacter(name="t", level=5,
                           skills={"gearcrafting": 1, "mining": 1},
                           inventory={"gear_ore": 2, "gear_shield": 1}), gd)
-    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"))
+    goal = UpgradeEquipmentGoal(committed_target=("gear_shield", "shield_slot"), ge_fill=True)
     rel = goal.relevant_actions([], state, gd)
     assert not [a for a in rel if isinstance(a, GeFillSellOrderAction)]

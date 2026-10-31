@@ -11,6 +11,8 @@ Extracted from `strategy_driver.py` (Task 5, PF-2 wiring) so that
 each other) breaks the cycle that direction would otherwise create.
 """
 
+from artifactsmmo_cli.ai.acquisition_cost import cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.dual_role_currency import fleet_pooled
 from artifactsmmo_cli.ai.game_data import GameData
@@ -18,7 +20,10 @@ from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.tiers.objective import _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
@@ -130,6 +135,31 @@ def _gather_goal_for_unreachable_equippable(
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
 
+def ge_fill_priced(code: str, state: WorldState, game_data: GameData,
+                   ctx: SelectionContext) -> bool:
+    """Is buying `code` off its standing GE sell order the route its PRICE
+    takes? The one question an `UpgradeEquipmentGoal` asks before it admits
+    the fill (S-046, the USER's ruling 2026-10-30: spent gold costs the time to
+    earn it again, so a buy is taken only when it beats the routes that cost
+    time).
+
+    An `L*` piece is served by the route that priced it (plan B Task 3): its
+    `GearPiece.route`, priced with the cycle's store. Any other target is
+    priced as the root walk prices it (`cheapest_route`, the pocket above the
+    reserve its buy keeps). A price at the no-route sentinel takes no route,
+    so it buys nothing. No standing order, no fill."""
+    if game_data.ge_best_sell_order(code) is None:
+        return False
+    objective = ctx.gear_objective
+    piece = (next((p for p in objective.missing if p.code == code), None)
+             if objective is not None else None)
+    if piece is not None:
+        return piece.route is SourceKind.GE_FILL and piece.price < UNOBTAINABLE_PER_UNIT
+    price, route = cheapest_route(code, 1, state, game_data, ctx, None, policy=LEGACY,
+                                  pocket=spendable_pocket(state, game_data, frozenset({code})))
+    return route is SourceKind.GE_FILL and price < UNOBTAINABLE_PER_UNIT
+
+
 def is_missing_piece(code: str, ctx: SelectionContext) -> bool:
     """`code` is a missing piece of the cycle's `L*`: the piece is served by the
     route that priced it, and a fight for gold is one (plan B Task 15).
@@ -184,7 +214,8 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     method. If the routing above ever admits a materials-short-but-gatherable
     target into `UpgradeEquipment`, the two DO become two producers and that
     census has to be re-run."""
-    upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
+    upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot),
+                                   ge_fill=ge_fill_priced(code, state, game_data, ctx))
     if (ctx.turn_in is not None and ctx.turn_in.item_code == code
             and ctx.turn_in.buyer != state.character):
         # A SIBLING HOLDS THE ELECTION for this item: the pooled currency in

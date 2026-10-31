@@ -255,7 +255,17 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
     by its fill: the first action is the `GeBuy` of the legs, and the amulet
     behind it is an `ObtainItem`, not the jewelrycrafting climb. The quiet
     book still withdraws its banked iron bars toward the legs' craft, behind
-    which its unsold amulet keeps its climb."""
+    which its unsold amulet keeps its climb.
+
+    RE-DERIVED S-046 (USER 2026-10-30: spent gold costs the time to earn it
+    again) and the 492 hotfix's round 3 (an upgrade buys off the book only
+    when its price took the fill): the legs' 299-gold fill now costs more time
+    than their craft, so their price takes the craft (25) and the busy book
+    serves it, the same withdraw of banked iron bars as the quiet one. The
+    `GeBuy` this asserted was the bug: a fill served against a price that
+    took the craft. The book still reorders the rest of `L*` (the amulet and
+    rings priced through their fills follow the legs) and the goal (the busy
+    upgrade, the quiet material walk)."""
     busy_report = _plan(CELL5_BUSY_ADEQUATE, busy)
     quiet_report = _plan(CELL5_BUSY_ADEQUATE, quiet)
     legs = ObtainItem(code=LEG_TARGET, quantity=1, slot="leg_armor_slot")
@@ -268,8 +278,8 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
     assert quiet_report.decision.chosen_root == legs
     order = busy.ge_best_sell_order(LEG_TARGET)
     assert order is not None
-    assert [repr(a) for a in busy_report.plan][:2] == [
-        f"GeBuy({LEG_TARGET}×1@{order[0]})", f"Equip({LEG_TARGET}->leg_armor_slot)"]
+    assert not any(repr(a).startswith("GeBuy") for a in busy_report.plan)
+    assert [repr(a) for a in busy_report.plan][:1] == ["Withdraw(iron_bar×3)"]
     assert [repr(a) for a in quiet_report.plan][:1] == ["Withdraw(iron_bar×3)"]
     assert quiet_report.decision.fallback_roots[3] == ReachSkillLevel(skill="jewelrycrafting",
                                                                       level=6)

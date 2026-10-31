@@ -417,6 +417,7 @@ GE_FILL_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_fi
 GE_POST_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_post_buy.py"
 WITHDRAW_GOLD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_gold.py"
 POST_BUY_BID_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "post_buy_bid.py"
+GOAL_SERIALIZATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goal_serialization.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
@@ -5408,8 +5409,8 @@ UPGRADE_DECOMPOSE_MUTATIONS = [
      "    return [*legs, equip] if equip.is_applicable(landed, game_data) else legs\n\n\ndef _decompose_grind",
      "    return [*legs, equip]\n\n\ndef _decompose_grind"),
     ("craft_plan_gen: an upgrade the GE sells is made instead (the venue choice lost)",
-     "    if game_data.ge_best_sell_order(item) is not None:\n        # The book sells it",
-     "    if False:\n        # The book sells it"),
+     "    if goal.ge_fill:\n        # The book sells it and",
+     "    if False:\n        # The book sells it and"),
     ("craft_plan_gen: an upgrade is never decomposed (A* only)",
      "        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks,\n"
      "                                  store=store)",
@@ -9755,6 +9756,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     GE_FILL_SELL_SRC, GE_POST_BUY_SRC, WITHDRAW_GOLD_SRC, POST_BUY_BID_GOAL_SRC, GOLD_RATE_SRC,
+    GOAL_SERIALIZATION_SRC,
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
@@ -13850,6 +13852,55 @@ POCKET_GOLD_CLAIM_MUTATIONS = [
      "                step_decline=step_decline,\n"),
 ]
 
+# Round 3 of the 492 hotfix: an UpgradeEquipment goal admits a GE fill only
+# when the item's PRICE took it (S-046). Killed by
+# tests/test_ai/test_pocket_gold_buys.py unless noted.
+UPGRADE_FILL_GOAL_MUTATIONS = [
+    ("progression: the goal admits any standing order, priced or not",
+     "            if self._ge_fill and ge_location is not None and ge_order is not None \\\n",
+     "            if ge_location is not None and ge_order is not None \\\n"),
+    ("progression: a resumed goal forgets its priced fill",
+     "                \"ge_fill\": self._ge_fill}\n",
+     "                \"ge_fill\": False}\n"),
+]
+UPGRADE_FILL_ROUTING_MUTATIONS = [
+    ("obtain_item_routing: a piece is bought whatever route priced it",
+     "        return piece.route is SourceKind.GE_FILL and piece.price < UNOBTAINABLE_PER_UNIT\n",
+     "        return piece.price < UNOBTAINABLE_PER_UNIT\n"),
+    ("obtain_item_routing: a piece at the no-route sentinel is bought",
+     "        return piece.route is SourceKind.GE_FILL and piece.price < UNOBTAINABLE_PER_UNIT\n",
+     "        return piece.route is SourceKind.GE_FILL\n"),
+    ("obtain_item_routing: a vanished order is still bought",
+     "    if game_data.ge_best_sell_order(code) is None:\n        return False\n"
+     "    objective = ctx.gear_objective\n",
+     "    if False:\n        return False\n"
+     "    objective = ctx.gear_objective\n"),
+    ("obtain_item_routing: a non-piece target is bought whatever its price took",
+     "    return route is SourceKind.GE_FILL and price < UNOBTAINABLE_PER_UNIT\n",
+     "    return price >= 0\n"),
+    ("obtain_item_routing: the equippable step's upgrade buys unpriced",
+     "                                   ge_fill=ge_fill_priced(code, state, game_data, ctx))\n",
+     "                                   ge_fill=True)\n"),
+]
+UPGRADE_FILL_DECISION_MUTATIONS = [
+    ("decisions/obtain_item: the craft-chain root's upgrade buys unpriced",
+     "                                       ge_fill=ge_fill_priced(self.root.code, state,\n"
+     "                                                              game_data, ctx))\n",
+     "                                       ge_fill=True)\n"),
+]
+UPGRADE_FILL_SERIALIZATION_MUTATIONS = [
+    ("goal_serialization: a resumed upgrade always buys",
+     "            committed, ge_fill=data.get(\"ge_fill\") is True)\n",
+     "            committed, ge_fill=True)\n"),
+]
+# Killed by tests/test_ai/test_craft_plan_gen.py.
+UPGRADE_FILL_WALK_MUTATIONS = [
+    ("craft_plan_gen: any standing order hands the upgrade to the search",
+     "    if goal.ge_fill:\n        # The book sells it and the price took the fill",
+     "    if game_data.ge_best_sell_order(item) is not None:\n"
+     "        # The book sells it and the price took the fill"),
+]
+
 POCKET_GOLD_OBJECTIVE_MUTATIONS = [
     ("gear_objective: a candidate's pieces are priced with no m* on the context",
      "    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))\n",
@@ -15237,6 +15288,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
     run_group(PLAYER_SRC, POCKET_GOLD_CLAIM_MUTATIONS,
               "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, UPGRADE_FILL_GOAL_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, UPGRADE_FILL_ROUTING_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_ITEM_DECISION_SRC, UPGRADE_FILL_DECISION_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GOAL_SERIALIZATION_SRC, UPGRADE_FILL_SERIALIZATION_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_FILL_WALK_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, POCKET_GOLD_WALK_MUTATIONS,
               "tests/test_ai/test_pocket_gold_buys.py", survivors)
 def _run_all_groups() -> int:

@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _equippable_goal,
     _gather_step_target_is_root,
     _recipe_has_combat_drop_input,
+    ge_fill_priced,
 )
 from artifactsmmo_cli.ai.obtain_sources import has_non_craft_source
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -399,7 +400,9 @@ class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
         for code, qty in (state.bank_items or {}).items():
             owned[code] = owned.get(code, 0) + qty
         upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                       committed_target=(self.root.code, dest_slot))
+                                       committed_target=(self.root.code, dest_slot),
+                                       ge_fill=ge_fill_priced(self.root.code, state,
+                                                              game_data, ctx))
         # Pursue the committed gear root one PLANNABLE CHUNK at a time — never
         # hand the whole craft+equip chain to the A* at once. The old code
         # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,

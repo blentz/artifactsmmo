@@ -30,13 +30,20 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction, gold_ferry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.decisions.obtain_item import (
+    DoesTheChainFitTheDepthBudget,
+    DoesTheRecipeNeedAMonsterDrop,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.gold_rate import gold_per_second, gold_spend_actions
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
+from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, ge_fill_priced
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -45,6 +52,7 @@ from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi, spendab
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import attached, shared_world
@@ -154,7 +162,7 @@ def test_no_ferry(deficit: int, bank_gold: int | None, pool: bool) -> None:
 # --------------------------------------------------------------------------
 
 def _upgrade() -> UpgradeEquipmentGoal:
-    return UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot"))
+    return UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot"), ge_fill=True)
 
 
 def test_a_star_withdraws_the_shortfall_then_buys() -> None:
@@ -478,3 +486,100 @@ def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
                                    pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
     assert piece.price == price + 1
+
+
+# --------------------------------------------------------------------------
+# Round 3: an upgrade goal admits a GE fill only when its PRICE took it.
+# --------------------------------------------------------------------------
+
+def test_a_robby_shaped_upgrade_does_not_buy_off_the_book() -> None:
+    """Live Robby 2026-10-30, on S-046's own commit: root
+    `ReachSkillLevel(gearcrafting, 27)`, but the fallback
+    `UpgradeEquipment(mithril_helm)` planned `WithdrawGold(90843)` ->
+    `GeBuy` -> `Equip`, because the goal admitted any standing order and the
+    search prices an edge by its travel. The goal now admits the fill only
+    when the item's price takes it (`ge_fill_priced`): with a ~92.5k order
+    the craft is the priced route, so no fill and no ferry are admitted, from
+    Robby's purse or from a bank that could pay it twice."""
+    for purse in ((1736, 91_000), ROBBY):
+        world, state, ctx = _sword_book(92_500, purse)
+        assert not ge_fill_priced(SWORD, state, world, ctx)
+        goal = UpgradeEquipmentGoal(committed_target=(SWORD, "weapon_slot"),
+                                    ge_fill=ge_fill_priced(SWORD, state, world, ctx))
+        rel = goal.relevant_actions(list(_pool()), state, world)
+        assert not [a for a in rel if isinstance(a, GeFillSellOrderAction | WithdrawGoldAction)]
+        plan = GOAPPlanner().plan(state, goal, list(_pool()), world, max_nodes=2_000)
+        assert not [a for a in plan if isinstance(a, GeFillSellOrderAction | WithdrawGoldAction)]
+
+
+def test_a_cheap_upgrade_that_pays_for_itself_is_still_bought() -> None:
+    """The same order at 50 gold: the fill is the priced route, so the goal
+    admits it and the search buys it, the equip after."""
+    world, state, ctx = _sword_book(50)
+    assert ge_fill_priced(SWORD, state, world, ctx)
+    goal = UpgradeEquipmentGoal(committed_target=(SWORD, "weapon_slot"), ge_fill=True)
+    plan = GOAPPlanner().plan(state, goal, list(_pool()), world)
+    assert [type(a) for a in plan][-2:] == [GeFillSellOrderAction, EquipAction]
+
+
+def test_a_piece_is_bought_only_by_the_route_that_priced_it() -> None:
+    """An `L*` piece answers from its own priced route (plan B Task 3): a
+    piece whose price took the fill is bought, one whose price took the craft
+    is not, whatever the book offers; and a piece priced at the no-route
+    sentinel buys nothing. No standing order, no fill."""
+    world, state, ctx = _sword_book(50)
+
+    def priced(route: SourceKind, price: int) -> bool:
+        piece = GearPiece("weapon_slot", SWORD, 0, Fraction(1), Fraction(price), route)
+        piece_ctx = replace(ctx, gear_objective=GearObjective(
+            "pig", {"weapon_slot": SWORD}, Fraction(1), (piece,), fighter=state))
+        return ge_fill_priced(SWORD, state, world, piece_ctx)
+
+    assert priced(SourceKind.GE_FILL, 5)
+    assert not priced(SourceKind.CRAFT, 5)
+    assert not priced(SourceKind.GE_FILL, UNOBTAINABLE_PER_UNIT)
+    world._ge_sell_orders = {k: v for k, v in world._ge_sell_orders.items() if k != SWORD}
+    assert not priced(SourceKind.GE_FILL, 5)
+
+
+def test_a_resumed_upgrade_keeps_its_priced_fill() -> None:
+    """A committed plan resumed from the store keeps the flag it was priced
+    with; a row written before the flag existed buys nothing."""
+    for ge_fill in (True, False):
+        goal = UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot"), ge_fill=ge_fill)
+        data = goal_to_dict(goal)
+        assert data is not None
+        back = goal_from_dict(data, None)
+        assert isinstance(back, UpgradeEquipmentGoal) and back.ge_fill is ge_fill
+    legacy = goal_to_dict(UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot")))
+    assert legacy is not None
+    legacy.pop("ge_fill")
+    back = goal_from_dict(legacy, None)
+    assert isinstance(back, UpgradeEquipmentGoal) and back.ge_fill is False
+
+
+def _crown_piece_ctx(hal: WorldState, route: SourceKind) -> SelectionContext:
+    piece = GearPiece("helmet_slot", "crown", 0, Fraction(1), Fraction(10), route)
+    return replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "pig", {"helmet_slot": "crown"}, Fraction(1), (piece,), fighter=hal))
+
+
+def test_both_upgrade_producers_ask_the_price_whether_to_buy() -> None:
+    """The two places an `UpgradeEquipmentGoal` is built for a target (the
+    equippable step's `_equippable_goal`, and the craft-chain root's
+    `DoesTheRecipeNeedAMonsterDrop`) both set `ge_fill` from
+    `ge_fill_priced`: on HAL's crown, the fill when the piece's price took
+    it, none when it took another route, and none with no gold rate to price
+    its 6,550 gold at all (the bare context, S-046's unpriceable case)."""
+    gd = _crown_gd()
+    hal = _hal(gd)
+    root = ObtainItem("crown", 1, slot="helmet_slot")
+    for ctx, buys in ((_crown_piece_ctx(hal, SourceKind.GE_FILL), True),
+                      (_crown_piece_ctx(hal, SourceKind.CRAFT), False),
+                      (TIMED_NO_PROFILE_CONTEXT, False)):
+        goal = _equippable_goal("crown", "helmet_slot", hal, gd, ctx)
+        assert isinstance(goal, UpgradeEquipmentGoal) and goal.ge_fill is buys
+        chain = DoesTheRecipeNeedAMonsterDrop(ObtainItem("crown", 1), root,
+                                              ["helmet_slot"]).resolve(hal, gd, ctx, None)
+        assert isinstance(chain, DoesTheChainFitTheDepthBudget)
+        assert chain.upgrade.ge_fill is buys

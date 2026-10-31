@@ -333,10 +333,11 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
         return _decline(declined, f"upgrade:equip_inapplicable:{equip!r}")
     if state.inventory.get(item, 0) >= 1:
         return [equip]
-    if game_data.ge_best_sell_order(item) is not None:
-        # The book sells it: buying off the GE against making it is a price
-        # question the walk does not answer (no GE routes, D-E); the search,
-        # which prices both, keeps that choice.
+    if goal.ge_fill:
+        # The book sells it and the price took the fill (S-046,
+        # `ge_fill_priced`): the walk has no GE routes (D-E), so the search,
+        # which admits the fill and its gold ferry, plans the buy. A goal whose
+        # price did not take the fill walks the item like any other.
         return _decline(declined, f"upgrade:ge_venue:{item}")
     legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}), state, game_data, actions, ctx,
                       declined, subtasks, frozenset(), grey_exempt=frozenset({item}), store=store)

@@ -1860,8 +1860,9 @@ class TestACommittedUpgradeDecomposes:
     item, then the equip; its only A* route to a skill-gated item was the
     LevelSkill macro, which is leaving the pool."""
 
-    def _goal(self, state, target=("copper_ring", "ring1_slot")):
-        return UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=target)
+    def _goal(self, state, target=("copper_ring", "ring1_slot"), ge_fill=False):
+        return UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=target,
+                                    ge_fill=ge_fill)
 
     def test_the_item_is_made_then_equipped(self):
         gd = _gd_copper_ring()
@@ -1907,15 +1908,23 @@ class TestACommittedUpgradeDecomposes:
         assert decompose(self._goal(infeasible), infeasible, gd, [], _ctx()) is None
 
     def test_an_item_the_ge_sells_is_left_to_the_search(self, monkeypatch):
-        """Buying off the book against making it is a price question the walk
-        does not answer (no GE routes, D-E); the search keeps that choice."""
+        """A fill its price took (`ge_fill`, S-046) is the search's to plan:
+        the walk has no GE routes (D-E). The same book with the fill NOT
+        priced walks the ring like any other item: a standing order alone is
+        no reason to buy (live Robby 2026-10-30, `GeBuy(mithril_helm)` at
+        92.5k while its price took the climb)."""
         gd = _gd_copper_ring()
         monkeypatch.setattr(gd, "ge_best_sell_order",
                             lambda code: ("order", 5, 1) if code == "copper_ring" else None)
         state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
         declined: list[str] = []
-        assert decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx(), declined) is None
+        assert decompose(self._goal(state, ge_fill=True), state, gd, _copper_ring_actions(),
+                         _ctx(), declined) is None
         assert declined == ["upgrade:ge_venue:copper_ring"]
+        walked = decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx())
+        assert walked is not None
+        assert repr(walked[-1]) == "Equip(copper_ring->ring1_slot)"
+        assert not any(repr(a).startswith("GeBuy") for a in walked)
 
     def test_an_equip_that_could_not_apply_declines_before_obtaining(self):
         """A copy the equip could not use is not fetched: the withdraw would be

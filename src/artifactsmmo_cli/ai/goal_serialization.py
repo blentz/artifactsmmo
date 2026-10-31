@@ -70,7 +70,10 @@ def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
         if committed_raw is not None:
             pair = cast(list[str], committed_raw)
             committed = (pair[0], pair[1])
+        # A row written before S-046 carries no `ge_fill`: it was never
+        # priced, so it buys nothing (the goal's own default) until the next
+        # decision re-derives it.
         return UpgradeEquipmentGoal(
             cast(dict[str, str | None], data["initial_equipment"]),
-            committed)
+            committed, ge_fill=data.get("ge_fill") is True)
     raise ValueError(f"unknown goal type for rehydration: {t}")
