@@ -86,6 +86,7 @@ import Formal.GuardCoverage
 import Formal.ActionSetCompleteness
 import Formal.ActionApplicability
 import Formal.CombatTargetExistence
+import Formal.GearObjectiveWalk
 import Formal.StepDispatch
 import Formal.CycleInvariants
 import Formal.NoActionDeadlock

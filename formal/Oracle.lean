@@ -2276,6 +2276,36 @@ def runWinnableCascade (args : Array Json) : Json :=
       pathWinnable := intArg args 2 != 0 }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
+/-- Compute one `whichPieceIsNext` result via the SAME proved
+`Formal.GearObjectiveWalk.whichPieceIsNext` (ruling C4-R m4).
+args: [hasObjective(0/1), monster, held(0/1), atCap(0/1), n,
+       code0, served0(0/1), code1, served1, ...]
+Output: { kind: "none" | "level" | "piece", code: int (piece only) }. -/
+def runWhichPieceIsNext (args : Array Json) : Json :=
+  let n := (intArg args 4).toNat
+  let pieces : List (Int × Bool) :=
+    (List.range n).map (fun k => (intArg args (5 + 2 * k), intArg args (6 + 2 * k) != 0))
+  let o : Option Formal.GearObjectiveWalk.ObjectiveView :=
+    if intArg args 0 != 0 then
+      some { monster := intArg args 1, held := intArg args 2 != 0, missing := pieces.map Prod.fst }
+    else none
+  let serves : Int → Bool := fun c =>
+    ((pieces.find? (fun p => p.1 == c)).map Prod.snd).getD false
+  match Formal.GearObjectiveWalk.whichPieceIsNext o serves (intArg args 3 != 0) with
+  | none => Json.mkObj [("kind", Json.str "none")]
+  | some .levelUp => Json.mkObj [("kind", Json.str "level")]
+  | some (.piece c) => Json.mkObj [("kind", Json.str "piece"), ("code", Json.num c)]
+
+/-- Compute one `grindTarget` result via the SAME proved
+`Formal.GearObjectiveWalk.grindTarget`. args: [monster, held(0/1)].
+Output: { target: int | null }. -/
+def runGrindTarget (args : Array Json) : Json :=
+  let o : Formal.GearObjectiveWalk.ObjectiveView :=
+    { monster := intArg args 0, held := intArg args 1 != 0, missing := [] }
+  match Formal.GearObjectiveWalk.grindTarget o with
+  | none => Json.mkObj [("target", Json.null)]
+  | some t => Json.mkObj [("target", Json.num t)]
+
 /-- Run the cheapest-path greedy model.
 args layout:
   [current, target, maxXp, xpInLevel, nMonsters,
@@ -3287,6 +3317,10 @@ def runOne (item : Json) : Json :=
     runStoreWarmup args
   else if kind == "winnable_cascade" then
     runWinnableCascade args
+  else if kind == "which_piece_is_next" then
+    runWhichPieceIsNext args
+  else if kind == "grind_target" then
+    runGrindTarget args
   else if kind == "cheapest_path" then
     runCheapestPath args
   else if kind == "items_task_run" then

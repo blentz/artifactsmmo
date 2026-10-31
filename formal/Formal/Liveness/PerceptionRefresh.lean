@@ -65,6 +65,7 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.GearTierLeveling
 open Formal.Liveness.WinnableGrounded
 open Formal.CombatTargetExistence
+open Formal.GearObjectiveWalk
 
 /-- **The perception-refresh step.** Below the level cap, arm the objective-step
 Bools — the in-model image of production's `perceive` committing the

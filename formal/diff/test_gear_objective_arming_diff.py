@@ -1,7 +1,7 @@
 """Differential: the gear objective's two halves, bound to production (ruling C4-b).
 
-`Formal/Liveness/GearTierLeveling.lean` restates the combat objective below the
-cap over the gear objective `(L*, m*)`:
+`Formal/GearObjectiveWalk.lean` (composed in `Formal/Liveness/GearTierLeveling.lean`)
+states the combat objective below the cap over the gear objective `(L*, m*)`:
 
 * `fight_armed_of_held` — `L*` held: the root is one more level and the grind
   target is `m*`;
@@ -11,9 +11,10 @@ cap over the gear objective `(L*, m*)`:
   `missing`'s order, or no root when every piece is declined;
 * `whichPieceIsNext none … = none` — no objective is the wall.
 
-The Lean `whichPieceIsNext` / `grindTarget` are re-evaluated here in Python over the
-abstraction they state (`m*`, `held`, the missing piece codes, a `serves`
-predicate), and compared with what the LIVE functions produce:
+The proved Lean `GearObjectiveWalk.whichPieceIsNext` / `grindTarget` are evaluated by
+the Lean oracle (kinds `which_piece_is_next`, `grind_target`) over the abstraction
+they state (`m*`, `held`, the missing piece codes, a `serves` predicate), and
+compared with what the LIVE functions produce:
 `attach_gear_objective` → `farm_target` for the grind target, and `resolve_root`
 → `WhichPieceIsNext` → `piece_step` for the root. `serves` is production's own
 `RootWalk.serves` per piece (with `GearPiece.awaits_delivery` as a decline), so
@@ -44,6 +45,7 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ReachCharLevel, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
+from formal.diff.oracle_client import run_oracle
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world
 
@@ -51,29 +53,46 @@ BUNDLE = (Path(__file__).resolve().parents[2] / "tests" / "test_ai" / "scenarios
           / "fixtures" / "gamedata_bundle.json")
 
 
+# Codes on the oracle wire: `m*` is 1, the i-th missing piece is PIECE_BASE + i
+# (codes are payload to the Lean model, never compared but for identity).
+MONSTER_CODE = 1
+PIECE_BASE = 100
+
+
 def _lean_grind_target(objective: GearObjective | None) -> str | None:
-    """`GearTierLeveling.grindTarget` with no task held: `m*` while `L*` is held."""
+    """The proved `GearObjectiveWalk.grindTarget`, evaluated by the Lean oracle
+    (no task held, no fleet piece). No objective has no grind target: the cascade
+    is given no path monster then."""
     if objective is None:
         return None
-    return objective.monster if objective.held else None
+    out = run_oracle("grind_target", [[MONSTER_CODE, int(objective.held)]])[0]["target"]
+    assert out in (None, MONSTER_CODE), out
+    return None if out is None else objective.monster
 
 
 def _lean_root(objective: GearObjective | None, served: list[bool],
                at_cap: bool) -> tuple[str, int] | None:
-    """`GearTierLeveling.whichPieceIsNext`: `("level", 0)`, `("piece", index into
-    missing)` or None."""
-    if objective is None:
-        return None
-    if objective.held:
-        return None if at_cap else ("level", 0)
+    """The proved `GearObjectiveWalk.whichPieceIsNext`, evaluated by the Lean
+    oracle: `("level", 0)`, `("piece", index into missing)` or None."""
+    args = [int(objective is not None), MONSTER_CODE,
+            int(objective is not None and objective.held), int(at_cap), len(served)]
     for index, ok in enumerate(served):
-        if ok:
-            return ("piece", index)
-    return None
+        args += [PIECE_BASE + index, int(ok)]
+    out = run_oracle("which_piece_is_next", [args])[0]
+    if out["kind"] == "none":
+        return None
+    if out["kind"] == "level":
+        return ("level", 0)
+    return ("piece", out["code"] - PIECE_BASE)
 
 
 def _cases() -> list[tuple[str, bool]]:
-    return [(name, carried) for name in sorted(SCENARIOS) for carried in (False, True)]
+    """Every bundle scenario, plain and with its `L*` carried, that the Lean view
+    covers: no monsters task held (the view has no task arm)."""
+    gd = shared_world(BUNDLE)
+    return [(name, carried) for name in sorted(SCENARIOS)
+            if not _holds_monsters_task(scenario_state(SCENARIOS[name], gd))
+            for carried in (False, True)]
 
 
 def _world(name: str, carried: bool) -> tuple[WorldState, GameData, SelectionContext]:
@@ -88,16 +107,21 @@ def _world(name: str, carried: bool) -> tuple[WorldState, GameData, SelectionCon
     return state, gd, attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None)
 
 
-def _in_scope(state: WorldState, ctx: SelectionContext) -> bool:
-    """The Lean view has no task arm and no fleet pieces."""
-    return not (state.task_type == "monsters" and state.task_code) and not ctx.fleet_pieces
+def _holds_monsters_task(state: WorldState) -> bool:
+    return state.task_type == "monsters" and bool(state.task_code)
+
+
+def _assert_in_scope(state: WorldState, ctx: SelectionContext) -> None:
+    """The Lean view has no task arm and no fleet pieces; `_cases` keeps the
+    first, and an offline bundle state has no fleet."""
+    assert not _holds_monsters_task(state)
+    assert not ctx.fleet_pieces
 
 
 @pytest.mark.parametrize(("name", "carried"), _cases())
 def test_production_matches_the_lean_root_walk(name: str, carried: bool) -> None:
     state, gd, ctx = _world(name, carried)
-    if not _in_scope(state, ctx):
-        return
+    _assert_in_scope(state, ctx)
     objective = ctx.gear_objective
     sheet = CharacterObjective.from_game_data(gd)
 
@@ -136,7 +160,8 @@ def test_both_halves_are_in_the_sweep() -> None:
     for name, carried in _cases():
         state, gd, ctx = _world(name, carried)
         objective = ctx.gear_objective
-        if not _in_scope(state, ctx) or objective is None:
+        _assert_in_scope(state, ctx)
+        if objective is None:
             continue
         if objective.held:
             seen["held"] += wp.next_level(state, gd) is not None
@@ -155,11 +180,13 @@ def test_both_halves_are_in_the_sweep() -> None:
 def test_a_declined_first_piece_hands_the_root_to_the_next() -> None:
     """`find?` skips a declined piece (`piece_root_of_not_held`'s order): declining
     the first missing piece's step makes production's root the second piece's."""
-    for name in sorted(SCENARIOS):
+    for name, carried in _cases():
+        if carried:
+            continue
         state, gd, ctx = _world(name, False)
         objective = ctx.gear_objective
-        if (not _in_scope(state, ctx) or objective is None or objective.held
-                or len(objective.missing) < 2):
+        _assert_in_scope(state, ctx)
+        if objective is None or objective.held or len(objective.missing) < 2:
             continue
         sheet = CharacterObjective.from_game_data(gd)
         first = resolve_root(state, gd, sheet, ctx, None, no_decline).root

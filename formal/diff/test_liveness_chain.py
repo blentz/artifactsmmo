@@ -1,20 +1,23 @@
 """Liveness regression gate for `LivenessChain.chain_emits_fight_when_target_exists_and_applicable`.
 
 The Lean theorem (Formal/LivenessChain.lean) proves the chain
-  picker → step dispatch → FightAction applicability
-emits SOME FightAction whenever:
-  (a) the monster catalog contains a winnable target, and
+  grind target → step dispatch → FightAction applicability
+emits a FightAction on the target whenever:
+  (a) the grind target exists — the two-arm `farm_target` (a held monsters
+      task's monster, else the gear objective's `m*` while its `L*` is held;
+      `CombatTargetExistence.winnableFarmTarget`), and
   (b) the FightAction predicate holds for that target.
 
-This Python harness pins the SAME CHAIN — picker, step dispatch, and
-FightAction.is_applicable — against the live runtime. Each component is
-exercised in isolation against synthesized inputs; the test asserts the
-three-way composition matches the Lean theorem's truth table.
+This Python harness pins the dispatch and applicability legs against the live
+runtime for a given target monster: `is_winnable` at max hp (the target is a
+winnable one), `objective_step_goal(ReachCharLevel)` → `GrindCharacterXPGoal`,
+and `FightAction.is_applicable`. The grind target leg itself (which monster
+`farm_target` names) is bound by `test_gear_objective_arming_diff.py` and
+`test_winnable_cascade_diff.py`.
 
-If a future change to `_winnable_farm_target`, `objective_step_goal`, or
-`FightAction.is_applicable` reintroduces the 2026-06-06 trace failure
-class (a winnable target unreachable for combat in the same state), this
-test catches it before deployment.
+If a future change to `objective_step_goal` or `FightAction.is_applicable`
+reintroduces the 2026-06-06 trace failure class (a target unreachable for
+combat in the same state), this test catches it before deployment.
 """
 
 from __future__ import annotations
@@ -92,7 +95,7 @@ def _chain(state: WorldState, gd: GameData, monster: str, level: int) -> bool:
       3. FightAction.is_applicable,
     all succeed.
     """
-    # Step 1: G3 picker projection — winnability at max_hp.
+    # Step 1: G3 — the target is winnable at max_hp.
     projected = dataclasses.replace(state, hp=state.max_hp)
     if not is_winnable(projected, gd, monster, history=None):
         return False
@@ -141,7 +144,7 @@ class TestLivenessChain:
     def test_zero_xp_monster_breaks_applicability_gate(self) -> None:
         """The honest lower bound: at level 12 a chicken (lvl 1) grants
         ZERO XP (the curve zeroes at char-monster >= 11). The Lean
-        theorem fightApplicable_false_of_zero_xp pins this — picker may
+        theorem fightApplicable_false_of_zero_xp pins this — the target may
         say winnable, FightAction.is_applicable says no.
 
         Was level 11 (diff exactly 10) until 2026-08-15; the store replay
@@ -155,7 +158,7 @@ class TestLivenessChain:
 
     def test_low_hp_breaks_applicability_at_runtime_only(self) -> None:
         """fightApplicable_false_of_low_hp — current-hp filter, not target
-        selection. The G3 picker (at max_hp) still flags winnable."""
+        selection. At max_hp the target is still winnable (G3)."""
         gd = _stub_gd("yellow_slime", monster_level=2)
         # hp 30/100 = 30% < 50% floor
         state = _state(level=2, hp=30, max_hp=100)

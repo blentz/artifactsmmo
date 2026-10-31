@@ -747,6 +747,11 @@ open Formal.PriorityBand
 #print axioms Formal.PurposeRouting.pickGatherSlot_score_optimal
 #print axioms Formal.PurposeRouting.argminBy_le
 #print axioms Formal.PurposeRouting.argminBy_mem
+#print axioms Formal.GearObjectiveWalk.fight_armed_of_held
+#print axioms Formal.GearObjectiveWalk.no_xp_fight_of_not_held
+#print axioms Formal.GearObjectiveWalk.piece_root_of_not_held
+#print axioms Formal.GearObjectiveWalk.no_root_when_every_piece_declined
+#print axioms Formal.GearObjectiveWalk.missing_nonempty_of_not_held
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_none_no_task

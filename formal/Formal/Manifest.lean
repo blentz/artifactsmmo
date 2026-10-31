@@ -3,6 +3,7 @@ import Formal.OwnedCount
 import Formal.GearPolicy
 import Formal.PurposeRouting
 import Formal.CombatTargetExistence
+import Formal.GearObjectiveWalk
 import Formal.ActionApplicability
 import Formal.StepDispatch
 import Formal.LivenessChain
@@ -881,6 +882,12 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
 
+-- GearObjectiveWalk (ruling C4-b/C4-R: the root walk and grind target over the gear objective):
+#check @Formal.GearObjectiveWalk.fight_armed_of_held                 -- L* held: level-up root, grind target m*
+#check @Formal.GearObjectiveWalk.no_xp_fight_of_not_held             -- L* not held: no XP grind target
+#check @Formal.GearObjectiveWalk.piece_root_of_not_held              -- L* not held: the first served missing piece is the root
+#check @Formal.GearObjectiveWalk.no_root_when_every_piece_declined   -- every piece declined: no root
+#check @Formal.GearObjectiveWalk.missing_nonempty_of_not_held        -- well formed and not held: a piece is missing
 -- CombatTargetExistence (Phase G3; the two-arm grind target since plan C Task 4):
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
