@@ -41,7 +41,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, season_8_status
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
@@ -321,6 +321,7 @@ class TestSyntheticBranches:
         gd = GameData(items=ItemCatalog(stats={
             "wooden_stick": ItemStats(code="wooden_stick", level=1,
                                       type_="weapon", attack={"air": 2})}))
+        gd._build_server(season_8_status())
         objective = CharacterObjective.from_game_data(gd)
         state = scenario_state(ScenarioCharacter(
             name="synthetic_geared", level=5, max_hp=100,

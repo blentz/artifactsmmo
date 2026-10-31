@@ -4797,6 +4797,35 @@ GAME_DATA_RECYCLE_YIELD_MUTATIONS = [
      "        if recipe is None:\n            return None\n"
      "        return recycle_unit_yield(recipe, total or 1)"),
 ]
+# The server's level caps (`GET /`, plan C Task 7). Killed by
+# tests/test_ai/test_game_data.py (test_max_level_comes_from_the_status_payload,
+# test_a_status_without_max_level_raises).
+GAME_DATA_LEVEL_CAP_MUTATIONS = [
+    ("game_data: the character-level cap is a documented 50",
+     "        return self._max_level\n",
+     "        return 50\n"),
+    ("game_data: the skill-level cap is a documented 50",
+     "        return self._max_skill_level\n",
+     "        return 50\n"),
+    ("game_data: the status page's character-level cap is not kept",
+     "        self._max_level = status.max_level\n",
+     "        self._max_level = 50\n"),
+    ("game_data: the status page's skill-level cap is not kept",
+     "        self._max_skill_level = status.max_skill_level\n",
+     "        self._max_skill_level = 50\n"),
+    ("game_data: a catalogue without a status page reads a character-level cap of 50",
+     "        if self._max_level is None:\n"
+     "            raise ValueError(\"no level cap: the catalogue was built without \"\n"
+     "                             \"the server status page\")\n",
+     "        if self._max_level is None:\n"
+     "            return 50\n"),
+    ("game_data: a catalogue without a status page reads a skill-level cap of 50",
+     "        if self._max_skill_level is None:\n"
+     "            raise ValueError(\"no skill-level cap: the catalogue was built without \"\n"
+     "                             \"the server status page\")\n",
+     "        if self._max_skill_level is None:\n"
+     "            return 50\n"),
+]
 # Killed by tests/test_ai/test_learning_store.py (TestFleetRecycleTotals).
 FLEET_RECYCLE_TOTALS_MUTATIONS = [
     ("store: an uneven batch counts",
@@ -10362,18 +10391,23 @@ KEEP_VALUATION_ADAPTER_MUTATIONS = [
     # nothing can ever craft with. Killed by
     # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
     ("keep_valuation: consumer reachability ignored (unreachable recipes count)",
-     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph, cap):",
      "        if ingredients.get(code, 0) > 0:"),
     # Ignore WHICH recipe consumes the code: any recipe at all grants the demand,
     # so an item consumed by nothing keeps its neighbours' demand. Killed by
     # test_demand_is_zero_when_no_recipe_consumes_the_item_at_all.
     ("keep_valuation: consumer scan ignores the ingredient list",
-     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
-     "        if consumer_reachable(consumer, graph):"),
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph, cap):",
+     "        if consumer_reachable(consumer, graph, cap):"),
     # Widen the progression cap to infinity: nothing is ever unreachable. Killed by
     # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
+    # A documented 50 in place of the server's skill cap. Killed by
+    # test_the_keep_valuation_reads_the_loaded_skill_cap.
+    ("keep_valuation: the skill cap is a documented 50, not the loaded one",
+     "    cap = game_data.max_skill_level\n",
+     "    cap = 50\n"),
     ("keep_valuation: progression cap ignored (every gate is attainable)",
-     "    return gate is None or gate[1] <= MAX_ATTAINABLE_SKILL_LEVEL",
+     "    return gate is None or gate[1] <= max_skill_level",
      "    return True"),
     # An unvisited bank (`bank_items is None`) reads as holding the WORLD, so
     # nothing is ever deposit-eligible before the first bank visit. Killed by
@@ -11355,6 +11389,9 @@ WHICH_PIECE_MUTATIONS = [
     ("which-piece: the trunk is offered at the level cap (F12)",
      "    if state.level >= game_data.max_character_level:\n",
      "    if False:\n"),
+    ("which-piece: the trunk stops at a documented 50, not the loaded cap",
+     "    if state.level >= game_data.max_character_level:\n",
+     "    if state.level >= 50:\n"),
     ("which-piece: the trunk stops one level below the cap (F12)",
      "    if state.level >= game_data.max_character_level:\n",
      "    if state.level + 1 >= game_data.max_character_level:\n"),
@@ -13945,6 +13982,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_recycle_yield.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, GAME_DATA_RECYCLE_YIELD_MUTATIONS,
               "tests/test_ai/test_recycle_yield.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEVEL_CAP_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_RECYCLE_TOTALS_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,

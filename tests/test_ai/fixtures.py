@@ -212,3 +212,13 @@ def season_8_status() -> StatusSchema:
         "max_skill_level": 50, "characters_online": 1, "rate_limits": [],
         "season": {"name": "God of the Sun", "number": 8,
                    "start_date": "2026-06-27T00:00:00+00:00", "rewards": []}})
+
+
+def served_game_data() -> GameData:
+    """An empty catalogue that has read the server status page
+    (`season_8_status`): the season start and the level caps every live
+    catalogue loads from `GET /`. A hand-built catalogue starts here, since a
+    catalogue without the status page has no level cap to read."""
+    game_data = GameData()
+    game_data._build_server(season_8_status())
+    return game_data

@@ -22,12 +22,11 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess, drain_snapshot
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
-from artifactsmmo_cli.ai.keep_valuation import MAX_ATTAINABLE_SKILL_LEVEL
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, season_8_status, served_game_data
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -38,7 +37,7 @@ def _ctx(**kw) -> SelectionContext:
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         # Far-skill-gated byproduct with no recipe use -> useful cap 0 (drain all).
         "sap": ItemStats(code="sap", level=1, type_="resource"),
@@ -126,7 +125,7 @@ def test_excess_keeps_eventual_recipe_demand_for_far_gated_material():
     drop (gold_ore, jasper_crystal) banked while the crafting skill is still too low —
     and stops the withdraw<->deposit churn `disposal_route` would otherwise cause
     (a recipe-demanded material routes back to DEPOSIT)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "rare_ore": ItemStats(code="rare_ore", level=1, type_="resource"),
         "rare_bar": ItemStats(code="rare_bar", level=20, type_="resource",
@@ -152,7 +151,7 @@ def test_far_level_material_is_kept_at_its_reachable_demand_not_a_distance_proxy
     is 80 at BOTH character levels — level distance is not evidence about
     consumption. Draining 75 more of a material a reachable recipe needs 80 of is
     the over-shedding the ceiling caused."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "future_ore": ItemStats(code="future_ore", level=20, type_="resource"),
         "future_bar": ItemStats(code="future_bar", level=20, type_="resource",
@@ -170,12 +169,12 @@ def test_material_whose_only_consumer_is_unreachable_fully_drains():
     progression cap can never be crafted by anyone, so the material it consumes
     has NO reachable consumer and the whole bank stock is junk. The distance
     proxy could not express this — it would still have hoarded 5."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "never_ore": ItemStats(code="never_ore", level=20, type_="resource"),
         "never_bar": ItemStats(code="never_bar", level=20, type_="resource",
                                crafting_skill="mining",
-                               crafting_level=MAX_ATTAINABLE_SKILL_LEVEL + 1),
+                               crafting_level=season_8_status().max_skill_level + 1),
     }
     gd._crafting_recipes = {"never_bar": {"never_ore": 80}}
     state = make_state(level=18, bank_items={"never_ore": 100})
@@ -185,7 +184,7 @@ def test_material_whose_only_consumer_is_unreachable_fully_drains():
 def test_excess_never_drains_currency_or_consumable_from_bank():
     """Currency (KEEP_ALL on the OWNED ladder) and (non-hp) consumables are never
     pulled out of the bank as junk."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "event_ticket": ItemStats(code="event_ticket", level=1, type_="currency"),
         "recall_potion": ItemStats(code="recall_potion", level=1, type_="consumable"),

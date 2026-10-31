@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.root_group import ROOT_GROUPS
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_group_census import GroupCounts, root_group_counts
-from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state
+from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state, served_game_data
 
 
 def test_store_migrates_root_group_columns(tmp_path: Path) -> None:
@@ -86,7 +86,7 @@ def _guard_world() -> GameData:
     """The smallest catalogue `_decide_band` can run against: one winnable
     monster so the walk has a trunk to resolve, a bank and a taskmaster so the
     selection context is buildable, and the shared ladder item stats."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 10}

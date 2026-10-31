@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_strategy_driver import _ctx
 
 # The five gear candidates below are chosen so that ONE slot lands in each of
@@ -51,7 +51,7 @@ from tests.test_ai.test_strategy_driver import _ctx
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "iron_shield": ItemStats(code="iron_shield", level=10, type_="shield",
                                  resistance={"earth": 20},

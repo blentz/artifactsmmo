@@ -180,6 +180,7 @@ from formal.sim.production_ladder import (
     fires as production_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import served_game_data
 
 PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
@@ -278,7 +279,7 @@ def _phase_task_fields(phase: str) -> dict[str, object]:
 
 
 def _make_game_data(scn: Scenario) -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {}
     gd._monster_level = (
         {scn_unlock_name(): scn.unlock_monster_level}
@@ -1111,7 +1112,7 @@ def drive_and_contest(
 
 
 def _craft_relief_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "plank": ItemStats(code="plank", level=1, type_="resource",
                            crafting_skill="woodcutting", crafting_level=1),
@@ -1123,7 +1124,7 @@ def _craft_relief_gd() -> GameData:
 def _single_input_relief_gd() -> GameData:
     """Same as `_craft_relief_gd` but a 1:1 recipe (net relief 0) — the
     net-relief gate (craft_relief.py `_net_relief_per_craft`) rejects it."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "plank": ItemStats(code="plank", level=1, type_="resource",
                            crafting_skill="woodcutting", crafting_level=1),
@@ -1208,7 +1209,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 
 
 def _recycle_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "dagger": ItemStats(code="dagger", level=1, type_="weapon",
                             crafting_skill="weaponcrafting", crafting_level=1),
@@ -1301,7 +1302,7 @@ def _drain_gd() -> GameData:
     # Empty catalog: the banked "sap" has no stats ⇒ useful_quantity_cap 0 ⇒
     # every banked unit is over-cap junk. bank_capacity large ⇒ bank has room ⇒
     # RECYCLE_RELIEF / SELL_RELIEF quiet so DRAIN_BANK_JUNK wins the slot contest.
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 50
     return gd
 
@@ -1411,7 +1412,7 @@ def _gebid_gd() -> GameData:
     #
     # Grand Exchange present so a post can land. bank_capacity large ⇒
     # RECYCLE_RELIEF / SELL_RELIEF quiet so acceptTask cleanly wins the contest.
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"steel": {"iron": 25}}
     gd._npc_stock = {"shop": {"steel": 5000, "iron": 1}}
     gd._npc_locations = {"shop": (1, 0)}
@@ -1584,7 +1585,7 @@ def test_party_join_near_miss_no_lease() -> None:
 def _rest_combat_gd() -> GameData:
     """A single monster `mob` with a plain {fire:50} attack and no exotic
     abilities — the symmetric fight the predict_win arithmetic above assumes."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_hp = {"mob": 100}
     gd._monster_attack = {"mob": {"fire": 50}}
     gd._monster_resistance = {"mob": {}}
@@ -1759,7 +1760,7 @@ def _feasible_items_gd() -> GameData:
     Task completion rewards are seeded for the `widget` task code so any
     task-reward read (`task_gold_reward` / `task_coin_reward`) gets real API
     amounts instead of raising on missing task-reward data."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {}
     gd._crafting_recipes = {}
     gd._task_gold_rewards = {"widget": 150}
@@ -1817,7 +1818,7 @@ def test_task_phase_selects_objective_step_for_an_out_of_reach_items_task() -> N
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="gizmo", task_type="items",
         task_progress=0, task_total=5)
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "gizmo": ItemStats(code="gizmo", level=30, type_="weapon",
                            crafting_skill="weaponcrafting", crafting_level=30),

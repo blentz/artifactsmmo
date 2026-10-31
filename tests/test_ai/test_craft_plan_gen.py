@@ -48,7 +48,7 @@ from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ def _gd_copper_ring() -> GameData:
     Closure: copper_ring (craftable, jewel lv1), copper_bar (craftable, mining lv1),
     copper_ore (raw; produced by copper_rocks resource).
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
         "copper_bar": ItemStats(
@@ -110,7 +110,7 @@ def _copper_ring_actions() -> list:
 
 def _gd_monster_drop() -> GameData:
     """feather_coat → feather (monster-drop only, NOT a resource drop)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "feather": ItemStats(code="feather", level=1, type_="resource"),
         "feather_coat": ItemStats(
@@ -433,7 +433,7 @@ class TestMissingItemStatsOrWorkshopFallsBack:
 
     def test_no_item_stats_for_craftable_returns_none(self):
         """Recipe exists but ItemStats is absent → unknown requirements → fall back."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {}  # No stats for copper_ring.
         gd._crafting_recipes = {"copper_ring": {"copper_ore": 6}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
@@ -497,7 +497,7 @@ class TestSharedIntermediateClosure:
 
         Exercises the ``if item in seen: continue`` branch in _closure_items.
         """
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
             "copper_bar": ItemStats(
@@ -764,7 +764,7 @@ def _gd_copper_dagger() -> GameData:
              copper_bar (craftable, mining lv1),
              copper_ore (raw; produced by copper_rocks resource).
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
         "copper_bar": ItemStats(
@@ -833,7 +833,7 @@ def _gd_drop_leaf(char_beats_chicken: bool = True) -> GameData:
     the goal's relevant_actions can emit the GAP-6-proven dropper Fight.
     `char_beats_chicken=False` makes the chicken unbeatable (hp/attack far
     above the test state's stats) so is_winnable gates the fight out."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "feather": ItemStats(code="feather", level=1, type_="resource"),
         "feather_coat": ItemStats(
@@ -1530,7 +1530,7 @@ def _gd_fire_staff() -> GameData:
     gatherable (ash_tree). fishing_net (a bag, weaponcrafting lv1) is made
     from 6 ash_plank each -- so ONE unit recycle recovers max(1, 6 // 2) = 3
     planks. The bag holds 7 spare fishing_nets."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
         "fire_staff": ItemStats(
@@ -1586,7 +1586,7 @@ class TestTheActivationRecycleBug:
 def _gd_widget_buy() -> GameData:
     """widget (gearcrafting lv1) needs 3 widget_part -- a raw leaf with no
     recipe and no resource drop, sold ONLY by a permanent, reachable NPC."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "widget_part": ItemStats(code="widget_part", level=1, type_="resource"),
         "widget": ItemStats(
@@ -1728,7 +1728,7 @@ class TestSecondaryDropGather:
 
     @staticmethod
     def _gd() -> GameData:
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "pearl_ring": ItemStats(code="pearl_ring", level=1, type_="ring",
                                     crafting_skill="jewelrycrafting", crafting_level=1),
@@ -1936,7 +1936,7 @@ class TestDecomposeSupply:
     attempt, timed out, plan_len 0."""
 
     def _gd(self) -> GameData:
-        gd = GameData()
+        gd = served_game_data()
         gd.world.bank_tile = (4, 0)
         gd._bank_capacity = 100
         return gd
@@ -1980,7 +1980,7 @@ class TestDecomposeSupply:
                              [], NO_DROPS_CONTEXT, declined) is None
         assert declined == ["satisfied"]
         declined = []
-        assert cpg.decompose(goal, make_state(bank_items={}), GameData(), [],
+        assert cpg.decompose(goal, make_state(bank_items={}), served_game_data(), [],
                              NO_DROPS_CONTEXT, declined) is None
         assert declined == ["supply:no_bank"]
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: None)
@@ -2061,34 +2061,34 @@ class TestBridgeRegions:
     def test_a_crossing_in_and_back_out(self) -> None:
         fight, craft = _Leg("Fight(rat)", "interior"), _Leg("Craft", "overworld")
         edges = [_Edge("overworld", "interior"), _Edge("interior", "overworld")]
-        plan = cpg._bridge_regions([fight, craft], make_state(layer="overworld"), GameData(),
+        plan = cpg._bridge_regions([fight, craft], make_state(layer="overworld"), served_game_data(),
                                    [*edges, fight], [])
         assert [repr(a) for a in plan] == ["Edge(overworld->interior)", "Fight(rat)",
                                            "Edge(interior->overworld)", "Craft"]
 
     def test_a_plan_in_one_region_is_untouched(self) -> None:
         legs = [_Leg("Fight(chicken)", "overworld"), _Leg("Craft", "overworld")]
-        assert cpg._bridge_regions(legs, make_state(layer="overworld"), GameData(),
+        assert cpg._bridge_regions(legs, make_state(layer="overworld"), served_game_data(),
                                    [_Edge("overworld", "interior")], []) == legs
 
     def test_no_crossing_declines_by_name(self) -> None:
         declined: list[str] = []
         fight = _Leg("Fight(rat)", "interior")
-        assert cpg._bridge_regions([fight], make_state(layer="overworld"), GameData(),
+        assert cpg._bridge_regions([fight], make_state(layer="overworld"), served_game_data(),
                                    [_Edge("overworld", "sanctum")], declined) is None
         assert declined == ["region:overworld->interior:Fight(rat)"]
 
     def test_a_leg_that_crosses_itself_needs_no_second_crossing(self) -> None:
         own = _Edge("overworld", "interior")
         fight = _Leg("Fight(rat)", "interior")
-        plan = cpg._bridge_regions([own, fight], make_state(layer="overworld"), GameData(),
+        plan = cpg._bridge_regions([own, fight], make_state(layer="overworld"), served_game_data(),
                                    [_Edge("overworld", "interior")], [])
         assert [repr(a) for a in plan] == ["Edge(overworld->interior)", "Fight(rat)"]
 
     def test_decompose_bridges_every_plan_it_returns(self, monkeypatch) -> None:
         fight = _Leg("Fight(rat)", "interior")
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [fight])
-        gd = GameData()
+        gd = served_game_data()
         gd.world.bank_tile = (4, 0)
         gd._bank_capacity = 100
         plan = cpg.decompose(SupplyBankGoal("cooked_rat_meat", 10, 20),
@@ -2100,7 +2100,7 @@ class TestBridgeRegions:
     def test_two_crossings_when_one_does_not_reach(self) -> None:
         fight = _Leg("Fight(lich)", "tomb")
         edges = [_Edge("overworld", "mine"), _Edge("mine", "tomb")]
-        plan = cpg._bridge_regions([fight], make_state(layer="overworld"), GameData(), edges, [])
+        plan = cpg._bridge_regions([fight], make_state(layer="overworld"), served_game_data(), edges, [])
         assert [repr(a) for a in plan] == ["Edge(overworld->mine)", "Edge(mine->tomb)",
                                            "Fight(lich)"]
 
@@ -2108,19 +2108,19 @@ class TestBridgeRegions:
         """The island to the sonnengott cavern is 5 crossings; a cap of 4
         declined it (2026-10-10). The search ends on exhausted regions."""
         chain = [_Edge(f"r{i}", f"r{i + 1}") for i in range(6)]
-        route = crossings(make_state(layer="r0"), "r6", chain, GameData())
+        route = crossings(make_state(layer="r0"), "r6", chain, served_game_data())
         assert route is not None and len(route) == 6
-        assert crossings(make_state(layer="r0"), "nowhere", chain, GameData()) is None
+        assert crossings(make_state(layer="r0"), "nowhere", chain, served_game_data()) is None
 
     def test_a_region_reached_twice_is_expanded_once(self) -> None:
         """Two edges into `mine`: the second is not a new frontier entry."""
         edges = [_Edge("overworld", "mine"), _Edge("overworld", "mine"), _Edge("mine", "tomb")]
-        route = crossings(make_state(layer="overworld"), "tomb", edges, GameData())
+        route = crossings(make_state(layer="overworld"), "tomb", edges, served_game_data())
         assert [repr(a) for a in route] == ["Edge(overworld->mine)", "Edge(mine->tomb)"]
 
     def test_decompose_declines_a_plan_it_cannot_bridge(self, monkeypatch) -> None:
         monkeypatch.setattr(cpg, "_walk_plan", lambda *a, **k: [_Leg("Fight(rat)", "interior")])
-        gd = GameData()
+        gd = served_game_data()
         gd.world.bank_tile = (4, 0)
         gd._bank_capacity = 100
         declined: list[str] = []
@@ -2143,7 +2143,7 @@ class TestGatherInTheCharactersRegion:
         graph = SimpleNamespace(sources={"palm_wood": [SimpleNamespace(kind=SourceKind.GATHER,
                                                                          via="palm_tree")]})
         return cpg._action_for(Act("palm_wood", 0, 3, 3), graph, [], pool, make_state(layer=layer),
-                               GameData(), True, lambda _item: False)
+                               served_game_data(), True, lambda _item: False)
 
     def test_the_home_region_copy_wins(self) -> None:
         isle = GatherAction(resource_code="palm_tree", locations=frozenset({(-4, 18)}),

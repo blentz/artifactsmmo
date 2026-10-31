@@ -13,6 +13,7 @@ from dataclasses import replace
 from fractions import Fraction
 
 import pytest
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.decisions.root import (
@@ -46,7 +47,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, season_8_status
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_gear_objective import BUNDLE, COPPER, CTX, _novice, _robby
@@ -279,6 +280,16 @@ def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:
     ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
     with pytest.raises(ValueError, match=r"\['no_such_helmet'\], absent from game data"):
         _resolve(make_state(level=15), gd, _missing(CLUB, ghost))
+
+
+def test_the_trunk_stops_at_the_loaded_level_cap() -> None:
+    """Review Focus 4: a season may move the cap, so the trunk's stop reads
+    the server's `max_level`, never a documented 50. With a cap of 45 a
+    level-45 character is offered no level; level 44 is offered level 45."""
+    gd = _gd()
+    gd._build_server(StatusSchema.from_dict({**season_8_status().to_dict(), "max_level": 45}))
+    assert _resolve(make_state(level=45), gd, _missing()).root is None
+    assert _resolve(make_state(level=44), gd, _missing()).root == ReachCharLevel(level=45)
 
 
 def test_no_trunk_at_the_level_cap() -> None:

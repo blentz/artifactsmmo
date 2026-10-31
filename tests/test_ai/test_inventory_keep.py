@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.objective_needs import NeedSet
 from artifactsmmo_cli.ai.tiers.strategy import MetaGoal, ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data
 
 
 def _ctx(**kw: object) -> SelectionContext:
@@ -51,7 +51,7 @@ def _gd() -> GameData:
     `copper_dagger <- 8 copper_ore` is a SECOND, DISJOINT root over the same
     leaf material: one root alone cannot see the difference between combining
     the two committed roots with `max` and with `sum`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
                                 subtype="tool", skill_effects={"woodcutting": -10},
@@ -586,7 +586,7 @@ def _gather_gd() -> GameData:
     """`ash_plank <- 10 ash_wood`, the ash_wood gathered from an ash_tree: an
     active GatherMaterials step accumulating a raw material in the bag — the
     shape of the livelock this keep reason exists to stop."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
                                crafting_skill="woodcutting", crafting_level=1),
@@ -802,7 +802,7 @@ def _slot_gd() -> GameData:
     profile cannot cover: `pick_loadout` under a `Combat` purpose names no ring
     (a ring's benefit against the monster is 0, so the empty-slot gate skips it)
     and under a `Gather` purpose names almost nothing at all."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    attack={"attack_fire": 12},

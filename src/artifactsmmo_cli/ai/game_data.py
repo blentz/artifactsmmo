@@ -190,6 +190,12 @@ class GameData:
     """When the server's CURRENT season began (`GET /`, `season.start_date`).
     None only for a catalogue built without the server page (a hand-built or
     pre-v6 bundle); `season_start` raises then rather than invent a date."""
+    _max_level: int | None = None
+    """The server's character-level cap (`GET /`, `max_level`). None only for a
+    catalogue built without the server page; `max_character_level` raises then."""
+    _max_skill_level: int | None = None
+    """The server's per-skill level cap (`GET /`, `max_skill_level`). None only
+    for a catalogue built without the server page; `max_skill_level` raises then."""
     _completed_achievements: set[str] = field(default_factory=set)
     """Achievement codes the ACCOUNT has completed (from
     /accounts/{account}/achievements). Evaluates `achievement_unlocked`
@@ -889,30 +895,24 @@ class GameData:
             return 1, 1, 1
         return row[1], row[2], row[3]
 
-    MAX_CHARACTER_LEVEL = 50
-    """Documented character level cap.
-    Source: https://docs.artifactsmmo.com/concepts/stats_and_fights/ —
-    "Characters progress through 50 levels...level 50 being the maximum."
-    Note: monster levels above 50 exist (event/boss monsters); the
-    PROGRESSION cap is 50.
-    """
-
     @property
     def max_character_level(self) -> int:
-        """Documented character-level cap. Constant from official docs."""
-        return self.MAX_CHARACTER_LEVEL
-
-    MAX_SKILL_LEVEL = 50
-    """Documented skill level cap.
-    Source: https://docs.artifactsmmo.com/concepts/skills —
-    "Your characters have 8 skills that can gain XP and reach up to level 50."
-    Equals the character-level cap.
-    """
+        """The server's character-level cap (`GET /`, `max_level`). Raises for a
+        catalogue built without the server status page: a season may move the
+        cap, so there is no number to invent."""
+        if self._max_level is None:
+            raise ValueError("no level cap: the catalogue was built without "
+                             "the server status page")
+        return self._max_level
 
     @property
     def max_skill_level(self) -> int:
-        """Documented per-skill level cap. Constant from official docs."""
-        return self.MAX_SKILL_LEVEL
+        """The server's per-skill level cap (`GET /`, `max_skill_level`). Raises
+        for a catalogue built without the server status page."""
+        if self._max_skill_level is None:
+            raise ValueError("no skill-level cap: the catalogue was built without "
+                             "the server status page")
+        return self._max_skill_level
 
     def xp_per_kill(self, monster_code: str, char_level: int, wisdom: int = 0) -> int:
         """Compute documented XP gained from killing `monster_code`.
@@ -1823,12 +1823,16 @@ class GameData:
         return result.data
 
     def _build_server(self, status: StatusSchema | None) -> None:
-        """Keep the current season's start; a status page without one raises."""
+        """Keep the current season's start and the level caps; a status page
+        without a season start raises. The caps are required fields of
+        `StatusSchema`, so a page without one already failed `from_dict`."""
         if status is None:
             return
         if isinstance(status.season, Unset) or isinstance(status.season.start_date, Unset):
             raise ValueError("the server status page carries no season start date")
         self._season_start = status.season.start_date
+        self._max_level = status.max_level
+        self._max_skill_level = status.max_skill_level
 
     @property
     def season_start(self) -> datetime:

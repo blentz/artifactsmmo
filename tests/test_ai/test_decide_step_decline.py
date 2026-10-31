@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, no_decline
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 
 
 def _eng(gd: GameData) -> StrategyEngine:
@@ -32,7 +32,7 @@ def _two_root_gd() -> GameData:
     from the retired TestStickyCommitment class at THE FLIP — decide-level
     sticky scoring died with the flat ranking; servability demotion did
     not)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    attack={"fire": 6}, crafting_skill="weaponcrafting",

@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.grey_farm import (
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, served_game_data
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -64,7 +64,7 @@ def fill_monster_stat_defaults(gd: GameData) -> None:
 def _gd(alchemy_next_tier_level: int | None = 20) -> GameData:
     """chicken (L1) drops feather; health_potion (alchemy 5) consumes feather;
     optionally a same-family next-tier recipe at `alchemy_next_tier_level`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
@@ -183,7 +183,7 @@ def _gd_gap9() -> GameData:
     consume feather. The old lowest-consumer heuristic evaluated only
     low_glove (close -> suppress); the ANY-consumer policy allows because
     iron_boots is non-obsolete."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}

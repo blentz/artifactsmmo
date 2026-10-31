@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.tracer import Tracer
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state
+from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state, served_game_data
 
 
 class _CaptureTracer(Tracer):
@@ -26,7 +26,7 @@ class _CaptureTracer(Tracer):
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"chicken": 1}
     gd._item_stats = dict(LADDER_ITEM_STATS)
     fill_monster_stat_defaults(gd)

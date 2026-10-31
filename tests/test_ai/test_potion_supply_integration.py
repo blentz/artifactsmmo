@@ -38,7 +38,7 @@ from artifactsmmo_cli.ai.tiers.guards import _fires as guard_fires
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -60,7 +60,7 @@ def _ctx(fight_monster: str | None = None,
 def _gd_with_potion() -> GameData:
     """One alchemy-craftable utility heal (`small_health_potion`) whose lone
     ingredient `sunflower` drops from `sunflower_field`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         _POTION: ItemStats(code=_POTION, level=1, type_="utility", hp_restore=30,
                            crafting_skill="alchemy", crafting_level=1),
@@ -126,7 +126,7 @@ def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip
 
 
 def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
-    gd = GameData()  # empty catalog: no alchemy-craftable utility potion exists
+    gd = served_game_data()  # empty catalog: no alchemy-craftable utility potion exists
     state = _understocked_state()
     ctx = _ctx(fight_monster=_MONSTER)
 
@@ -146,7 +146,7 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
     Regression guard for the Robby play-trace where a well-stocked lower-tier
     potion triggered aspirational enhanced-potion grind (alchemy 16→45).
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "small_health_potion": ItemStats(
             code="small_health_potion", level=1, type_="utility",

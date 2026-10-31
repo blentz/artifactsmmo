@@ -37,9 +37,6 @@ class _FakeGameData:
     Lean `drop` predicate is the FULL leaf-acceptance set, which here is the
     union of `resource_drops.values()` and items dropped by a located monster."""
 
-    MAX_CHARACTER_LEVEL = 50
-    MAX_SKILL_LEVEL = 50
-
     def __init__(self, recipes: dict[int, dict[int, int]], drops: dict[int, int],
                  item_stats: dict[int, ItemStats],
                  monster_drops: dict[int, list[int]] | None = None,
@@ -113,14 +110,6 @@ class _FakeGameData:
     @property
     def all_item_stats(self) -> dict[str, ItemStats]:
         return self._item_stats
-
-    @property
-    def max_character_level(self) -> int:
-        return self.MAX_CHARACTER_LEVEL
-
-    @property
-    def max_skill_level(self) -> int:
-        return self.MAX_SKILL_LEVEL
 
 
 # ---------------------------------------------------------------------------

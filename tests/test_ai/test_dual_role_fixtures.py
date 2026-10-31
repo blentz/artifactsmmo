@@ -1,6 +1,7 @@
 """Game data for the lich-race currency chain, shared by the turn-in tests."""
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
+from tests.test_ai.fixtures import served_game_data
 
 
 def medal_game_data() -> GameData:
@@ -9,7 +10,7 @@ def medal_game_data() -> GameData:
     the dual-role case this module exists to recognise. `event_ticket` is
     spendable but not wearable (currency type); `novice_guide` is wearable
     but nothing takes it as payment — both are the negative cases."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "lich_race_medal": ItemStats(code="lich_race_medal", level=10, type_="artifact"),
         # hp_bonus=1 (not 0): Task 5's upgrade gate (`_resolve_turn_in` rule

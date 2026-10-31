@@ -33,7 +33,7 @@ from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
-from tests.test_ai.fixtures import with_missing
+from tests.test_ai.fixtures import served_game_data, with_missing
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -65,7 +65,7 @@ def make_state(**overrides: object) -> WorldState:
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         # Equippable, craftable gear (recyclable when surplus).
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",

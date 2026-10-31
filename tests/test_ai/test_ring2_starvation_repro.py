@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, obtainable_now
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, obtainable_now, served_game_data
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -68,7 +68,7 @@ def _stuck_wolf_ears_plus_craftable_ring2() -> tuple[WorldState, GameData, Chara
     and the starvation bug would be moot). `test_wolf_ears_route_is_
     genuinely_unattainable_from_scratch` below verifies this empirically
     rather than merely asserting it in prose."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring", hp_bonus=1,
                                crafting_skill="jewelrycrafting", crafting_level=1),

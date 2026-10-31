@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     means_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state, with_missing
+from tests.test_ai.fixtures import make_state, served_game_data, with_missing
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -33,7 +33,7 @@ def _ctx(**kw) -> SelectionContext:
 
 
 def _gd() -> GameData:
-    return GameData()
+    return served_game_data()
 
 
 def _fires(kind: MeansKind, state, game_data, ctx: SelectionContext) -> bool:
@@ -66,12 +66,12 @@ def test_accept_task_does_not_wait_on_a_missing_piece():
 
 def test_claim_pending_fires_with_pending_items():
     state = make_state(pending_items=(("id1", "copper_ore"),))
-    collect, _ = active_means(state, GameData(), None, _ctx())
+    collect, _ = active_means(state, served_game_data(), None, _ctx())
     assert MeansKind.CLAIM_PENDING in collect
 
 
 def _sells_copper_ore() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._npc_sell_prices = {"merchant": {"copper_ore": 5}}
     gd._npc_locations = {"merchant": (1, 2)}   # located, and non-event => tradeable now
     return gd
@@ -132,7 +132,7 @@ def test_a_sell_rung_does_not_fire_when_no_buyer_can_trade_now():
 
 def test_band_order_matches_declared_order():
     state = make_state(task_code=None, pending_items=(("id", "x"),))
-    collect, discretionary = active_means(state, GameData(), None, _ctx())
+    collect, discretionary = active_means(state, served_game_data(), None, _ctx())
     assert collect == [m for m in COLLECT_REWARD_ORDER if m in collect]
     assert discretionary == [m for m in DISCRETIONARY_ORDER if m in discretionary]
 
@@ -148,7 +148,7 @@ def test_band_order_matches_declared_order():
 def test_task_cancel_discards_a_task_that_advances_nothing():
     """A grey draw with no gold or drop reason is worthless and goes back, and
     the verdict needs no learning store to know it."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     gd._task_gold_rewards = {"chicken": 150}
@@ -168,7 +168,7 @@ def test_a_paying_task_is_not_discarded():
     the fight rather than the monster's level, a zero-attack fixture reads OUT OF
     REACH and would be discarded for a reason that has nothing to do with what
     the test is asserting."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     gd._task_gold_rewards = {"chicken": 150}
@@ -184,7 +184,7 @@ def test_without_a_coin_a_grey_task_is_worked_not_discarded():
     coins come only from COMPLETING tasks, so the first draw of a character's life
     is undiscardable. It is worked. `TaskCancelAction.is_applicable` spends a
     POCKET coin."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     gd._task_gold_rewards = {"chicken": 150}
@@ -203,7 +203,7 @@ def test_accept_task_not_in_discretionary_when_task_held():
 
 
 def test_bank_expand_fires_when_conditions_met():
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     # 19/20 = 0.95 fill, gold - cost >= ctx reserve (default 0), accessible
@@ -213,7 +213,7 @@ def test_bank_expand_fires_when_conditions_met():
 
 
 def test_bank_expand_absent_when_bank_not_accessible():
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=100)
@@ -222,7 +222,7 @@ def test_bank_expand_absent_when_bank_not_accessible():
 
 
 def test_bank_expand_absent_when_capacity_zero():
-    gd = GameData()
+    gd = served_game_data()
     # _bank_capacity defaults to 0
     state = make_state(bank_items={"iron_ore": 1}, gold=100)
     _, discretionary = active_means(state, gd, None, _ctx(bank_accessible=True))
@@ -230,7 +230,7 @@ def test_bank_expand_absent_when_capacity_zero():
 
 
 def test_bank_expand_absent_when_fill_below_threshold():
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 100
     gd._next_expansion_cost = 10
     # Only 5 items in a 100-slot bank → 5% fill, far below 95%
@@ -240,7 +240,7 @@ def test_bank_expand_absent_when_fill_below_threshold():
 
 
 def test_bank_expand_absent_when_insufficient_gold():
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 1000
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=5)
@@ -256,7 +256,7 @@ def test_bank_expand_absent_when_purchase_would_break_gold_reserve():
     flagged 2026-07-06). The player threads reserve_floor(state, gd, None)
     as ctx.gold_reserve: gold 100, cost 10, reserve 100 → 90 < 100 → no
     fire."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=100)
@@ -267,7 +267,7 @@ def test_bank_expand_absent_when_purchase_would_break_gold_reserve():
 
 def test_bank_expand_fires_when_reserve_survives_purchase():
     """gold - cost >= reserve (200 - 10 = 190 >= 100) → fires."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
@@ -291,7 +291,7 @@ def test_bank_expand_fill_gate_is_an_exact_integer_boundary():
     realistic state can exhibit one. The test now pins the BOUNDARY and its
     tie-inclusive `>=`; the no-float property is still carried by
     `should_expand_bank`'s own differential and its Lean model."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 39
     gd._next_expansion_cost = 10
     below = make_state(bank_items={f"item{i}": 1 for i in range(29)}, gold=500)
@@ -304,7 +304,7 @@ def test_bank_expand_fill_gate_is_an_exact_integer_boundary():
 
 def test_bank_expand_fill_gate_fires_on_an_exact_tie():
     """`>=`, not `>`: 3/4 hits the 75/100 trigger exactly and must fire."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 4
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(3)}, gold=500)
@@ -338,7 +338,7 @@ def _horizon_world() -> GameData:
 
     No items means no chain can ever close a fight, which is what makes the
     out-of-reach arm reachable from a hand-built world at all."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {}
     gd._crafting_recipes = {}
     gd._monster_level = {"rat": 1}
@@ -447,7 +447,7 @@ def test_bank_expand_fires_on_account_gold_not_pocket_alone():
     reserve 5100. The reserve is an ACCOUNT floor, so the buy is reserve-safe
     (16350-3500=12850 >= 5100) even though the pocket alone reads 297 < 5100.
     Refusing here left him wedged at 157/158 with no shed route for 10 hours."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 50
     gd._next_expansion_cost = 3500
     state = make_state(bank_items={f"item{i}": 1 for i in range(50)},
@@ -461,7 +461,7 @@ def test_bank_expand_absent_when_pocket_cannot_pay_cost():
     """The account is reserve-safe but the pocket cannot fund the buy, and no
     withdraw-gold edge exists, so BuyBankExpansionAction.is_applicable would
     refuse — firing here emits a rung the planner cannot serve."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 50
     gd._next_expansion_cost = 3500
     state = make_state(bank_items={f"item{i}": 1 for i in range(50)},
@@ -480,7 +480,7 @@ def test_bank_expand_is_a_collect_rung_not_a_discretionary_one():
     live: the rung fired for two characters against a 50/50 bank and was never
     once selected, while every inventory climbed with no deposit sink.
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
@@ -503,7 +503,7 @@ def test_bank_expand_is_an_interrupt_after_the_claim():
 def test_bank_expand_fires_at_the_three_quarter_fill_mark():
     """USER 2026-09-13: expanding is good to do whenever we have the money, so
     the trigger moved 95% -> 75%. 15/20 = exactly 0.75 fires (>=)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(15)}, gold=200)
@@ -513,7 +513,7 @@ def test_bank_expand_fires_at_the_three_quarter_fill_mark():
 
 def test_bank_expand_silent_below_the_three_quarter_mark():
     """14/20 = 0.70 < 0.75: still nothing to do."""
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
     state = make_state(bank_items={f"item{i}": 1 for i in range(14)}, gold=200)

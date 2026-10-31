@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.fixtures import served_game_data
 
 
 def _gd_gated_gather() -> GameData:
@@ -16,7 +17,7 @@ def _gd_gated_gather() -> GameData:
     the character is under (deep_ore ← deep_rocks, mining 10). Mirrors iron_ore
     ← iron_rocks in the l12_taskgated_bag scenario: the sole ore source is
     skill-locked, so the only route is the mining grind, then Gather."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "deep_ore": ItemStats(code="deep_ore", level=10, type_="resource",
                               subtype="mining"),

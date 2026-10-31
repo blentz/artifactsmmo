@@ -45,13 +45,13 @@ from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data
 from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
 
 def make_game_data_mock() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)], "cow": [(2, 0)]}
     gd._resource_locations = {"copper": [(3, 0)]}
     gd._workshop_locations = {"weaponcrafting": (5, 0)}
@@ -488,7 +488,7 @@ def _winnable_gd(monsters: dict[str, dict]) -> GameData:
     `monsters` maps code -> {level, hp, attack, resistance, crit, initiative}.
     Only level/hp/attack are required; the rest default sensibly.
     """
-    gd = GameData()
+    gd = served_game_data()
     for code, m in monsters.items():
         gd._monster_level[code] = m["level"]
         gd._monster_hp[code] = m["hp"]
@@ -1399,7 +1399,7 @@ class TestExecute:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         bank_slot = MagicMock()
         bank_slot.code = "copper_ore"
@@ -1590,7 +1590,7 @@ class TestBuildGoalsTier1:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
         gd._resource_locations = {}
@@ -1875,7 +1875,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -1900,7 +1900,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -1950,7 +1950,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -1985,7 +1985,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -2177,7 +2177,7 @@ class TestBuildGoalsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
         gd._resource_locations = {}
@@ -2253,7 +2253,7 @@ class TestBuildActionsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {}
         gd._resource_locations = {}
         gd._workshop_locations = {}
@@ -2295,7 +2295,7 @@ class TestBuildActionsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {}
         gd._resource_locations = {}
         gd._workshop_locations = {}
@@ -2523,7 +2523,7 @@ class _CapturingCraft(CraftAction):
 
 
 def _batch_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable",
                                     crafting_skill="cooking", crafting_level=1),
