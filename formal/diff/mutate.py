@@ -7854,8 +7854,10 @@ TASK_HORIZON_MUTATIONS = [
 ]
 
 # The horizon's consumer on the LATCH (`REGEAR_EDGE_HORIZON_MUTATIONS`) was
-# retired in Phase 4-3b with `RegearEdge` and the GEAR_REVIEW guard it fed; the
-# fight-arm half lives on in ROOT_FIGHT_ARM_MUTATIONS.
+# retired in Phase 4-3b with `RegearEdge` and the GEAR_REVIEW guard it fed; its
+# fight-arm half (ROOT_FIGHT_ARM_MUTATIONS) went with the wave-4 fight arm in
+# plan C Task 2. The horizon's gear verdict is served by the task root
+# (ROOT_TASK_GEAR_MUTATIONS).
 CATALOGUE_SCOPE_PURGE_MUTATIONS = [
     ("catalogue_scope: a catalogue's sub-cache outlives the catalogue",
      "            weakref.finalize(game_data, self._caches.pop, key, None)",

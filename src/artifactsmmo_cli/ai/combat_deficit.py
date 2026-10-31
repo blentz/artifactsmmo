@@ -29,13 +29,14 @@ the model was right every time and the bot fought anyway.
 
 THE BAR is FEASIBILITY (post-merge review 2026-10-16): can gear make this
 fight one the gate takes? `predict_win` — P(win) at least this character's θ,
-worn restore potions drunk — is what every pricing and task-worth caller asks
-(`acquisition_cost`, `drop_evidence`, `decisions.obtain_item`, `task_horizon`'s
-level-up arm, the censuses). It was `secure_win` for one commit: a dropper
+worn restore potions drunk — is what every pricing caller asks
+(`acquisition_cost`, `drop_evidence`, `decisions.obtain_item`, the censuses and
+the `combat-deficit` diagnostic). It was `secure_win` for one commit: a dropper
 fought at θ 0.488 and P 0.6 was priced unobtainable for want of gear to reach
 0.75. WHAT TO BUILD for a held task's lost fight is no longer this walk's
-question: it is `L*` of the task monster (`gear_objective.gear_objective_for`,
-plan C Task 2). `has_combat_deficit` keeps the routing bar's existence fact,
+question, nor whether a level closes it: both are `L*` of the task monster
+(`task_horizon`, plan C Task 2). `has_combat_deficit` keeps the routing bar's
+existence fact,
 `secure_win` (max(θ, SECURE_WIN), USER 2026-10-15) on BARE gear.
 
 USER (2026-08-20), on what to do when no one item is enough: "that just means we
@@ -123,8 +124,10 @@ class CombatDeficit:
     For a while it told them apart only for the reader: the `combat-deficit`
     diagnostic printed CLOSES / DOES NOT CLOSE and the production consumer of
     the day branched on `chain` instead and committed to gear from the second
-    case as readily as the first (648 of 895 losing pairs on the bundle). The
-    level-up arm of `task_horizon` reads this field.
+    case as readily as the first (648 of 895 losing pairs on the bundle). Its
+    readers now are `acquisition_cost`, `drop_evidence` and
+    `decisions.obtain_item` (a drop route's fight), the xp-gate census and the
+    `combat-deficit` diagnostic.
     """
 
     monster: str
