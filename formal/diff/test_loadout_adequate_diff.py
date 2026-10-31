@@ -7,6 +7,11 @@ capstone — and until this file it was ASSERTED and never checked. Opened as
 `docs/PLAN_c2_composed_liveness.md:238-241`; the adversarial review of 2026-07-20
 flagged the E layer as having zero production binding.
 
+SINCE RULING C4-R the field has a second, production-decision binding:
+`test_gear_objective_e_binding_diff.py` binds `loadoutAdequate := gear_objective.held`
+and `gearGap := len(gear_objective.missing)`, the verdict the gear decisions read.
+This file keeps the witness-loadout reading, which grounds the band's `GEAR_CAP`.
+
 WHAT THIS PINS, AND WHAT IT CANNOT
 -----------------------------------
 It pins that the predicate is SATISFIABLE and DISCRIMINATING in production:

@@ -11486,6 +11486,13 @@ GEAR_OBJECTIVE_LINK_MUTATIONS = [
      "    if not rated or max(rate for _, rate in rated) <= 0:\n        return None\n",
      "    if not rated:\n        return None\n"),
 ]
+# Ruling C4-R I3: the E-tower's `loadoutAdequate := held`, `gearGap :=
+# len(missing)`, killed by formal/diff/test_gear_objective_e_binding_diff.py.
+GEAR_E_BINDING_MUTATIONS = [
+    ("e-binding: one missing piece still reads as held",
+     "        return objective_held(frozenset(piece.slot for piece in self.missing))\n",
+     "        return objective_held(frozenset(piece.slot for piece in self.missing[1:]))\n"),
+]
 GEAR_ARMING_TARGET_MUTATIONS = [
     ("arming: an unheld m* is the grind target",
      "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
@@ -13819,6 +13826,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_gear_objective_arming_diff.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_LINK_MUTATIONS,
               "formal/diff/test_gear_objective_link_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_RESULT_SRC, GEAR_E_BINDING_MUTATIONS,
+              "formal/diff/test_gear_objective_e_binding_diff.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,
