@@ -197,10 +197,10 @@ carrying the same efficiency stats — which is the historical pair exactly
 (fishing_net and wooden_stick carry none) — keep the strict `WScore` ordering in
 their full ruler values. The efficiency hypothesis is what the ruler genuinely
 says: a weapon that is worse at fighting but carries 100 prospecting IS worth
-more overall, on the same terms an artifact is, and pursuing it over a better
-weapon is prevented one layer up by
-`Formal.StrategicValue.pursuit_combat_dominates`, which reads `combatScore`
-alone. -/
+more overall, on the same terms an artifact is. Which weapon is pursued is the
+gear objective's question (`L*`, ranked by the fight loop's rate); the scalar
+dominance proof that used to answer it one layer up was retired with
+`tiers/pursuit_value` in plan C Task 6. -/
 theorem weaponScore_strict_of_strict_wscore
     (a b : CombatItem) (monsterRes : ElemStats)
     (wisdom prospecting inventorySpace haste : Int)

@@ -43,7 +43,6 @@ from artifactsmmo_cli.ai.equipment.slot_occupancy import may_displace
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # --- API items (effects verbatim from /v3/items) ---------------------------
@@ -155,10 +154,6 @@ def test_the_two_amulets_now_score_the_same_way_on_both_rulers() -> None:
     assert equip_value(_LIFE_AMULET) == RULER_SCALE * 6000
     assert equip_value(_FIRE_AND_EARTH_AMULET) == RULER_SCALE * 70000
     assert equip_value(_FIRE_AND_EARTH_AMULET) > equip_value(_LIFE_AMULET)
-    # Neither amulet carries an efficiency stat, so pursuit is exactly 1000x.
-    assert pursuit_value(_LIFE_AMULET) == 1000 * RULER_SCALE * 6000
-    assert pursuit_value(_FIRE_AND_EARTH_AMULET) == 1000 * RULER_SCALE * 70000
-    assert pursuit_value(_FIRE_AND_EARTH_AMULET) > pursuit_value(_LIFE_AMULET)
 
     # The monster-relative half is untouched and still prefers the element
     # amulet by the damage it adds to a 40-earth output vs res_earth -10.
@@ -239,7 +234,6 @@ def test_mushmush_jacket_beats_adventurer_vest_on_both_rulers() -> None:
     `armor_score` removed the separate formula that could hold the wrong opinion.
     `may_displace` still refuses the vest over the jacket outright, so the loop
     was closed structurally even while the flat ruler disagreed."""
-    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_ADVENTURER_VEST)
     assert equip_value(_MUSHMUSH_JACKET) > equip_value(_ADVENTURER_VEST)
     assert may_displace(_ADVENTURER_VEST, _MUSHMUSH_JACKET) is False
 
@@ -280,7 +274,6 @@ def test_a_purely_defensive_item_still_wins_where_defence_matters() -> None:
     jacket = armor_score(_MUSHMUSH_JACKET, _ROSENBLOOD_ATK, _ROSENBLOOD_RES,
                          _FOREST_WHIP_ATTACK)
     assert piggy > jacket
-    assert pursuit_value(_MUSHMUSH_JACKET) > pursuit_value(_PIGGY_ARMOR)
     assert equip_value(_MUSHMUSH_JACKET) > equip_value(_PIGGY_ARMOR)
     assert not may_displace(_PIGGY_ARMOR, _MUSHMUSH_JACKET)
     assert not may_displace(_MUSHMUSH_JACKET, _PIGGY_ARMOR)

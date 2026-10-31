@@ -135,7 +135,7 @@ theorem armor_score_combat_bridge (enc : Int → String)
 
 /-- BRIDGE: the extracted EFFICIENCY slice IS the hand `AEfficiency`,
 definitionally — both are `rulerScale * (200 * (wisdom + prospecting +
-inventorySpace + haste))`. This is the term `tiers/pursuit_value` bounds, and it
+inventorySpace + haste))`. This is the term the economics layer bounds, and it
 is the term BOTH slots read; pinning it here is what stops the economics layer
 re-deriving utility on a scale of its own, and what stops the two slots pricing
 the same stat differently. -/

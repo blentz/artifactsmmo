@@ -39,9 +39,7 @@ the sum of (`GearValue.rankValue_decomp`). It used to be `GearValue.combatRaw`,
 a flat 8-stat sum defined alongside the ruler — a second ruler in all but name,
 which added a resistance PERCENTAGE to an HP amount 1:1. `combatOf` /
 `combatOf_eq_rankCombat` below replace `combatRawOf` / `combatRawOf_eq` with that
-strictly stronger correspondence, and `pursuitValue` below adds what the flat sum
-never had: a proof that combat dominance is an ORDER-EMBEDDING, true for all
-integer inputs rather than for the magnitudes the live catalog happens to carry.
+strictly stronger correspondence.
 -/
 
 namespace Formal.StrategicValue
@@ -109,18 +107,13 @@ theorem combatOf_add_efficiency_eq_rankValue (isWeapon : Bool)
   (Formal.GearValue.rankValue_decomp isWeapon ci flatCombat wisdom prospecting
     inventorySpace haste hflat).symm
 
-/-! ## The pursuit reading: combat dominance as an ORDER-EMBEDDING.
+/-! ## The efficiency bound.
 
-`tiers/pursuit_value.pursuit_value` is `strategicValue` with the combat weight
-pinned to `STRATEGIC_SCALE` and the efficiency block BOUNDED to
-`[-budget, +budget]`. The point of the bound is not to shrink utility but to
-make the score an order-embedding of the pair `(combat, efficiency)` ordered
-LEXICOGRAPHICALLY, which is what "combat dominates cross-slot" means precisely.
-
-The live invariant this protects (docstring of `tiers/pursuit_value`): a
-prospecting-201 artifact must not outrank a modest combat weapon just because
-201 > 30. Under `pursuit_combat_dominates` that cannot happen for ANY stat
-magnitudes, not merely for the ones in today's item table. -/
+`strategic_value` bounds the efficiency block to `[-budget, +budget]`
+(`efficiency_budget`). The pursuit reading built on it (`pursuitValue`, the
+lexicographic order-embedding of `(combat, efficiency)`) was retired with
+`tiers/pursuit_value` in plan C Task 6: the gear objective `L*` is the one gear
+sheet, and it ranks loadouts by the fight loop's rate, not by a scalar. -/
 
 /-- Symmetric two-sided clamp. Mirrors the `strategic_value` wrapper's
 `efficiency_budget` handling — symmetric because live items carry NEGATIVE
@@ -146,47 +139,6 @@ theorem clampEff_id (budget e : Int) (hlo : -budget ≤ e) (hhi : e ≤ budget) 
   split
   · omega
   · split <;> omega
-
-/-- The pursuit score: the ruler's two terms read lexicographically. -/
-def pursuitValue (scale budget combat efficiency : Int) : Int :=
-  combat * scale + clampEff budget efficiency
-
-/-- **STRUCTURAL COMBAT DOMINANCE.** When the whole efficiency span
-(`2 * budget`) is narrower than one unit of scaled combat, a strictly greater
-combat term is a strictly greater pursuit value — for EVERY pair of efficiency
-blocks, of any magnitude and either sign.
-
-This is the theorem the flat `combat_raw` era never had. It says the property is
-a fact of the arithmetic, quantified over all integer inputs, and not a
-coincidence of the magnitudes the current catalog happens to contain. -/
-theorem pursuit_combat_dominates (scale budget ca cb ea eb : Int)
-    (hb : 0 ≤ budget) (hspan : 2 * budget < scale) (hlt : cb < ca) :
-    pursuitValue scale budget cb eb < pursuitValue scale budget ca ea := by
-  unfold pursuitValue
-  obtain ⟨hea_lo, hea_hi⟩ := clampEff_mem budget ea hb
-  obtain ⟨heb_lo, heb_hi⟩ := clampEff_mem budget eb hb
-  have hstep : (cb + 1) * scale ≤ ca * scale :=
-    Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
-  rw [Int.add_mul, Int.one_mul] at hstep
-  omega
-
-/-- **EFFICIENCY STILL ORDERS.** On a combat TIE the pursuit value is strictly
-increasing in the efficiency block (inside the budget) — utility slots keep a
-total ranking, which is the no-regression half of the design: the defect being
-fixed was utility outranking COMBAT, never utility being ignored. -/
-theorem pursuit_efficiency_orders (scale budget c ea eb : Int)
-    (hea_lo : -budget ≤ ea) (hea_hi : ea ≤ budget)
-    (heb_lo : -budget ≤ eb) (heb_hi : eb ≤ budget)
-    (hlt : eb < ea) :
-    pursuitValue scale budget c eb < pursuitValue scale budget c ea := by
-  unfold pursuitValue
-  rw [clampEff_id budget ea hea_lo hea_hi, clampEff_id budget eb heb_lo heb_hi]
-  omega
-
-/-- The live parameters (`STRATEGIC_SCALE = 1000`,
-`EFFICIENCY_BUDGET = (1000 - 1) / 2 = 499`) satisfy the span hypothesis, so the
-dominance theorem is not vacuous at the values production actually uses. -/
-theorem live_pursuit_span_ok : 2 * (499 : Int) < 1000 := by decide
 
 /-! ## Nonnegativity. -/
 
@@ -258,11 +210,8 @@ theorem pure_bag_scores_positive :
 /-- Combat weight dominates the efficiency weights: a single point of combat_raw
 (×1000) outscores a 35-slot bag (×1) — combat-slot ordering is preserved.
 
-`ai/tiers/pursuit_value.pursuit_value` is the Python INSTANCE of this: it calls
-`strategic_value` with exactly these weights ⟨1000,1,1,1,1⟩ and an efficiency
-budget of 999 (< the 1000 combat weight proven dominant here), so any combat
-item outranks any all-efficiency item cross-slot. A thin parameter pin of this
-proved core — no separate theorem (would restate this witness verbatim). -/
+A concrete witness of the weights' ordering. `tiers/pursuit_value`, which
+called `strategic_value` with these weights, was retired in plan C Task 6. -/
 theorem combat_weight_dominates_efficiency :
     strategicValue ⟨0, 0, 0, 35, 0⟩ ⟨1000, 1, 1, 1, 1⟩
       < strategicValue ⟨1, 0, 0, 0, 0⟩ ⟨1000, 1, 1, 1, 1⟩ := by

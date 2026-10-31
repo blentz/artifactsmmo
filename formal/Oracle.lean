@@ -283,7 +283,7 @@ def runRankValue (args : Array Json) : Json :=
 
 /-- Evaluate the HAND `Formal.GearValue.rankCombat` and `rankEfficiency` — the
     two terms the ONE gear ruler is the SUM of, and the pair the ECONOMICS layer
-    (`tiers/pursuit_value`) reads. Replaces the retired `runCombatRaw`, whose
+    (`strategic_value`) reads. Replaces the retired `runCombatRaw`, whose
     subject (a flat 8-stat sum) no longer exists.
 
     args layout (25 ints): isWeapon(0/1), isTool(0/1), the standard 18-int item

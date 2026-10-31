@@ -1224,10 +1224,6 @@ open Formal.PriorityBand
 #check @Formal.StrategicValue.clampEff                                -- symmetric efficiency bound (live items carry NEGATIVE efficiency)
 #check @Formal.StrategicValue.clampEff_mem                            -- the bound holds: |clampEff| ≤ budget
 #check @Formal.StrategicValue.clampEff_id                             -- inside the budget the bound is the identity
-#check @Formal.StrategicValue.pursuitValue                            -- pursuit_value: the ruler's two terms read lexicographically
-#check @Formal.StrategicValue.pursuit_combat_dominates                -- STRUCTURAL cross-slot combat dominance (∀ integer inputs)
-#check @Formal.StrategicValue.pursuit_efficiency_orders               -- no regression: efficiency still totally orders on a combat tie
-#check @Formal.StrategicValue.live_pursuit_span_ok                    -- the live (1000, 499) parameters satisfy the span hypothesis
 #check @Formal.StrategicValue.strategicValue_nonneg                   -- hand: nonneg stats+weights ⇒ nonneg (gap-bound precond)
 #check @Formal.StrategicValue.strategicValue_mono_combatRaw           -- hand: monotone in combat_raw
 #check @Formal.StrategicValue.strategicValue_mono_wisdom              -- hand: monotone in wisdom

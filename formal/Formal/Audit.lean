@@ -965,10 +965,6 @@ open Formal.PriorityBand
 #print axioms Formal.StrategicValue.clampEff
 #print axioms Formal.StrategicValue.clampEff_mem
 #print axioms Formal.StrategicValue.clampEff_id
-#print axioms Formal.StrategicValue.pursuitValue
-#print axioms Formal.StrategicValue.pursuit_combat_dominates
-#print axioms Formal.StrategicValue.pursuit_efficiency_orders
-#print axioms Formal.StrategicValue.live_pursuit_span_ok
 #print axioms Formal.StrategicValue.strategicValue_nonneg
 #print axioms Formal.StrategicValue.strategicValue_mono_combatRaw
 #print axioms Formal.StrategicValue.strategicValue_mono_wisdom

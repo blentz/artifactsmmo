@@ -135,9 +135,8 @@ def weapon_score_combat_pure(elements: list[str], attack: dict[str, int],
     trace bug where Robby kept fishing_net equipped for combat against slimes.
 
     This is the term ``gear_components`` hands the economics layer as the
-    weapon branch's COMBAT half, so it is what
-    ``Formal.StrategicValue.pursuit_combat_dominates`` dominates utility with.
-    Bridged to the hand ``Formal.PurposeRouting.combatScore``.
+    weapon branch's COMBAT half. Bridged to the hand
+    ``Formal.PurposeRouting.combatScore``.
     """
     non_tool_bonus = 0 if subtype == "tool" else 1
     return RULER_SCALE * weapon_score_raw_pure(elements, attack, critical_strike,

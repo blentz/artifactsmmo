@@ -2679,30 +2679,6 @@ RANK_ADVERSARY_MUTATIONS = [
 ]
 
 
-# pursuit_value CROSS-SLOT DOMINANCE mutations (2026-08-04). `pursuit_value` is
-# the ONE ruler read LEXICOGRAPHICALLY: `combat * SCALE + clamp(efficiency)`,
-# and the property that makes it an order-embedding is `2 * EFFICIENCY_BUDGET <
-# STRATEGIC_SCALE`. Break that inequality and a prospecting artifact can outrank
-# a combat weapon cross-slot again — the exact 2026-07-08 defect. OWN run_group
-# (unit-killed mutants need their own group) — killed by
-# tests/test_ai/test_pursuit_value.py.
-#
-# Replaces the retired `combat_raw_of` dmg_elements-hoist mutant: that adapter
-# is gone, and the divergence it guarded (a monster-blind ruler blind to
-# per-element damage %) is now impossible by construction — the economics layer
-# reads `armor_score`'s own term, which has priced `dmg_elements` since
-# 170ed8d8.
-PURSUIT_DOMINANCE_MUTATIONS = [
-    ("pursuit_value: budget widened past half the scale — the efficiency SPAN "
-     "exceeds one combat unit and cross-slot dominance is no longer structural",
-     "EFFICIENCY_BUDGET = (STRATEGIC_SCALE - 1) // 2",
-     "EFFICIENCY_BUDGET = STRATEGIC_SCALE - 1"),
-    ("pursuit_value: efficiency stats re-weighted to combat parity — a bag "
-     "priced like a weapon, the original cross-slot bug",
-     "_EFFICIENCY_RATE = 1",
-     "_EFFICIENCY_RATE = STRATEGIC_SCALE"),
-]
-
 # strategic_value SYMMETRIC-BOUND mutations. The bound must clamp BOTH ends:
 # live items carry negative efficiency stats (obsidian_battleaxe
 # inventory_space -25), so a one-sided cap leaves the block's span unbounded
@@ -3286,7 +3262,6 @@ SKILL_GRINDABLE_MUTATIONS = [
 
 
 STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
-PURSUIT_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pursuit_value.py"
 
 # strategic_value mutations -- anchors for the EXTRACTED strategic_value_pure
 # (efficiency-weighted cross-slot scorer, #16). Killed by the differential test
@@ -6426,7 +6401,7 @@ WEAPON_RULER_MUTATIONS = [
 # double-counting failure mode the unification has to exclude.
 GEAR_VALUE_PARTITION_MUTATIONS = [
     ("gear_components: leak the efficiency slice INTO the combat term (utility "
-     "counted twice by pursuit_value, and cross-slot dominance broken)",
+     "counted twice by the economics layer)",
      "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
      "                                   dict(purpose.monster_resistance),\n"
      "                                   dict(purpose.player_attack)),\n"
@@ -14359,8 +14334,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,
-              "tests/test_ai/test_pursuit_value.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
               "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,

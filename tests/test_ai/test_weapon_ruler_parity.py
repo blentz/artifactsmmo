@@ -38,7 +38,6 @@ from artifactsmmo_cli.ai.equipment.scoring import (
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_components, gear_value
 from artifactsmmo_cli.ai.gear_value_core import Rank, rank_adversary
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 
 BUNDLE = (Path(__file__).resolve().parents[1] / "test_ai" / "scenarios"
           / "fixtures" / "gamedata_bundle.json")
@@ -200,22 +199,6 @@ def test_the_non_tool_bonus_never_flips_a_strict_raw_inequality() -> None:
         assert weapon_score(tool, _NO_RES) > weapon_score(real, _NO_RES)
         # ... and the combat term alone, which is what the economics layer reads.
         assert weapon_score_combat(tool, _NO_RES) > weapon_score_combat(real, _NO_RES)
-
-
-def test_cross_slot_combat_dominance_survives_the_rescale() -> None:
-    """`Formal.StrategicValue.pursuit_combat_dominates`, on the historical
-    witness: a prospecting-201 artifact must not outrank a modest combat weapon
-    cross-slot. Doubling the armor terms cannot break this — the property is an
-    order-embedding over the COMBAT term, which the efficiency block spans less
-    than one unit of."""
-    weapon = ItemStats(code="wpn", level=2, type_="weapon", attack={"earth": 30})
-    artifact = ItemStats(code="art", level=2, type_="artifact", prospecting=201)
-    assert pursuit_value(weapon) > pursuit_value(artifact)
-    # And now that a WEAPON can carry efficiency too, the same holds with the
-    # roles reversed: a prospecting tool cannot outrank a better fighter.
-    tool = ItemStats(code="tool", level=2, type_="weapon", subtype="tool",
-                     attack={"earth": 29}, prospecting=201)
-    assert pursuit_value(weapon) > pursuit_value(tool)
 
 
 def test_the_two_pinned_orderings_still_hold() -> None:

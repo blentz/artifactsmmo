@@ -3031,7 +3031,7 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
   @Formal.GearTaxonomy.combatGear_subset_equippable
 
 -- GearValue. rankValue_decomp: THE PARTITION. The one gear ruler IS the sum of
--- the two terms the ECONOMICS layer (strategic_value / pursuit_value) weighs, so
+-- the two terms the ECONOMICS layer (strategic_value) weighs, so
 -- the acquisition score cannot contain a stat the ruler does not, cannot drop one
 -- it does, and cannot count one twice. REPLACES the retired rawSum_decomp, whose
 -- subject (the flat 8-stat combatRaw sum, a second ruler in all but name) no
@@ -3062,23 +3062,6 @@ example : ∀ (monsterRes : Formal.EquipmentScoring.ElemStats)
         - Formal.PurposeRouting.combatScore monsterRes ci
       = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste :=
   @Formal.PurposeRouting.weaponScore_efficiency_eq_AEfficiency
--- StrategicValue. pursuit_combat_dominates: cross-slot combat dominance is an
--- ORDER-EMBEDDING, quantified over ALL integer inputs -- a strictly greater
--- combat term is a strictly greater pursuit value whatever the efficiency stats
--- are, given only that the efficiency SPAN (2*budget) is under one unit of scaled
--- combat. Weakening it to particular catalog magnitudes fails to elaborate.
-example : ∀ (scale budget ca cb ea eb : Int),
-    0 ≤ budget → 2 * budget < scale → cb < ca →
-    Formal.StrategicValue.pursuitValue scale budget cb eb
-      < Formal.StrategicValue.pursuitValue scale budget ca ea :=
-  @Formal.StrategicValue.pursuit_combat_dominates
--- StrategicValue. pursuit_efficiency_orders: the no-regression half -- on a
--- combat TIE, efficiency still totally orders (utility slots keep their ranking).
-example : ∀ (scale budget c ea eb : Int),
-    -budget ≤ ea → ea ≤ budget → -budget ≤ eb → eb ≤ budget → eb < ea →
-    Formal.StrategicValue.pursuitValue scale budget c eb
-      < Formal.StrategicValue.pursuitValue scale budget c ea :=
-  @Formal.StrategicValue.pursuit_efficiency_orders
 -- rankValue_eq_combatValue_canonical: ONE ALGORITHM. The Python
 -- gear_value(_, Rank) is gear_value(_, Combat) against the canonical adversary,
 -- so Rank cannot hold an opinion the combat picker disagrees with. Replaces the
