@@ -590,6 +590,8 @@ open Formal.Liveness.GearTierLeveling
 #print axioms no_root_when_every_piece_declined
 #print axioms missing_nonempty_of_not_held
 #print axioms combatObjective_live_below_fifty
+#print axioms objectiveCoversBand_satisfiable
+#print axioms not_objectiveCoversBand_of_none
 #print axioms held_objective_emits_fight_nonvacuous
 
 -- Task 4 (2026-06-20): WinnableAcrossBand DISCHARGED over the live catalog via a

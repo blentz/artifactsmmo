@@ -11476,6 +11476,16 @@ GEAR_ARMING_WHICH_PIECE_MUTATIONS = [
      "                return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)\n",
      "                continue\n"),
 ]
+# Ruling C4-R: the production link `GearTierLeveling.ObjectiveCoversBand`,
+# killed by formal/diff/test_gear_objective_link_diff.py.
+GEAR_OBJECTIVE_LINK_MUTATIONS = [
+    ("link: a winning candidate gives no objective",
+     "    if not rated or max(rate for _, rate in rated) <= 0:\n",
+     "    if True:\n"),
+    ("link: an objective is named with no winning candidate",
+     "    if not rated or max(rate for _, rate in rated) <= 0:\n        return None\n",
+     "    if not rated:\n        return None\n"),
+]
 GEAR_ARMING_TARGET_MUTATIONS = [
     ("arming: an unheld m* is the grind target",
      "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
@@ -13807,6 +13817,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_gear_objective_arming_diff.py", survivors)
     run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_ARMING_TARGET_MUTATIONS,
               "formal/diff/test_gear_objective_arming_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_LINK_MUTATIONS,
+              "formal/diff/test_gear_objective_link_diff.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,

@@ -23,12 +23,14 @@ Both halves are bound to production by `formal/diff/test_gear_objective_arming_d
 which drives the live `attach_gear_objective` / `farm_target` / `resolve_root` /
 `WhichPieceIsNext` / `piece_step` on the scenario bundle.
 
-The GEAR-TIER guarantee that the objective has a monster at all is
-`WinnableAcrossBand`: at every level the character reaches, a winnable,
-XP-positive monster under the suicide guard exists — a candidate for `m*`
-(`gear_objective._candidates` asks exactly the level ceiling and positive XP, and
-`_rated` the win). `combatObjective_live_below_fifty` composes it with the held half:
-at every band level some candidate exists whose held objective arms its fight.
+The GEAR-TIER guarantee that a candidate exists is `WinnableAcrossBand`: at every
+level the character reaches, a winnable, XP-positive monster under the suicide guard
+exists (`gear_objective._candidates` asks the level ceiling and positive XP, and
+`_rated` the win). That production then HAS a gear objective whose `m*` is such a
+candidate is the hypothesis `ObjectiveCoversBand`, bound to production by a bundle
+differential. `combatObjective_live_below_fifty` composes the two: at every band
+level production's objective exists, its `m*` is a candidate, and the fight on it is
+armed exactly while its `L*` is held.
 
 Plan C Task 4 retired the windowed-picker grounding this module used to carry
 (`combatTargetExists_of_gearTier`: the deleted picker returned `some` target):
@@ -183,22 +185,81 @@ theorem missing_nonempty_of_not_held (o : ObjectiveView) (hwf : WellFormed o)
   rw [hheld] at this
   exact absurd this (by decide)
 
-/-! ## The band guarantee, composed with the held half -/
+/-! ## The link: a winnable candidate gives production a gear objective
 
-/-- **The combat objective is live at every level below the cap.** At every band
-    level some catalogue monster is a candidate for `m*` (winnable, XP-positive, under
-    the suicide guard), and an objective holding its `L*` on it arms its fight. -/
+`WinnableAcrossBand` is a fact about the catalogue; the root walk reads
+production's `gear_objective`. `ObjectiveCoversBand` is the link between the two,
+a HYPOTHESIS about production (ruling C4-R): at every band level where a winnable,
+XP-positive monster under the suicide guard exists, production's gear objective
+`objectiveAt L` exists, is well formed, and its `m*` is such a monster.
+
+Production: `gear_objective` returns None only when no candidate
+(`gear_objective._candidates`, the level ceiling and positive XP) wins on its
+`L*` fighter (`_rated`, `drop_fight_winnable`) with `R > 0`; otherwise `m*` is
+the max-`R` candidate. Bound by `formal/diff/test_gear_objective_link_diff.py`
+over the scenario bundle, in both polarities (a winnable candidate ⇒ an
+objective whose `m*` is a candidate; none ⇒ no objective). Satisfiable
+(`objectiveCoversBand_satisfiable`) and not trivially true
+(`not_objectiveCoversBand_of_none`). -/
+
+/-- The production link (a hypothesis, bound by the differential above). -/
+def ObjectiveCoversBand (winnable xpPos : WinnableFn) (xs : List Monster)
+    (objectiveAt : Int → Option ObjectiveView) : Prop :=
+  ∀ L : Int, InLevelingBand L →
+    (∃ m ∈ xs, winnable m = true ∧ xpPos m = true ∧ notOverleveled L m = true) →
+      ∃ o, objectiveAt L = some o ∧ WellFormed o ∧
+        ∃ m ∈ xs, m.code = o.monster ∧ winnable m = true ∧ xpPos m = true ∧
+          notOverleveled L m = true
+
+/-- **The combat objective is live at every level below the cap**, given the
+    production link. At every band level production's gear objective exists and its
+    `m*` is a winnable, XP-positive candidate under the suicide guard; while its `L*`
+    is held the fight on `m*` is armed, and while it is not held the grind target is
+    none (the root is a missing piece's acquisition, `piece_root_of_not_held`). -/
 theorem combatObjective_live_below_fifty
     (winnable xpPos : WinnableFn) (xs : List Monster)
-    (h : WinnableAcrossBand winnable xpPos xs) :
+    (objectiveAt : Int → Option ObjectiveView)
+    (h : WinnableAcrossBand winnable xpPos xs)
+    (hcov : ObjectiveCoversBand winnable xpPos xs objectiveAt) :
     ∀ L : Int, 1 ≤ L → L < 50 →
-      ∃ m ∈ xs, winnable m = true ∧ xpPos m = true ∧ notOverleveled L m = true ∧
-        ∀ serves : Int → Bool,
-          whichPieceIsNext (some ⟨m.code, true, []⟩) serves false = some .levelUp ∧
-            grindTarget ⟨m.code, true, []⟩ = some m.code := by
+      ∃ o, objectiveAt L = some o ∧ WellFormed o ∧
+        (∃ m ∈ xs, m.code = o.monster ∧ winnable m = true ∧ xpPos m = true ∧
+          notOverleveled L m = true) ∧
+        (o.held = true → grindTarget o = some o.monster) ∧
+        (o.held = false → grindTarget o = none) := by
   intro L hlo hhi
-  obtain ⟨m, hm, hw, hx, ho⟩ := h L ⟨hlo, hhi⟩
-  exact ⟨m, hm, hw, hx, ho, fun serves => fight_armed_of_held ⟨m.code, true, []⟩ serves rfl⟩
+  obtain ⟨o, hat, hwf, hm⟩ := hcov L ⟨hlo, hhi⟩ (h L ⟨hlo, hhi⟩)
+  refine ⟨o, hat, hwf, hm, fun hh => (fight_armed_of_held o (fun _ => true) hh).2,
+    no_xp_fight_of_not_held o⟩
+
+/-- The link is satisfiable: the one-monster catalogue of
+    `winnableAcrossBand_satisfiable` with an objective on that monster at every
+    level. -/
+theorem objectiveCoversBand_satisfiable :
+    ∃ (winnable xpPos : WinnableFn) (xs : List Monster)
+      (objectiveAt : Int → Option ObjectiveView),
+      WinnableAcrossBand winnable xpPos xs ∧ ObjectiveCoversBand winnable xpPos xs objectiveAt := by
+  refine ⟨fun _ => true, fun _ => true, [{ code := 0, level := 1 }],
+    fun _ => some ⟨0, true, []⟩, ?_, ?_⟩
+  · intro L hL
+    refine ⟨{ code := 0, level := 1 }, List.mem_singleton.mpr rfl, rfl, rfl, ?_⟩
+    obtain ⟨h1, _⟩ := hL
+    simp only [notOverleveled, decide_eq_true_eq]
+    omega
+  · intro L _ hex
+    obtain ⟨m, hm, hw, hx, ho⟩ := hex
+    have hm0 : m = { code := 0, level := 1 } := List.mem_singleton.mp hm
+    refine ⟨⟨0, true, []⟩, rfl, by simp [WellFormed], m, hm, by rw [hm0], hw, hx, ho⟩
+
+/-- The link is not trivially true: a catalogue with a winnable candidate and a
+    production that names no objective violates it. -/
+theorem not_objectiveCoversBand_of_none :
+    ¬ ObjectiveCoversBand (fun _ => true) (fun _ => true) [{ code := 0, level := 1 }]
+        (fun _ => none) := by
+  intro hcov
+  obtain ⟨o, hat, _⟩ := hcov 1 ⟨le_refl 1, by norm_num⟩
+    ⟨{ code := 0, level := 1 }, List.mem_singleton.mpr rfl, rfl, rfl, by decide⟩
+  exact absurd hat (by simp)
 
 /-! ## Non-vacuity witnesses -/
 
