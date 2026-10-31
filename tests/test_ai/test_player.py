@@ -1703,11 +1703,7 @@ class TestBuildGoalsTier1:
             },
         )
 
-        class _Obj:
-            target_gear = {"weapon_slot": "copper_dagger"}
-            target_tools: dict[str, str] = {}
-
-        player._objective = _Obj()  # type: ignore[assignment]
+        player._objective = CharacterObjective.from_game_data(player.game_data)
         player.state = make_state(skills={"weaponcrafting": 1, "gearcrafting": 1})
         actions = player._build_actions()
         recycle_codes = {a.code for a in actions if isinstance(a, RecycleAction)}
