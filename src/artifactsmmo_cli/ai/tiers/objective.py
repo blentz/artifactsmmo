@@ -14,11 +14,9 @@ from datetime import UTC, datetime
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equip_value import equip_value, tool_value
-from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
@@ -26,7 +24,6 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
-from artifactsmmo_cli.ai.tiers.tier_progress import gear_target_tier
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 # Single source: the duplicate-allowed slot types, read from actions/equip.py's
@@ -92,18 +89,9 @@ def _gear_candidates_by_type(
 ) -> dict[str, list[tuple[int, str]]]:
     """Equippable items at or below `level_cap`, scored by `pursuit_value` and
     ranked (highest value first, item code breaking ties) within each item
-    type. Shared candidate-build step for `near_term_gear` and
-    `gear_targets_with_blockers` (I1) — they differ only in the level cap
-    (`state.level` vs the gear-target tier) and in WHERE attainability is
-    applied: `near_term_gear` filters to attainable-now items BEFORE
-    `_slot_assignments` runs, so an unattainable item can never displace an
-    attainable one within a slot; `gear_targets_with_blockers` ranks first and
-    classifies attainability per ASSIGNED slot afterward, because an
-    unattainable target must still surface (carrying its blocker) rather than
-    vanish. That difference means the two functions can legitimately pick
-    different codes for the same slot from the same ranked list -- do not
-    move the attainability filter into this helper, and do not swap which
-    function filters and which classifies."""
+    type: `near_term_gear`'s candidate build. `near_term_gear` filters to
+    attainable-now items BEFORE `_slot_assignments` runs, so an unattainable
+    item can never displace an attainable one within a slot."""
     by_type: dict[str, list[tuple[int, str]]] = {}
     for code, stats in game_data.all_item_stats.items():
         if (stats.type_ not in ITEM_TYPE_TO_SLOTS
@@ -421,34 +409,6 @@ class CharacterObjective:
             for slot, value, code in _slot_assignments(type_, slots, attainable):
                 if value > self._item_value(state.equipment.get(slot)):
                     targets[slot] = code
-        return targets
-
-    def gear_targets_with_blockers(
-        self, state: WorldState, history: LearningStore | None
-    ) -> dict[str, GearTarget]:
-        """Best target per slot up to the gear target tier, each carrying its
-        blocker when it cannot be built now.
-
-        UNATTAINABLE targets are kept deliberately — that is this walk's whole
-        difference from `structural_targets`, and `IsThisTargetBlocked` needs
-        them to route to the skill or material standing in front of them.
-        UNSUPPLIABLE targets are not the same thing and are dropped here: a
-        fixed-supply item with no free copy has no blocker to route to, so
-        keeping it yields a root that can never plan. Filtering the ranked list
-        rather than the assignment lets the next-best candidate take the slot,
-        which is what makes the slot recover instead of going empty."""
-        tier = gear_target_tier(state, self._game_data, history)
-        targets: dict[str, GearTarget] = {}
-        for type_, ranked in _gear_candidates_by_type(self._game_data, tier).items():
-            slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
-            suppliable = [(value, code) for (value, code) in ranked
-                          if is_suppliable(code, state, self._game_data)]
-            for slot, value, code in _slot_assignments(type_, slots, suppliable):
-                if value <= self._item_value(state.equipment.get(slot)):
-                    continue
-                if defers_to_picker(code, slot, state, self._game_data):
-                    continue
-                targets[slot] = self.classify_target(code, state)
         return targets
 
     def classify_target(self, code: str, state: WorldState) -> GearTarget:

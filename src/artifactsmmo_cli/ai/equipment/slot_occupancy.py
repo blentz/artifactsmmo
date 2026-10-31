@@ -101,11 +101,10 @@ def defers_to_picker(code: str, slot: str, state: WorldState,
                      game_data: GameData) -> bool:
     """True iff the acquisition path must leave `slot` to `pick_loadout`.
 
-    THE TARGET-NAMING GATE, shared by the two walks that name gear roots —
-    `progression_tree._structural_candidates` and
-    `CharacterObjective.gear_targets_with_blockers`. It is stated once here
-    because they had drifted: the 2026-08-04 fix pinned the tree leg, and the
-    objective walk — whose winner `obtain_item_routing._equippable_goal` turns
+    THE TARGET-NAMING GATE of `progression_tree._structural_candidates`. It
+    was stated once here because two walks had drifted: the 2026-08-04 fix
+    pinned the tree leg, and the old objective walk (deleted by plan C Task 3)
+    — whose winner `obtain_item_routing._equippable_goal` turns
     into a COMMITTED `UpgradeEquipmentGoal` with no occupancy question asked —
     never had the gate at all. Live HAL ran
     `Equip(hard_leather_pants->leg_armor_slot)` 1,464 times between 2026-09-08

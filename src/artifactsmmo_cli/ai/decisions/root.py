@@ -1,59 +1,30 @@
 """The ROOT graph: named `Decision[MetaGoal]`s that answer "which root".
 
-Wave 3 replaces the flat scored ranking over candidate roots
-(`progression_tree.decide_tree`'s argmax) with a resolution walk over named
-nodes, exactly as wave 2 replaced `objective_step_goal`'s if-pile with
-`decisions/obtain_item.py`. The ranking answered "which root scores highest" —
-two unrelated scales sharing one column (live 2026-08-08: gear showed 2.6e8
-against the trunk's 1.0). This graph answers "which root does the tier ladder
-select", and its `trail` is a named path a reader can follow instead of a
-number they could not.
+`resolve_root` walks from `WhichPieceIsNext` (spec 2026-10-18 §2.4): the next
+missing piece of the cycle's gear objective `L*` (`ctx.gear_objective`), or
+one more character level once `L*` is held, or None when the cycle has no gear
+objective (the wall). `IsThisTargetBlocked` converts a piece's target into the
+root its blocker asks for. `trail` names the nodes the walk visited, the plan
+pane's "why".
 
-`decide_tree` calls `resolve_root` directly — THE FLIP (task 6,
-`PLAN_wave3a_cutover`) wired it in; this is no longer groundwork sitting
-uncalled, it is what every live cycle's root comes from.
-
-One module, five behavioural classes: the same shape as
-`decisions/obtain_item.py`, whose six `Decision` subclasses share a file
-because they are ONE graph — each class is a branch of it, they are only ever
-constructed by one another, and splitting them across five files would put
-mutually-referencing halves of a single control-flow structure behind five
-imports without making any of them independently usable.
+The resolution then OFFERS, never ranked against each other, the rest of the
+missing pieces, a crafter's fleet pieces, the trunk, the held task
+(`_task_root`), the fleet work (`_fleet_roots`) and the orphan skill roots
+(`_orphan_skill_roots`), in that fixed order.
 
 THE STANDALONE SKILL ROOT IS A RESTORED CAPABILITY, NOT A NEW FEATURE.
 `ef67c1d6` ("refactor(flip)!: delete the flat scalar ranking") deleted four
-standalone `ReachSkillLevel` root emitters at once — craft bootstrap, the
-alchemy gather-bootstrap, the recipe curve and the skill-50 long-haul — on the
-premise its own message states: "skills are pure prerequisites now". That
-premise is false for any skill whose output nothing equips. After it, the ONLY
-producer of a `ReachSkillLevel` was `IsThisTargetBlocked` off
-`GearTarget.blocking_skill`, which is a GEAR target's own crafting skill, so a
-skill no gear target can name had no producer at all and the bot could not
-choose to raise it. Live consequence, measured on
-`~/.cache/artifactsmmo/learning.db`: 33,840 cooking XP earned, 99.6% of it as a
-side effect of `Craft(cooked_*)` legs inside `RestoreHP` plans — an entire
-skill levelled by accident.
+standalone `ReachSkillLevel` root emitters at once on the premise "skills are
+pure prerequisites now". That premise is false for any skill whose output
+nothing equips: live, on `~/.cache/artifactsmmo/learning.db`, 33,840 cooking
+XP earned, 99.6% of it as a side effect of `Craft(cooked_*)` legs inside
+`RestoreHP` plans — an entire skill levelled by accident.
 
 `_orphan_skill_roots` restores the seam, as a rule about DAG DEMAND rather
 than about cooking (USER 2026-10-08: "Only when demanded" — a skill climbs when
-the goal-action DAG asks for it), and `resolve_root` offers its roots one rank BELOW the
-trunk. It adds no node and no argmax: a root that has to be CHOSEN against gear
-is a ranking, and deleting one is what this epic is for. `CanIClearMyTier`
-records the measurement that rejected the node.
-
-Spec: `docs/superpowers/specs/2026-08-23-wave3-resolution-design.md` §5.1,
-§5.3. One place this module deliberately departs from that spec, recorded in
-`.superpowers/sdd/PLAN_wave3a_cutover/task-4-report.md` (the spec's other
-disagreement at task-4 time — §5.3 saying "Six nodes" and drawing five — was
-the spec's own error; the spec text has since been corrected to "Five nodes"
-and no longer disagrees with this module):
-
-* §5.3's `IsThereACombatTarget` "yes" arm names
-  `ReachCharLevel(tier_of_level(game_data, state.level))`, which is a root the
-  character has ALREADY satisfied (`tier_of_level` returns the highest rung at
-  or below `state.level`). Task 4 transcribed it because its contract was
-  "change no behaviour"; THE FLIP (task 6) is the task that decides, and it
-  decided against the spec — see `_next_rung_above`.
+the goal-action DAG asks for it), and `resolve_root` offers its roots one rank
+BELOW the trunk. It adds no node and no argmax: a root that has to be CHOSEN
+against gear is a ranking.
 """
 
 from collections.abc import Sequence
@@ -97,7 +68,6 @@ from artifactsmmo_cli.ai.decisions import route as _route
 # MODULE import, same idiom and reason: `which_piece_is_next` reads this
 # module's `RootWalk` / `IsThisTargetBlocked`, and this module builds its entry.
 from artifactsmmo_cli.ai.decisions import which_piece_is_next as _which_piece
-from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.fleet_work import (
     FLEET_SUPPLY,
     FLEET_TURN_IN,
@@ -117,7 +87,6 @@ from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
-    ReachCharLevel,
     ReachFleetOutcome,
     ReachSkillLevel,
     ReachTaskOutcome,
@@ -128,11 +97,8 @@ from artifactsmmo_cli.ai.tiers.objective import (
     CharacterObjective,
     GearTarget,
 )
-from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
-from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, tier_of_level
-from artifactsmmo_cli.ai.tiers.tier_progress import next_uncleared_tier
 from artifactsmmo_cli.ai.tool_objective import tool_first
-from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
+from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 
 @dataclass(frozen=True)
@@ -140,10 +106,10 @@ class RootResolution:
     """The walk's answer: the root to pursue, ordered alternatives, and the
     trail that produced it.
 
-    `alternatives` is NOT a ranking. It is the ordered remainder of the ONE
-    list-valued node in the graph (`WhichSlotIsFurthestBehind`), then the
-    trunk, then the orphan skill roots (`_orphan_skill_roots`) — three ordered
-    groups, none of them scored against each other. It exists because
+    `alternatives` is NOT a ranking. It is the missing `L*` pieces in their
+    own order, the fleet pieces, the trunk, then the task, fleet and orphan
+    skill roots (`resolve_root`) — ordered groups, none of them scored against
+    each other. It exists because
     `objective_step_goal` can still return None for a
     resolved root (`ReachCharLevel` with no combat target, a paying held
     items task) and the arbiter walks it when the chosen step does not
@@ -175,19 +141,16 @@ class RootResolution:
 class RootWalk:
     """The one mutable side-channel the walk needs, threaded through the nodes.
 
-    Two things `resolve_node` cannot hand back on its own:
+    What `resolve_node` cannot hand back on its own:
 
     * `trail` — `resolve_node` keeps its visited list (`seen`) private and
       only surfaces it in the `RecursionError` message. Rather than widen a
       signature three other call sites already depend on, each node appends
       its own `name` as it resolves; the result is byte-identical to `seen`
       because `resolve_node` calls each visited node's `resolve` exactly once.
-    * `sibling_targets` — `WhichSlotIsFurthestBehind` ranks every blocked
-      slot but a `Decision` returns ONE child. The remainder is what
-      `RootResolution.alternatives` is made of, so it is deposited here.
 
     A node that is resolved OUTSIDE the main walk (`resolve_root` re-runs
-    `IsThisTargetBlocked` once per sibling to turn it into a `MetaGoal`) is
+    `IsThisTargetBlocked` once per missing piece to turn it into a `MetaGoal`) is
     handed a throwaway `RootWalk`, so those visits never pollute the trail.
 
     * `blocked_target` — the gear code whose CRAFTING-SKILL GATE turned this
@@ -203,17 +166,15 @@ class RootWalk:
       whether it can be served (`StepDecline`) and lets only a served one head
       the resolution (Phase 3-2: goal choice reads the walk's answer, which
       replaced promoting past an unservable pick after the fact). A declined
-      target is recorded with its reason and stays an alternative, after the
-      served ones (`declined_targets`), so it is visible and re-asked every
-      cycle: it heads the walk again exactly when its blocker clears.
+      target is recorded with its reason and stays an alternative, so it is
+      visible and re-asked every cycle: it heads the walk again exactly when
+      its blocker clears.
     """
 
     trail: list[str] = field(default_factory=list)
-    sibling_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
     blocked_target: str | None = None
     step_decline: StepDecline = no_decline
     declined: dict[str, str] = field(default_factory=dict)
-    declined_targets: list[tuple[str, GearTarget]] = field(default_factory=list)
     # The walk's one clock (the obtain model's event gates read it): the
     # caller's, else read once when the walk is made.
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -232,177 +193,6 @@ class RootWalk:
             return True
         self.declined[repr(root)] = reason
         return False
-
-
-def _target_rung(game_data: GameData, code: str) -> int:
-    """The ladder rung `code` sits on.
-
-    Raises rather than defaulting when the item is absent from game data: an
-    item the objective picked as a gear target and the catalogue does not know
-    is a data fault, and a silently-substituted rung would rank it.
-    """
-    stats = game_data.item_stats(code)
-    if stats is None:
-        raise ValueError(
-            f"gear target {code!r} has no item stats in game data — cannot "
-            f"place it on the ladder")
-    return tier_of_level(game_data, stats.level)
-
-
-def _next_rung_above(game_data: GameData, level: int) -> int:
-    """The lowest ladder rung STRICTLY ABOVE `level`; the trunk milestone when
-    the ladder is exhausted.
-
-    NOT STRICTLY ABOVE AT THE CAP, and the honest statement matters because the
-    cap is exactly where the risk was flagged. Past the last rung this falls
-    back to `milestone_pure`, whose L50 fixed point is `milestone_pure(50) ==
-    50` — so a level-50 character gets `ReachCharLevel(50)`, which
-    `is_satisfied` reports True, and all three consequences named below RETURN
-    at the cap. That is not a defect this function can fix: there is no level
-    above 50 to name, and `CanIClearMyTier` reaches the same fixed point by the
-    same route. It is the L50 capstone's own open question
-    (`project_l50_unconditional_descent`), pinned by
-    `test_combat_target_root_at_the_level_cap_is_the_satisfied_capstone` so it
-    cannot be rediscovered by accident.
-
-    THE FLIP's correction to spec §5.3, which named
-    `tier_of_level(game_data, state.level)` here — the highest rung AT OR BELOW
-    the level, i.e. a root the character has already satisfied. Three things
-    that root broke, all of them silent:
-
-      * `chosen_root.is_satisfied(...)` is True, so the walk's answer to "what
-        should this character pursue" is something it has already done;
-      * `objective_needs` reads `char_xp = state.level < root.level`, so an
-        already-met rung yields an EMPTY `NeedSet` and switches the arbiter's
-        PURSUE_TASK worth gate OFF — a live gate disabled by a level nobody
-        chose;
-      * it names a level already reached, so the `ReachCharLevel` step it
-        commits has nothing left to grind.
-
-    The rung strictly above is what the arm MEANT: this is the "there is a
-    monster to fight" arm, and the reason to fight is to reach the next gear
-    breakpoint. Both sibling arms name unreached levels and `CanIClearMyTier`
-    already falls back on `milestone_pure`, which is also the level-50 fixed
-    point (`milestone_pure(50) == 50`) once the ladder runs out.
-    """
-    rungs = ladder(game_data)
-    if not rungs:
-        # RAISES, exactly as its sibling `tier_of_level` does on the same
-        # input. `ladder` is empty only for a catalogue with no equippable
-        # items, which the API cannot produce; defaulting here while
-        # `tier_of_level` refused would make the two disagree about the same
-        # data fault, and "tier_of_level correctly refuses it" is the argument
-        # six test fixtures were changed on.
-        raise ValueError("no equippable items in game data — cannot derive a ladder")
-    higher = [rung for rung in rungs if rung > level]
-    return higher[0] if higher else milestone_pure(level)
-
-
-def _tier_gap(slot: str, target: GearTarget, state: WorldState,
-              game_data: GameData) -> int:
-    """How many ladder rungs `slot` is behind its target.
-
-    An EMPTY slot counts as rung 0 — strictly below the ladder's first rung,
-    never `tier_of_level(game_data, 0)` (which is `rungs[0]`, the first rung).
-    So an empty slot outranks an occupied slot aiming at the same rung, which
-    is the empty-slot dominance the kernel already proves
-    (`Formal.GearPolicy.armor_strictly_dominates_empty_slot`) and the live
-    2026-06-11 trace paid for: level 6, body/leg/amulet empty, 148 consecutive
-    fights at -72.8 HP each.
-    """
-    worn = state.equipment.get(slot)
-    worn_rung = 0 if worn is None else _target_rung(game_data, worn)
-    return _target_rung(game_data, target.code) - worn_rung
-
-
-def _is_dead_target(target: GearTarget, state: WorldState,
-                    game_data: GameData) -> bool:
-    """Is this target's blocker a wall NOTHING IN THE CATALOGUE OPENS?
-
-    Exactly the drop-wall census's `WALL_DROPPER_OUT_OF_REACH` arm, whose own
-    docstring calls it "An honest terminal wall, and the arm a future pricing
-    change must decline rather than charge". Three conjuncts, and the middle one
-    is the whole reason this is not just "the blocker is unreachable":
-
-      * MATERIAL-GATED. `blocker is None` is an attainable target and
-        `blocker == code` is a leaf with no recipe (`GearTarget`'s docstring
-        names both shapes). Neither is a claim about a monster.
-      * IT HAS LIVE DROPPERS. `on_live_tiles` non-empty. Live 2026-09-12, HAL:
-        `hard_leather_helmet` is blocked on `astralyte_crystal`, which NO
-        monster drops at all — a SPAWN wall, a resource node the character has
-        not unlocked, not a fight it cannot win. Dropping that conjunct would
-        demote every gather-gated target in the catalogue on evidence that says
-        nothing about them.
-      * NONE OF THEM CLOSES. `combat_deficit` finds no gear chain that lifts the
-        margin over any live dropper, so the target is not merely expensive —
-        there is no sequence of acquisitions in the catalogue that makes it
-        servable at this level. HAL's `slime_shield` sits here: `king_slimeball`
-        drops from `king_slime` alone, a static 1000-hp spawn, and his best
-        reachable chain gets the margin from -17 to -8.
-
-    DEMOTION, NEVER EXCLUSION — see `_slot_order`. The verdict is a fact about
-    THIS cycle's state (a level-30 HAL closes it), so a target that leaves the
-    sheet here could never come back on its own.
-    """
-    if target.blocker is None or target.blocker == target.code:
-        return False
-    evidence = drop_evidence(target.blocker, state, game_data)
-    return bool(evidence.on_live_tiles) and not evidence.closes
-
-
-def dead_target_slots(targets: dict[str, GearTarget], state: WorldState,
-                      game_data: GameData) -> frozenset[str]:
-    """The slots of `targets` whose target is `_is_dead_target`, computed ONCE.
-
-    THE REASON THIS IS NOT A `_slot_order` CONJUNCT COMPUTED IN PLACE:
-    `_slot_order` is a SORT KEY, and `drop_evidence` walks every dropper of the
-    blocker through `combat_deficit`, which costs tens of milliseconds. A key
-    function runs O(n log n) times per cycle and `sorted` gives no memo, so
-    asking there turns a 74 ms resolution into seconds. `resolve` asks once, for
-    exactly the `len(targets)` distinct targets, and hands the answer down.
-    """
-    return frozenset(slot for slot, target in targets.items()
-                     if _is_dead_target(target, state, game_data))
-
-
-def _slot_order(item: tuple[str, GearTarget], state: WorldState,
-                game_data: GameData, dead: frozenset[str]
-                ) -> tuple[int, int, int, int]:
-    """Descent key for `WhichSlotIsFurthestBehind`: reachable targets first,
-    then furthest behind, then the higher-rung target, then the API schema's
-    own slot order.
-
-    The LEADING component is `dead_target_slots`' verdict as 0/1, so an
-    ascending sort puts every target whose blocker something can open above
-    every target whose blocker nothing can. It is a DEMOTION and the key is
-    total either way: a dead target keeps its full place in
-    `RootResolution.alternatives` and is still ranked against its dead peers by
-    the same three components, it just cannot head the resolution while a
-    servable sibling exists. Live 2026-09-12, HAL at level 20: `slime_shield`
-    (blocked on `king_slimeball`, dropped only by `king_slime`, whose margin
-    closes at no level he can reach) headed the walk, so the planner was handed
-    `ObtainItem(king_slimeball, 6)` and returned `nodes=6 depth=2 plan_len=0 NO
-    PLAN` every cycle. The fall-through cost no cycles; it cost the resolution
-    its meaning.
-
-    NOT A FILTER, and deliberately not. The verdict is state-dependent — HAL at
-    level 30 beats `king_slime` — and `gear_targets_with_blockers` exists
-    precisely to keep unattainable targets visible rather than dropping them on
-    the floor (`near_term_gear` drops them; that is the defect `GearTarget` was
-    introduced for). A removed target is invisible to `_servable_promotion`, to
-    the plan pane and to every census that walks the alternatives.
-
-    The last component is `EQUIPMENT_SLOTS.index`, the order the character
-    schema declares its slots in — NOT `sorted(slot)`. An alphabetical
-    tiebreak is the defect `feedback_no_alphabetical_tiebreak` names; the
-    schema order is a declared vocabulary and is the only total order over
-    slots this codebase actually publishes.
-    """
-    slot, target = item
-    return (1 if slot in dead else 0,
-            -_tier_gap(slot, target, state, game_data),
-            -_target_rung(game_data, target.code),
-            EQUIPMENT_SLOTS.index(slot))
 
 
 def _is_food(code: str, game_data: GameData) -> bool:
@@ -445,7 +235,7 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
       (`_seed`'s guard), so nothing admits itself.
 
     The level offered is the level ASKED FOR, never a one-rung `C+1` nudge
-    with no destination. A skill a root on offer already climbs (the tier
+    with no destination. A skill a root on offer already climbs (the
     walk's skill-gated target, a supply-link climb) is left to that root.
 
     WHAT THIS REPLACED. The old gate admitted every skill no gear target could
@@ -489,82 +279,6 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
     orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
                                     SKILL_NAMES.index(skill)))
     return tuple(ReachSkillLevel(skill=skill, level=demand[skill]) for skill in orphans)
-
-
-class IsMyGearBehindMyTier(Decision[MetaGoal]):
-    """Does the gear-target tier want anything this character does not wear?
-
-    `gear_targets_with_blockers` is the wave-2 objective walk that reports a
-    target per slot TOGETHER with what stands in front of it, instead of
-    dropping the unattainable ones on the floor the way `near_term_gear` does.
-    This is its first production consumer.
-    """
-
-    name = "IsMyGearBehindMyTier"
-
-    def __init__(self, objective: CharacterObjective, walk: RootWalk) -> None:
-        self.objective = objective
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-        targets = self.objective.gear_targets_with_blockers(state, history)
-        served = {slot: target for slot, target in targets.items()
-                  if self.walk.serves(slot, target, state, game_data, ctx, history)}
-        declined = {slot: target for slot, target in targets.items() if slot not in served}
-        dead = dead_target_slots(declined, state, game_data)
-        self.walk.declined_targets = sorted(
-            declined.items(), key=lambda item: _slot_order(item, state, game_data, dead))
-        if not served:
-            # Every target the sheet wants is blocked this cycle, each with its
-            # named reason: the gear arm has nothing to offer, so the walk asks
-            # the combat/tier arm, as it does when the sheet wants nothing.
-            return IsThereACombatTarget(self.walk)
-        return WhichSlotIsFurthestBehind(served, self.walk)
-
-
-class WhichSlotIsFurthestBehind(Decision[MetaGoal]):
-    """The largest tier gap among the served slots wins; the rest become
-    `RootResolution.alternatives`, in `_slot_order`.
-
-    `targets` is never empty: the only constructor call site is
-    `IsMyGearBehindMyTier.resolve`, inside its `if not served` NEGATIVE arm.
-
-    FAIRNESS IS NOT DECIDED HERE ANY MORE. `_slot_order` is a pure total order
-    over a set that does not change while the character makes no progress, so
-    on its own it would re-elect the same slot forever (the ring2 shape: a
-    target whose only route is an unbeatable monster's drop, held once). That
-    used to be answered here by focus aging and a d'Hondt interleave over the
-    slots. Phase 4-2b replaced both with facts about the intention: a target
-    that makes no progress ends as `stalled` (and a lost fight is learned, so
-    the walk declines it), and one that spends its cycle budget goes to the back
-    of the turn order (the arbiter tries the least recently served goal first,
-    `intention_progress.rotate`), so every other candidate gets a turn.
-
-    THE DEAD-TARGET DEMOTION IS A KEY, NOT A GATE. `dead_target_slots` is asked
-    ONCE here and leads `_slot_order`, so a provably-dead target cannot head the
-    walk while a servable sibling exists, and it stays on offer.
-    """
-
-    name = "WhichSlotIsFurthestBehind"
-
-    def __init__(self, targets: dict[str, GearTarget], walk: RootWalk) -> None:
-        self.targets = targets
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-        # ONCE per cycle, NOT inside the key: see `dead_target_slots`.
-        dead = dead_target_slots(self.targets, state, game_data)
-        ranked = sorted(self.targets.items(),
-                        key=lambda item: _slot_order(item, state, game_data, dead))
-        (slot, target), *siblings = ranked
-        self.walk.sibling_targets = siblings
-        return IsThisTargetBlocked(slot, target, self.walk)
 
 
 class IsThisTargetBlocked(Decision[MetaGoal]):
@@ -637,69 +351,6 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
                 f"{self.target.blocker!r}, which is not in its recipe")
         return ObtainItem(code=self.target.blocker,
                           quantity=recipe[self.target.blocker])
-
-
-class IsThereACombatTarget(Decision[MetaGoal]):
-    """Is there a monster this character should be fighting right now?
-
-    `ctx.combat_monster` is the held monsters task's monster, else the gear
-    objective's `m*` while its `L*` is held, else None: no fight is chosen for
-    XP while a piece of `L*` is missing (spec 2026-10-18 §6.2).
-
-    The level it names is the next ladder rung STRICTLY ABOVE the character's
-    — see `_next_rung_above` for why that is not what spec §5.3 wrote.
-    """
-
-    name = "IsThereACombatTarget"
-
-    def __init__(self, walk: RootWalk) -> None:
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-        if ctx.combat_monster is not None:
-            return ReachCharLevel(level=_next_rung_above(game_data, state.level))
-        return CanIClearMyTier(self.walk)
-
-
-class CanIClearMyTier(Decision[MetaGoal]):
-    """The end of the ladder, or an honest wall.
-
-    Reached only when the gear sheet wants nothing AND no monster in the band
-    is winnable. If every rung is cleared, the ladder is finished and the
-    trunk milestone is the root. Otherwise there is a rung left, nothing to
-    gear for, and nothing to fight: that is a WALL, and it is reported as
-    `None` rather than dressed up as a root the character cannot make progress
-    on. `MAX_RESOLVE_DEPTH` never sees it — `None` terminates the walk.
-
-    THE ORPHAN SKILL ROOTS DO NOT GO HERE, and that was MEASURED rather than
-    assumed. A sixth node on this arm — "before you call it a wall, is there a
-    skill nothing can name?" — reads well and is wrong: `chosen_root is None`
-    is what `strategy_driver._build_candidates` keys `step_is_real` on, and a
-    non-None root there demotes the raid candidates below the objective step.
-    Measured on the scenario set, that turned `l48_raid_active` from
-    `ParticipateRaid(enchanted_fairy)` into a cooking grind — a time-limited
-    event traded for a skill climb — and dissolved the wall three suites pin as
-    a designed verdict (`scenarios/test_band_liveness.py`,
-    `scenarios/test_no_deadlock.py`). The wall is a real answer, and a skill
-    with an open rung is an ALTERNATIVE to it, not a replacement for it: see
-    `resolve_root`, which offers the same roots one rank below the trunk.
-    """
-
-    name = "CanIClearMyTier"
-
-    def __init__(self, walk: RootWalk) -> None:
-        self.walk = walk
-
-    def resolve(self, state: WorldState, game_data: GameData,
-                ctx: SelectionContext, history: LearningStore | None
-                ) -> "Decision[MetaGoal] | MetaGoal | None":
-        self.walk.trail.append(self.name)
-        if next_uncleared_tier(state, game_data, history) is None:
-            return ReachCharLevel(level=milestone_pure(state.level))
-        return None
 
 
 def _task_root(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -833,7 +484,7 @@ def resolve_root(state: WorldState, game_data: GameData,
         ordered.append(trunk)
     # THE RESTORED SEAM: the orphan skill roots, after the gear siblings and
     # after the trunk. Produced here, beside the trunk, and for the same reason
-    # the trunk is produced here — neither is a question the tier walk asks,
+    # the trunk is produced here — neither is a question the piece walk asks,
     # both are roots the resolution OFFERS for when the walk's own answer
     # cannot be served. Nothing is ranked against anything: three groups
     # concatenated in a fixed order, and `_orphan_skill_roots` orders its own

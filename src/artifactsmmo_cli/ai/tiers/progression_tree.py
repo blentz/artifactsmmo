@@ -56,8 +56,7 @@ def _structural_candidates(state: WorldState, game_data: GameData,
 
     Scored on `pursuit_value` (combat-dominant efficiency budget), NOT the flat
     `equip_value`. The ruler was chosen for the cross-slot GAIN ranking that
-    `focus_aging_order` ran (waves 3a/3b removed that ranker; the walk orders
-    slots on `_tier_gap` instead): it had to let a combat weapon outrank a
+    `focus_aging_order` ran (waves 3a/3b removed that ranker): it had to let a combat weapon outrank a
     pure-utility artifact instead of chasing the prospecting artifact that flat
     equip_value mistakenly scored highest (the cross-slot bug). It stays on
     `pursuit_value` because the `gain > 0` predicate this list is now read
@@ -77,9 +76,8 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     merely refusing the action also keeps it out of the ranking, so it cannot
     sit there as a permanently-unservable root starving the interleave.
 
-    The predicate is SHARED with `CharacterObjective.gear_targets_with_blockers`
-    — the other walk that names gear roots. It used to be inline here only, and
-    that walk went ungated for a month; see `defers_to_picker`'s docstring."""
+    The predicate lives in `defers_to_picker`: it used to be inline here only,
+    and the old objective walk went ungated for a month (see its docstring)."""
     candidates = []
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
@@ -167,8 +165,8 @@ def _resolution_rows(state: WorldState, game_data: GameData,
     resolution trail: the ordered `Decision.name`s the walk actually visited, a
     named path a reader can follow, which is what they wanted from the number
     and never got. For an alternative it is `alternative · <kind>`, because an
-    alternative was NOT produced by that trail — it is the ordered remainder of
-    `WhichSlotIsFurthestBehind` plus the trunk (see `RootResolution`), and
+    alternative was NOT produced by that trail — it is one of the groups
+    `resolve_root` offers (see `RootResolution`), and
     stamping the chosen root's path onto it would claim a derivation that never
     happened. One vocabulary, two honest values.
     """
@@ -192,8 +190,8 @@ def decide_tree(state: WorldState, game_data: GameData,
                 ) -> "strategy.StrategyDecision":
     """THE FLIP (wave 3a, spec §5.2): the root is RESOLVED, not ranked.
 
-    `resolve_root` walks the five-node graph in `ai/decisions/root.py` from
-    `IsMyGearBehindMyTier` to one root `MetaGoal`. That replaces the argmax
+    `resolve_root` walks the graph in `ai/decisions/root.py` from
+    `WhichPieceIsNext` to one root `MetaGoal`. That replaces the argmax
     this function used to run — a scored competition between two unrelated
     scales sharing one column (live 2026-08-08: gear showed 2.6e8 against the
     trunk's 1.0 while `J` had them within 0.006% of each other, trunk winning).

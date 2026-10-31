@@ -292,11 +292,10 @@ class StrategyEngine:
         map). Defaults to `NO_PROFILE_CONTEXT` for every caller that doesn't
         wire it in.
 
-        `history` is the learning store the root walk's own nodes read —
-        `IsMyGearBehindMyTier` passes it to `gear_targets_with_blockers` and
-        `CanIClearMyTier` to `next_uncleared_tier`. None is a legitimate
-        answer, not a disabled mode: both fall back to the state-only verdict
-        the same way every other `Decision` in the codebase does."""
+        `history` is the learning store the root walk's own nodes read (the
+        held task's root reads it). None is a legitimate answer, not a
+        disabled mode: it falls back to the state-only verdict the same way
+        every other `Decision` in the codebase does."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
             step_decline=step_decline, ctx=ctx, history=history)

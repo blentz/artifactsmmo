@@ -13,8 +13,8 @@ scenarios (`l1_fresh`, `l10_weapon_upgrade`, `l10_copper_adequate`,
     level-12 character in a full copper set losing to a 60-hp chicken;
   * that fiction became LOAD-BEARING at the flip. The retired ranking read
     `near_term_gear`, capped by LEVEL and blind to winnability. The resolution
-    walk reads `gear_targets_with_blockers`, which gears for
-    `tier_progress.gear_target_tier` — the rung being CLEARED. With no attack
+    walk read `gear_targets_with_blockers` (deleted by plan C Task 3), which
+    geared for `tier_progress.gear_target_tier` — the rung being CLEARED. With no attack
     nothing clears, so `gear_target_tier` pinned to 1 and all four goldens
     collapsed onto ONE answer, `GatherMaterials(ash_wood)`. A golden suite that
     cannot tell four scenarios apart is testing nothing.
@@ -1105,8 +1105,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # while slot 1 was skipped lived ONLY in that function, which wave 3b
     # deleted (zero production callers since wave 3a stopped reading it) —
     # so as of wave 3b no potion reaches `fallback_roots` at all, stocked or
-    # not (utility slots aren't equipment slots `gear_targets_with_blockers`
-    # sees). This scenario now exercises that absence rather than a win.
+    # not (`L*` wears no potion). This scenario now exercises that absence rather than a win.
     "l20_dual_utility_one_stocked": ScenarioCharacter(
         name="l20_dual_utility_one_stocked", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,

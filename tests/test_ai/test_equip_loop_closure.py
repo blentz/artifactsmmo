@@ -43,8 +43,6 @@ from artifactsmmo_cli.ai.equipment.slot_occupancy import defers_to_picker, may_d
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.suppliable import is_suppliable
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import _structural_candidates
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -618,46 +616,19 @@ def _gd_pants_world() -> GameData:
     return gd
 
 
-def test_the_gear_target_walk_leg_of_the_loop_also_closes() -> None:
-    """The FOURTH producer, and the one still live on 2026-09-20:
-    `CharacterObjective.gear_targets_with_blockers`.
-
-    a1e67887 gated `_committed_upgrade_if_ready`, which only `value()` and
-    `desired_state()` reach. What NAMES the root is this walk — it ranks a slot
-    on the monster-blind `_item_value` alone (`objective.py:505`) and hands the
-    winner to `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, which
-    `obtain_item_routing._equippable_goal` turns into a committed
-    `UpgradeEquipmentGoal` with no occupancy question asked. Live HAL ran
-    `Equip(hard_leather_pants->leg_armor_slot)` 1,464 times between 2026-09-08
-    and 2026-09-20 — 790 of them in one 94.7-hour session, 16.5% of his cycles
-    — with `OptimizeLoadout(pig)` putting `adventurer_pants` back each time.
-
-    The tree's gear branch already defers here (`_structural_candidates`); this
-    walk is the same ruler over the same slot and must defer identically.
-    """
+def test_an_owned_piece_the_picker_would_swap_back_defers() -> None:
+    """The gate's deferral proper: an OWNED `hard_leather_pants` that does not
+    dominate the worn `adventurer_pants` is left to `pick_loadout`, so no walk
+    names it and the equip loop (live HAL, 1,464 equips 2026-09-08..09-20)
+    cannot start. The same board with no copy held does not defer: acquiring
+    it is real work."""
     gd = _gd_pants_world()
     leg = "leg_armor_slot"
     state = _state(20, {"hard_leather_pants": 1},
                    {leg: "adventurer_pants"}, _BATTLESTAFF_ATTACK)
-    obj = CharacterObjective.from_game_data(gd)
-
-    # Vacuity guards: every OTHER filter must pass the candidate, or the empty
-    # result below says nothing about occupancy.
     assert may_displace(_HARD_LEATHER_PANTS, _ADVENTURER_PANTS) is False
-    assert is_suppliable("hard_leather_pants", state, gd) is True
-    assert (obj._item_value("hard_leather_pants")
-            > obj._item_value("adventurer_pants")), (
-        "fixture drift: a non-positive gain drops the candidate at "
-        "objective.py:505 before occupancy is consulted"
-    )
-    # The SAME board with no copy held: the walk DOES name the target. This
-    # pins the difference below to ownership + occupancy and nothing else.
-    unowned = replace(state, inventory={})
-    assert unowned.equipment[leg] == "adventurer_pants"
-    assert obj.gear_targets_with_blockers(unowned, None)[leg].code == \
-        "hard_leather_pants"
-
-    assert leg not in obj.gear_targets_with_blockers(state, None)
+    assert defers_to_picker("hard_leather_pants", leg, state, gd) is True
+    assert defers_to_picker("hard_leather_pants", leg, replace(state, inventory={}), gd) is False
 
 
 def test_an_empty_slot_is_filled_not_deferred() -> None:
@@ -667,25 +638,20 @@ def test_an_empty_slot_is_filled_not_deferred() -> None:
     acquisition ruler thinks, so naming it as a target costs nothing and skips
     an idle slot. Over-widening the gate to every owned item would silently
     switch off the empty-slot fill that `EquipOwnedGoal` and the artifact
-    branch depend on, and no equip-loop assertion would notice — the loop
-    needs two occupants to alternate between.
+    branch depend on.
     """
     gd = _gd_pants_world()
     leg = "leg_armor_slot"
     state = _state(20, {"hard_leather_pants": 1}, {leg: None},
                    _BATTLESTAFF_ATTACK)
-    obj = CharacterObjective.from_game_data(gd)
-
     assert defers_to_picker("hard_leather_pants", leg, state, gd) is False
-    assert obj.gear_targets_with_blockers(state, None)[leg].code == \
-        "hard_leather_pants"
 
 
-def test_a_dominating_owned_candidate_still_reaches_the_gear_target_walk() -> None:
+def test_a_dominating_owned_candidate_is_not_deferred() -> None:
     """The gate must stay a DEFERRAL, not a ban on owned gear.
 
     `hard_leather_pants` over `old_pants` is stat-wise dominance, so
-    `pick_loadout` can never swap it back and the walk must keep naming it —
+    `pick_loadout` can never swap it back and the gate must not defer —
     otherwise the character never upgrades a slot from anything it already
     carries.
     """
@@ -694,9 +660,5 @@ def test_a_dominating_owned_candidate_still_reaches_the_gear_target_walk() -> No
     leg = "leg_armor_slot"
     state = _state(20, {"hard_leather_pants": 1}, {leg: "old_pants"},
                    _BATTLESTAFF_ATTACK)
-    obj = CharacterObjective.from_game_data(gd)
-
     assert may_displace(_HARD_LEATHER_PANTS, _OLD_PANTS) is True
     assert defers_to_picker("hard_leather_pants", leg, state, gd) is False
-    assert obj.gear_targets_with_blockers(state, None)[leg].code == \
-        "hard_leather_pants"

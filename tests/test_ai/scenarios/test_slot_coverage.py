@@ -390,22 +390,6 @@ def test_l48_event_active_pursues_event_gear() -> None:
     the wall-crossing behaviour l48_band_adequate proves impossible without
     events.
 
-    WAVE 3a re-derived WHICH event candidate. `corrupted_crown` (helmet) is off
-    the sheet: `gear_targets_with_blockers` gears for `gear_target_tier`, which
-    is 30 here, and the crown sits above it — the helmet target is
-    `obsidian_helmet`. The event's contribution is `corrupted_skull` at
-    artifact1_slot, and it is ATTAINABLE (`blocker is None`) precisely because
-    the event opened its corrupted_gem route. RE-DERIVED 2026-08-22: it is the
-    ONE artifact slot, not all three — artifacts are no longer duplicate-allowed
-    (a 2nd copy 485s), so the siblings take blocked distinct artifacts instead.
-    The selected goal and the first action are UNCHANGED, which is the pursuit
-    this test exists for.
-
-    (An earlier fix-round draft of this docstring claimed `demon_horn` was
-    `corrupted_crown`'s blocker. It is not — it blocks `gold_shield` and
-    `conjurer_cloak`. The assertions below read the blocker map rather than
-    restating it, so the claim and the code cannot drift again.)
-
     RE-DERIVED Task 5 (global gear objective): with the event up its gear is
     ON the argmax (spec 2026-10-18 §5.3) — `L*` for hellhound wears
     `corrupted_skull` and `corrupted_crown` — and both are pursued as `L*`
@@ -413,30 +397,13 @@ def test_l48_event_active_pursues_event_gear() -> None:
     `goblin_guard_shield`, whose acquisition the cycle plans. The event
     changed `L*`; it did not jump the queue."""
     report = _run("l48_event_active")
-    # Read the sheet off the SAME event-overlaid game data the run used
+    # The `L*` off the SAME event-overlaid game data the run used
     # (`seed_offline` applies the overlay from `state.active_events`).
     gd_event = load_bundle_game_data(BUNDLE)
     overlay = GamePlayer(character="l48_event_active", history=None)
     overlay._offline_timing = committed_timing()
     overlay._learned_drops = LearnedDrops.empty()
     overlay.seed_offline(_state("l48_event_active", gd_event), gd_event)
-    assert overlay._objective is not None
-    targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
-    # THE EVENT'S OWN CONTRIBUTION, by name and by attainability — not "any
-    # corrupted-anything root", which the previous form degenerated to.
-    assert targets["artifact1_slot"].code == "corrupted_skull", targets["artifact1_slot"]
-    assert targets["artifact1_slot"].blocker is None, targets["artifact1_slot"]
-    # ...and ONLY artifact1. Artifacts left `DUPLICATE_SLOT_TYPES` on 2026-08-22
-    # (2nd-copy equip = HTTP 485), so the sibling slots take the next-ranked
-    # DISTINCT artifacts — both of which are blocked at this tier. That is the
-    # honest sheet: a 2nd corrupted_skull could never be equipped, so naming it
-    # here would have manufactured two unreachable targets that LOOK attainable.
-    for slot in ("artifact2_slot", "artifact3_slot"):
-        assert targets[slot].code != "corrupted_skull", (slot, targets[slot])
-        assert targets[slot].blocker is not None, (slot, targets[slot])
-    assert any(r.root_repr == "ObtainItem(code='corrupted_skull', quantity=1, "
-               "slot='artifact1_slot')" for r in report.decision.ranking), \
-        report.decision.ranking
     assert overlay.state is not None and overlay.game_data is not None
     objective = attach_gear_objective(overlay.state, overlay.game_data,
                                       TIMED_NO_PROFILE_CONTEXT, None).gear_objective

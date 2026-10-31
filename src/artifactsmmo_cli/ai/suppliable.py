@@ -44,7 +44,8 @@ def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
     completed 2026-07-03. `craft: null`, `tradeable: false`, and absent from
     every monster, resource, NPC, task and event table. ONE copy exists on the
     account and Robby is wearing it. It outranks every artifact the others can
-    reach, so `gear_targets_with_blockers` handed it to every one of the three
+    reach, so the old gear sheet (`gear_targets_with_blockers`, deleted by
+    plan C Task 3) handed it to every one of the three
     whose walk reached a gear root at all — C3P0, Lor and R2D2 — for an empty
     artifact slot, `classify_target` fell to its
     LAST arm (no recipe and not attainable, therefore its own blocker), and

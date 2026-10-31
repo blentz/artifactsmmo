@@ -419,32 +419,11 @@ def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
     assert is_suppliable("coin", state, gd) is True
 
 
-def test_gear_targets_drop_an_unsuppliable_candidate_and_fall_through():
-    """`relic` outranks nothing else for the artifact slot, so before the gate
-    it took that slot and `classify_target` reached its LAST arm — no recipe and
-    not attainable, therefore its OWN blocker — handing the root walk an
-    `ObtainItem` no step graph could ever plan. The slot must now be absent
-    rather than carry a target the character can never hold."""
-    gd = _gd_fixed_supply()
-    state = make_state(level=5, attack={"air": 5})
-    obj = CharacterObjective.from_game_data(gd)
-    targets = obj.gear_targets_with_blockers(state, None)
-    assert all(t.code != "relic" for t in targets.values())
-
-
 def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
-    """`classify_target`'s FOURTH shape, pinned HERE because the suppliability
-    gate made it unreachable through `gear_targets_with_blockers`.
-
-    That walk used to be the arm's only witness: an item with no recipe and no
-    acquisition source classified `blocker == code`, and `IsThisTargetBlocked`
-    turned it into an `ObtainItem` root with nothing to route to — the
-    `novice_guide` failure. `is_suppliable` now drops such a candidate before it
-    can be classified, so no candidate reaching `classify_target` from that walk
-    can land on this arm any more. The arm itself must stay: the material loop
-    exhausts whenever a recipe's materials are all attainable-now, and
-    `classify_target` is public. Asserting it directly keeps it pinned without
-    pretending the walk can still produce it."""
+    """`classify_target`'s FOURTH shape: an item with no recipe and no
+    acquisition source classifies as its own blocker (`blocker == code`). The
+    arm must stay: the material loop exhausts whenever a recipe's materials
+    are all attainable-now, and `classify_target` is public."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, attack={"air": 5})
     target = CharacterObjective.from_game_data(gd).classify_target("relic", state)
@@ -476,19 +455,6 @@ def test_classify_target_asks_one_obtain_model_per_call() -> None:
     assert not is_attainable_now("dragon_helm", state, gd)
     assert not is_attainable_now("dragon_scale", state, gd)
     assert (coat.attainable, coat.blocker) == (True, None)
-
-
-def test_gear_targets_keep_an_unattainable_but_producible_candidate():
-    """The other half of the contract: `gear_targets_with_blockers`
-    DELIBERATELY keeps unattainable targets so `IsThisTargetBlocked` can route
-    to the blocker in front of them. The suppliability gate must not touch
-    those. `dragon_helm` is unattainable now and still a target."""
-    gd = _gd_fixed_supply()
-    state = make_state(level=5, attack={"air": 5})
-    obj = CharacterObjective.from_game_data(gd)
-    targets = obj.gear_targets_with_blockers(state, None)
-    assert targets["helmet_slot"].code == "dragon_helm"
-    assert targets["helmet_slot"].attainable is False
 
 
 def test_is_attainable_accepts_known_spawn_monster_drop():

@@ -2984,15 +2984,6 @@ GE_ORDER_404_REFRESH_MUTATIONS = [
      "            if True \\"),
 ]
 
-OBJECTIVE_OCCUPANCY_MUTATIONS = [
-    ("objective: drop the gear-target occupancy deferral",
-     "                if defers_to_picker(code, slot, state, self._game_data):\n"
-     "                    continue",
-     "                if False:\n"
-     "                    continue"),
-]
-
-
 # UpgradeEquipmentGoal inventory-path occupancy mutation -- the SECOND producer
 # of a displacing equip. Its own `_is_upgrade_over` is level-based, so a
 # higher-level piece that is worse for the current monster passes it; only the
@@ -5682,22 +5673,11 @@ DECISION_MUTATIONS = [
 # at the sibling. 11,434 LevelSkill(weaponcrafting->N) actions ran, target
 # never once above 10, dead on four characters since 2026-08-16. This mutant
 # restores exactly that regression.
-# The ROOT graph (`ai/decisions/root.py`, wave 3a task 4). One mutant per
-# branch claim: each of the five nodes' pivots, the blocker/skill read order,
-# the empty-slot rung rule and the slot tiebreak. Killed by
+# The ROOT graph (`ai/decisions/root.py`, wave 3a task 4): the blocker/skill
+# read order and each arm of `IsThisTargetBlocked`, and the orphan skill rule.
+# Plan C Task 3 deleted the tier walk's nodes and their mutants. Killed by
 # tests/test_ai/test_decisions_root.py.
 ROOT_DECISION_MUTATIONS = [
-    # Re-anchored 2026-10-03 (Phase 3-2): the pivot reads the SERVED targets,
-    # and a comment now sits between the test and its return.
-    ("root: IsMyGearBehindMyTier's emptiness test is inverted -- a character"
-     " WITH gear targets is sent to the combat question",
-     "        if not served:\n",
-     "        if served:\n"),
-    # Re-anchored 2026-10-04 (Phase 4-2b-ii): the aged head is gone, so the
-    # head is the ranking's first entry and the siblings are the rest.
-    ("root: WhichSlotIsFurthestBehind picks the LEAST-behind slot",
-     "        (slot, target), *siblings = ranked\n",
-     "        *siblings, (slot, target) = ranked\n"),
     # The mask this graph exists to avoid: a skill-gated target also carries
     # `blocker=None`, so hoisting the attainable arm reports it as buildable
     # and the character chases a craft it cannot perform. Same shape as the
@@ -5718,35 +5698,6 @@ ROOT_DECISION_MUTATIONS = [
      "        return ObtainItem(code=self.target.blocker,\n"
      "                          quantity=recipe[self.target.blocker])\n",
      "        return ObtainItem(code=self.target.blocker, quantity=1)\n"),
-    # Anchored WITH its consequent: `IsAFightBlockingMe` (wave 4, deleted in
-    # plan C Task 2) tested the same fact one node earlier.
-    ("root: IsThereACombatTarget's combat test is inverted",
-     "        if ctx.combat_monster is not None:\n"
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n",
-     "        if ctx.combat_monster is None:\n"
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n"),
-    ("root: CanIClearMyTier swaps the finished ladder and the honest wall",
-     "        if next_uncleared_tier(state, game_data, history) is None:\n"
-     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
-     "        return None\n",
-     "        if next_uncleared_tier(state, game_data, history) is not None:\n"
-     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
-     "        return None\n"),
-    ("root: an empty slot counts as the ladder's FIRST rung, losing"
-     " empty-slot dominance",
-     "    worn_rung = 0 if worn is None else _target_rung(game_data, worn)\n",
-     "    worn_rung = (tier_of_level(game_data, 0) if worn is None\n"
-     "                 else _target_rung(game_data, worn))\n"),
-    ("root: equal gaps break alphabetically instead of on the schema's slot"
-     " order",
-     "            EQUIPMENT_SLOTS.index(slot))\n",
-     "            ord(slot[0]))\n"),
-    # Fix-round-1 finding 1: the middle key was never the one that decided
-    # over the original fixture (every tied gap was a tied rung too), so this
-    # mutant used to survive. `_gd_two_ways_behind` exists to exercise it.
-    ("root: equal gaps prefer the LOWER-rung target",
-     "            -_target_rung(game_data, target.code),\n",
-     "            _target_rung(game_data, target.code),\n"),
     # Fix-round-1 finding 3: the arm spec 5.3 was SILENT on was the one arm
     # of IsThisTargetBlocked with no anchor. Deleting it drops a self-blocked
     # target through to the recipe lookup, which raises.
@@ -5759,13 +5710,6 @@ ROOT_DECISION_MUTATIONS = [
      "            # root is the item itself and the step graph owns the rest.\n"
      "            return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)\n",
      ""),
-    ("root: a gear target missing from game data silently defaults to rung 1"
-     " instead of failing",
-     "    stats = game_data.item_stats(code)\n"
-     "    if stats is None:\n",
-     "    stats = game_data.item_stats(code)\n"
-     "    if stats is None:\n"
-     "        return 1\n"),
     # THE STANDALONE SKILL ROOT (`_orphan_skill_roots`). USER 2026-10-08
     # "Only when demanded": a skill climbs only when the goal-action DAG demands
     # it. The demand rule, the open-rung conjunct and the ordering get their
@@ -5794,14 +5738,6 @@ ROOT_DECISION_MUTATIONS = [
      " alternative pollutes the trail",
      "                                RootWalk(step_decline=step_decline, now=walk.now),\n",
      "                                walk,\n"),
-    # THE FLIP (task 6). Spec 5.3 named `tier_of_level`, the highest rung AT OR
-    # BELOW the level -- a root the character has already satisfied, which
-    # empties `objective_needs` and switches the arbiter's PURSUE_TASK worth
-    # gate off. This mutant restores exactly that.
-    ("root: the combat arm names the rung the character is already on"
-     " (tier_of_level) instead of the next one up",
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n",
-     "            return ReachCharLevel(level=tier_of_level(game_data, state.level))\n"),
     # `RootResolution.alternatives` construction. Both conjuncts are load
     # bearing and each gets its own mutant: without `alt != root` the chosen
     # root reappears as its own alternative (so the arbiter retries the pair
@@ -7397,25 +7333,6 @@ SYNERGY_CORE_MUTATIONS = [
      "    return sum(top, Fraction(0))"),
 ]
 
-# The root walk's step-decline filter (Phase 3-2, `decisions/root.py`): a gear
-# target whose step cannot be served never heads the walk, is named, and is
-# offered after the served siblings. Unit-killed by
-# tests/test_ai/test_decisions_root.py (since Task 5 of the global gear
-# objective: `test_the_tier_sheet_never_lets_a_declined_target_head_it`, on
-# the pre-objective subtree's own node). Replaced FALLBACK_ORDER_MUTATIONS,
-# whose one mutant anchored `promoted_from` in the deleted promotion.
-STEP_DECLINE_MUTATIONS = [
-    ("root: a declined gear target may still head the walk",
-     "                  if self.walk.serves(slot, target, state, game_data, ctx, history)}",
-     "                  if self.walk.serves(slot, target, state, game_data, ctx, history) or True}"),
-    # Global gear objective Task 5 retired the two `declined_targets`
-    # ordering mutants with the slot walk's place as the entry: the
-    # alternatives are every missing `L*` piece in the objective's own order,
-    # declined or not (`WHICH_PIECE_ROOT_MUTATIONS` drops them all).
-    ("root: the decline's reason is not recorded",
-     "        self.declined[repr(root)] = reason\n",
-     "        pass\n"),
-]
 
 # WAVE 3a DELETED `BRANCH_OBJECTIVE_ROOT_MUTATIONS` (four mutants over the
 # unified objective's grip on ROOT selection: the justifying filter, its
@@ -11745,6 +11662,12 @@ WHICH_PIECE_MUTATIONS = [
      "            return ReachCharLevel(level=state.level + 1)\n"),
 ]
 WHICH_PIECE_ROOT_MUTATIONS = [
+    # `RootWalk.serves` names a declined piece's reason (Phase 3-2's step
+    # decline; its old group, STEP_DECLINE, went with the tier walk in plan C
+    # Task 3).
+    ("root: the decline's reason is not recorded",
+     "        self.declined[repr(root)] = reason\n",
+     "        pass\n"),
     ("root/resolve_root: the trunk is offered while a piece is missing",
      "    if target is not None and target.held and not fleet and trunk is not None:\n",
      "    if target is not None and not fleet and trunk is not None:\n"),
@@ -14729,11 +14652,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
-    # Task 5 moved both kill-tests: `resolve_root` enters at
-    # `WhichPieceIsNext`, so the pre-objective subtree's declines are driven
-    # from its own nodes in test_decisions_root.py until Plan C deletes it.
-    run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,
-              "tests/test_ai/test_decisions_root.py", survivors)
     # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
     # run_group so a survivor names the exact authority that stopped deferring.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
@@ -14741,8 +14659,6 @@ def _collect_all_groups() -> None:
     run_group(SLOT_OCCUPANCY_SRC, OCCUPANCY_PREDICATE_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_CROSSING_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)

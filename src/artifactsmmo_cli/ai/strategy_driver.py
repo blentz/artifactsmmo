@@ -1457,8 +1457,8 @@ class StrategyArbiter:
         # chain (GatherMaterials/UpgradeEquipment) get tried even when the
         # top combat step can't plan.
         # WHETHER THERE IS A REAL OBJECTIVE STEP AT ALL. `chosen_root is None`
-        # is the walk's WALL arm (`CanIClearMyTier`): no gear work and nothing
-        # winnable in the band. `_resolve_step_goal` still walks the fallbacks
+        # is the walk's WALL arm (`WhichPieceIsNext` with no gear objective: no
+        # achievable loadout pays XP anywhere). `_resolve_step_goal` still walks the fallbacks
         # and may return one, but a fallback promoted because there was no step
         # is not an objective step — filing it at BAND_STEP would let it claim a
         # priority the walk explicitly declined to give anything.
