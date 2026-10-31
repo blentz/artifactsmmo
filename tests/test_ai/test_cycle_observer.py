@@ -26,7 +26,7 @@ class TestCycleSnapshot:
         assert snap.plan_len == 0
         assert snap.goals_tried == []
         assert snap.objective_unplannable is None
-        assert snap.path_blocked is False
+        assert snap.gear_objective is None
 
 
 class TestObserverHook:
@@ -108,7 +108,6 @@ class TestObserverHook:
                      "declined": "bag_overflow:qty=171/158:slots=11/20"},
                 ],
                 "goal_rank": [{"goal": "CraftEquipment", "priority": 88.0}],
-                "path_blocked": True,
             },
         )
         snap = calls[0]
@@ -116,7 +115,6 @@ class TestObserverHook:
         assert snap.planner_depth == 7
         assert snap.planner_timed_out is False
         assert snap.plan_len == 3
-        assert snap.path_blocked is True
         assert [g.goal for g in snap.goals_tried] == ["CraftEquipment", "FightMonster"]
         assert snap.goals_tried[1].timed_out is True
         assert snap.goals_tried[1].nodes == 120

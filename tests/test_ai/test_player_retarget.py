@@ -22,7 +22,6 @@ def _player(tmp_path):
     p.history = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
     p.game_data = GameData()
     p.state = None
-    p._last_path_plan = None
     return p
 
 

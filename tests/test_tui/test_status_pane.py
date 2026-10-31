@@ -145,31 +145,51 @@ class TestStatusPaneTask:
         assert "3/10" in plain
 
 
-class TestStatusPanePath:
-    def test_path_shows_max_level(self):
+class TestStatusPaneGearObjective:
+    def test_status_pane_shows_the_gear_objective(self):
+        """The pane renders the cycle's gear objective line, the text the
+        `plan` command prints (m*, held, the missing pieces in pursuit order),
+        not the deleted level-path ETA fields (Review Focus 3)."""
+        line = ("gear_objective: monster=wolf, held=False, "
+                "missing=[weapon:iron_sword(1, 0.075/450)]")
         pane = StatusPane()
-        pane.update_snapshot(_snap(max_level=40))
-        assert "L40" in _render(pane)
+        pane.update_snapshot(_snap(gear_objective=line))
+        plain = _render(pane)
+        assert "Gear" in plain
+        # The narrow value column wraps the line; its whole text is there.
+        assert "".join(line.split()) in "".join(plain.split())
+        assert "Cyc left" not in plain
+        assert "Next" not in plain
 
-    def test_projected_cycles_none(self):
+    def test_status_pane_shows_a_held_objective(self):
         pane = StatusPane()
-        pane.update_snapshot(_snap(projected_cycles_to_max=None))
-        assert "?" in _render(pane)
+        pane.update_snapshot(_snap(gear_objective="gear_objective: monster=wolf, held=True, missing=[]"))
+        assert "held=True, missing=[]" in _render(pane)
 
-    def test_projected_cycles_shown(self):
+    def test_status_pane_marks_an_unrecorded_objective(self):
+        """No line before the first decision: the row reads `?`, never an
+        invented objective."""
         pane = StatusPane()
-        pane.update_snapshot(_snap(projected_cycles_to_max=123.7))
-        assert "124" in _render(pane)
+        pane.update_snapshot(_snap())
+        gear_row = next(ln for ln in _render(pane).splitlines() if "Gear" in ln)
+        assert gear_row.split("Gear", 1)[1].strip() == "?"
 
-    def test_path_next_action_none(self):
+    def test_an_old_snapshot_with_path_keys_still_renders(self):
+        """A snapshot from an older run still carries the deleted
+        `projected_cycles_to_max` / `path_next_action` / `path_blocked` keys:
+        they are ignored, and the pane renders without raising."""
+        old = _snap().model_dump()
+        del old["gear_objective"]
+        old.update(projected_cycles_to_max=123.7, path_next_action="craft_iron_sword",
+                   path_blocked=True)
+        snap = CycleSnapshot.model_validate(old)
+        assert not hasattr(snap, "projected_cycles_to_max")
         pane = StatusPane()
-        pane.update_snapshot(_snap(path_next_action=None))
-        assert "?" in _render(pane)
-
-    def test_path_next_action_shown(self):
-        pane = StatusPane()
-        pane.update_snapshot(_snap(path_next_action="craft_iron_sword"))
-        assert "craft_iron_sword" in _render(pane)
+        pane.update_snapshot(snap)
+        plain = _render(pane)
+        assert "hero" in plain
+        assert "124" not in plain
+        assert "craft_iron_sword" not in plain
 
 
 class TestStatusPaneGoalRank:

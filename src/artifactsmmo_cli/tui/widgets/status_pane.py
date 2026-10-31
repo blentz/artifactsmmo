@@ -186,12 +186,12 @@ class StatusPane(Static):
         t.add_row("Action", f"{s.action}  [{outcome_color}]{s.outcome}[/{outcome_color}]")
 
         t.add_row("", "")
-        t.add_row("Path", f"→ L{s.max_level}")
-        if s.projected_cycles_to_max is not None:
-            t.add_row("Cyc left", f"{s.projected_cycles_to_max:.0f}")
-        else:
-            t.add_row("Cyc left", "[dim]?[/dim]")
-        t.add_row("Next", s.path_next_action or "[dim]?[/dim]")
+        # The gear objective line exactly as `plan` prints it, so the pane and
+        # the command cannot disagree. Text, not markup: the line's brackets
+        # are data. None only before the first decision or on an older run's
+        # snapshot.
+        t.add_row("Gear", Text(s.gear_objective) if s.gear_objective is not None
+                  else Text("?", style="dim"))
 
         # Top 3 goal ranks
         if s.goal_rank:

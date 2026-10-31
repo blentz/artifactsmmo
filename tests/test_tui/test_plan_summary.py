@@ -19,19 +19,12 @@ def _snap(**ov) -> CycleSnapshot:
     return CycleSnapshot(**base)
 
 
-def test_header_shows_objective_and_eta():
+def test_header_shows_objective():
     out = _text(build_plan_header(_snap(
-        chosen_root="ObtainItem(code='life_amulet', quantity=1)",
-        projected_cycles_to_max=18.0)))
+        chosen_root="ObtainItem(code='life_amulet', quantity=1)")))
     assert "OBJECTIVE" in out and "40" in out
-    assert "ETA" in out and "18" in out
 
 
 def test_header_none_objective_message():
     out = _text(build_plan_header(_snap(chosen_root=None)))
     assert "No committed objective" in out
-
-
-def test_header_omits_eta_when_absent():
-    out = _text(build_plan_header(_snap(chosen_root="ReachCharLevel(level=3)")))
-    assert "ETA" not in out

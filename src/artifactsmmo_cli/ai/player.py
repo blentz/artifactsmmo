@@ -118,7 +118,7 @@ from artifactsmmo_cli.ai.gear_objective_context import (
     gear_keep_for,
     gear_objective_line,
 )
-from artifactsmmo_cli.ai.gear_objective_result import GearPiece
+from artifactsmmo_cli.ai.gear_objective_result import GearPiece, gear_objective_report
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
@@ -145,7 +145,6 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.projections import PathPlan
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
@@ -437,7 +436,6 @@ class GamePlayer:
         self._task_exchange_min_coins: int = 1
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
-        self._last_path_plan: PathPlan | None = None
         self._cycle_observer = cycle_observer
         self._planning_observer: Callable[[bool], None] | None = None
         # Authoritative aged open-order list, persisted independently of
@@ -1242,7 +1240,6 @@ class GamePlayer:
                         "objective_unplannable": (
                             self._arbiter.objective_unplannable if replanned else None),
                         "goal_rank": goal_rank_trace,
-                        **self._path_trace_snapshot(),
                     }
                     self._emit_trace(
                         action_name="<no_plan>",
@@ -1431,7 +1428,6 @@ class GamePlayer:
                     "objective_unplannable": (
                         self._arbiter.objective_unplannable if replanned else None),
                     "goal_rank": goal_rank_trace,
-                    **self._path_trace_snapshot(),
                 }
                 self._emit_trace(
                     action_name=repr(action),
@@ -2782,7 +2778,6 @@ class GamePlayer:
             )
             if isinstance(raw_abandoned, dict) else None
         )
-        plan = self._last_path_plan
         # Cooldown remaining at snapshot time (post-action; the server-set
         # cooldown the bot will wait through before the next cycle).
         cooldown_remaining = 0.0
@@ -2821,10 +2816,6 @@ class GamePlayer:
             outcome=outcome,
             goal_rank=[GoalRankEntry(goal=str(e["goal"]), priority=float(e["priority"]))
                        for e in goal_rank_trace],
-            path_next_action=plan.next_action_monster if plan else None,
-            projected_cycles_to_max=(
-                plan.total_cycles if plan and plan.total_cycles != float("inf") else None
-            ),
             max_level=self.game_data.max_character_level if self.game_data else 0,
             remaining_levels=max(
                 0, (self.game_data.max_character_level if self.game_data else 0) - self.state.level,
@@ -2835,7 +2826,8 @@ class GamePlayer:
             plan_len=int(stats.get("plan_len", 0)),
             goals_tried=goals_tried,
             objective_unplannable=objective_unplannable,
-            path_blocked=bool(stats.get("path_blocked", False)),
+            gear_objective=(None if self._last_ctx is NO_PROFILE_CONTEXT
+                            else gear_objective_report(self._last_ctx.gear_objective)),
             chosen_root=(repr(self._last_decision.chosen_root)
                          if self._last_decision is not None
                          and self._last_decision.chosen_root is not None else None),
@@ -2865,23 +2857,6 @@ class GamePlayer:
             turn_in=self._turn_in_trace(),
         )
         self._cycle_observer(snap)
-
-    def _path_trace_snapshot(self) -> dict[str, object]:
-        """G-I: small dict of root-objective state to merge into trace records."""
-        max_lvl = self.game_data.max_character_level if self.game_data else 0
-        cur_lvl = self.state.level if self.state else 0
-        snapshot: dict[str, object] = {
-            "max_level": max_lvl,
-            "remaining_levels": max(0, max_lvl - cur_lvl),
-        }
-        plan = self._last_path_plan
-        if plan is not None:
-            snapshot["projected_cycles_to_max"] = (
-                round(plan.total_cycles, 1) if plan.total_cycles != float("inf") else "inf"
-            )
-            snapshot["path_next_action"] = plan.next_action_monster
-            snapshot["path_blocked"] = plan.blocked
-        return snapshot
 
     def _stamp_cycle(self) -> None:
         """Read the cycle clock once, at the start of a cycle (ruling FR-IA)."""

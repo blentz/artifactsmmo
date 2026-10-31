@@ -148,8 +148,6 @@ class CycleSnapshot(BaseModel):
     action_target: str | None = None    # gather resource / fight monster / "x,y"
     outcome: str
     goal_rank: list[GoalRankEntry] = Field(default_factory=list)
-    path_next_action: str | None = None
-    projected_cycles_to_max: float | None = None
     max_level: int = 0
     remaining_levels: int = 0
 
@@ -161,7 +159,12 @@ class CycleSnapshot(BaseModel):
     plan_len: int = 0
     goals_tried: list[GoalAttempt] = Field(default_factory=list)
     objective_unplannable: ObjectiveUnplannable | None = None
-    path_blocked: bool = False
+    gear_objective: str | None = None
+    """The cycle's gear objective as the `plan` command prints it
+    (`gear_objective_result.gear_objective_report`): m*, held, and the missing
+    pieces in pursuit order. None before the character's first decision and on a
+    snapshot written before this field existed; a decided cycle with no
+    objective carries `"gear_objective: None"`."""
 
     # Committed strategy root + ranking + bank, for the TUI plan screen.
     chosen_root: str | None = None

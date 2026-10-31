@@ -12,10 +12,8 @@ def _snap(**overrides) -> CycleSnapshot:
         x=3, y=4, level=5, xp=0, max_xp=100, hp=80, max_hp=150, gold=0,
         selected_goal="FarmItems", action="Craft(potion)", outcome="ok",
         task_code="potion", task_type="items", task_progress=2, task_total=29,
-        cooldown_remaining=4.5, path_next_action="green_slime",
-        projected_cycles_to_max=1234.0,
+        cooldown_remaining=4.5,
         planner_nodes=842, planner_depth=7, plan_len=3, planner_timed_out=False,
-        path_blocked=False,
         goals_tried=[
             GoalAttempt(goal="FarmItems", nodes=842, depth=7, plan_len=3),
             GoalAttempt(goal="FightMonster", nodes=120, depth=4, plan_len=0, timed_out=True),
@@ -49,8 +47,6 @@ def test_debug_line_has_debug_detail():
     assert "80/150" in line            # hp
     assert "4.5" in line               # cooldown
     assert "(3,4)" in line             # position
-    assert "green_slime" in line       # path next
-    assert "1234" in line              # projected cycles
 
 
 def test_debug_line_includes_full_goal_rank():
@@ -67,7 +63,6 @@ def test_debug_line_shows_planner_internals():
     assert "depth=7" in line
     assert "plan_len=3" in line
     assert "timeout=no" in line
-    assert "blocked=no" in line
 
 
 def test_debug_line_shows_goals_tried_with_timeout_flag():

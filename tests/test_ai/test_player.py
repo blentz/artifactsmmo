@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece, gear_objective_report
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -38,6 +38,8 @@ from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
@@ -2350,58 +2352,6 @@ class TestComputeCyclesToSatisfy:
         assert player._compute_cycles_to_satisfy("ReachCharLevel(5)", current_cycle=9) is None
 
 
-class TestPathTraceSnapshot:
-    def test_includes_plan_fields_when_plan_present(self):
-        """_path_trace_snapshot merges plan fields when a path plan exists (1042-1046)."""
-        from artifactsmmo_cli.ai.learning.projections import PathPlan, PathSegment
-
-        player = GamePlayer(character="hero")
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = make_game_data_mock()
-        player.state = make_state(level=4)
-        player._last_path_plan = PathPlan(
-            target_level=10,
-            total_cycles=42.5,
-            segments=[PathSegment(
-                from_level=4, to_level=10, monster_code="cow",
-                estimated_cycles=42.5, xp_per_cycle=10.0, cycles_per_kill=1.5,
-            )],
-        )
-        snap = player._path_trace_snapshot()
-        assert snap["projected_cycles_to_max"] == 42.5
-        assert snap["path_next_action"] == "cow"
-        assert snap["path_blocked"] is False
-
-    def test_infinite_plan_reports_inf(self):
-        """An unreachable (inf) plan reports the string 'inf'."""
-        from artifactsmmo_cli.ai.learning.projections import PathPlan
-
-        player = GamePlayer(character="hero")
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = make_game_data_mock()
-        player.state = make_state(level=4)
-        player._last_path_plan = PathPlan(
-            target_level=10, total_cycles=float("inf"), segments=[], blocked=True,
-        )
-        snap = player._path_trace_snapshot()
-        assert snap["projected_cycles_to_max"] == "inf"
-        assert snap["path_blocked"] is True
-
-
 class TestNotifyObserverCooldown:
     def test_cooldown_remaining_computed_from_state(self):
         """_notify_observer computes cooldown_remaining from state.cooldown_expires (line 987)."""
@@ -2437,6 +2387,47 @@ class TestNotifyObserverCooldown:
         snap = captured[0]
         assert snap.plan_tree != ()
         assert snap.plan_tree[0].label == "nonexistent_item"
+
+
+class TestNotifyObserverGearObjective:
+    """The snapshot carries the cycle's gear objective as the `plan` command's
+    own `gear_objective:` line, the text the TUI status pane shows."""
+
+    def _player(self, captured):
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        return player
+
+    def test_snapshot_carries_the_plan_commands_line(self):
+        captured = []
+        player = self._player(captured)
+        objective = GearObjective(
+            monster="wolf", loadout={"weapon": "iron_sword"}, rate=Fraction(1, 4),
+            missing=(GearPiece("weapon", "iron_sword", 1, Fraction(3, 40), Fraction(450),
+                               SourceKind.CRAFT),))
+        player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=objective)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective == (
+            "gear_objective: monster=wolf, held=False, missing=[weapon:iron_sword(1, 0.075/450)]")
+        assert captured[0].gear_objective == gear_objective_report(objective)
+
+    def test_a_decided_cycle_without_an_objective_says_so(self):
+        captured = []
+        player = self._player(captured)
+        player._last_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=True)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective == "gear_objective: None"
+
+    def test_no_decision_yet_carries_no_line(self):
+        """Before the first decision nothing was computed, so the snapshot
+        claims no objective either way."""
+        captured = []
+        player = self._player(captured)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective is None
 
 
 @dataclass(frozen=True)

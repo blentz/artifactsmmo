@@ -32,4 +32,4 @@ def test_character_detail_shows_the_layer():
 
 def test_debug_log_line_shows_the_layer():
     assert "pos (5,-2) underground" in build_debug_log_line(_snap("underground"))
-    assert "pos (5,-2) next" in build_debug_log_line(_snap())
+    assert "pos (5,-2)\n" in build_debug_log_line(_snap())  # overworld: bare coordinates
