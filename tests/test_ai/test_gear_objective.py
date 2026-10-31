@@ -498,6 +498,22 @@ def test_none_when_no_monster_pays_even_on_the_achievable_fighter(gd: GameData) 
     assert gear_objective(state, gd, CTX, None) is None
 
 
+def test_none_when_every_winning_candidate_rates_zero(gd: GameData) -> None:
+    """The `R = 0` branch: candidates WIN on their `L*` fighters, but no loop runs
+    (a bag with no room for a kill's drops, `runnable` false), so every rate is 0
+    and there is no objective — no root, no grind target. Production's live path
+    to it is a bag the carried keep fills (a named residual of plan C Task 4,
+    ruling C4-R2); a zero-capacity bag is the same branch at its smallest."""
+    state = replace(scenario_state(SCENARIOS["l10_bag_pursuit"], gd), inventory_max=0)
+    depth, food, loop = mod._inputs(state, gd, CTX, None)
+    targets = mod._targets(state, gd, frozenset(depth))
+    winning = [code for code in targets if drop_fight_winnable(targets[code][0], gd, code)]
+    assert winning, "the branch needs winning candidates, or it is the no-candidate one"
+    rated = mod._rated(targets, gd, food, loop)
+    assert rated and all(rate == 0 for _, rate in rated)
+    assert gear_objective(state, gd, CTX, None) is None
+
+
 def test_an_equal_rate_goes_to_the_higher_monster(monkeypatch: pytest.MonkeyPatch,
                                                   gd: GameData) -> None:
     """Every rate is 1, and every fight a second long, so the walk's bound

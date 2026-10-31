@@ -37,6 +37,13 @@ Option-A residual set:
   production's antecedent true: some `_candidates` monster's `L*` fighter wins at the
   real state with `R > 0`. Not proved, and false at a naked high-level character
   (`gear_objective` None). The same gear-progress gap as the not-held phase below.
+* **keep fills the bag ⇒ `R = 0` ⇒ no objective (NAMED RESIDUAL, ruling C4-R2)** —
+  every candidate can win on its `L*` fighter and still rate `R = 0` when the
+  loop cannot run (no bag room for a kill's drops: a bag the carried keep fills).
+  `gear_objective` then returns None (tested:
+  `test_gear_objective.py::test_none_when_every_winning_candidate_rates_zero`), so
+  there is no root and no grind target. Plan C Task 8c's food-carry fix narrows the
+  keep but does not close this.
 * **not-held phase (NAMED RESIDUAL, ruling C4-R)** — the not-held phase terminates and
   `L*` is held again after a level-up. While `L*` misses a piece production fights
   nothing for XP (`GearTierLeveling.no_xp_fight_of_not_held`; the root is a piece's

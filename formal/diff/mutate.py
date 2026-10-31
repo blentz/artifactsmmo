@@ -11483,12 +11483,16 @@ GEAR_OBJECTIVE_LINK_MUTATIONS = [
      "    if not rated or max(rate for _, rate in rated) <= 0:\n",
      "    if True:\n"),
 ]
-# Retired: "link: an objective is named with no winning candidate" (dropping the
-# `max(rate) <= 0` clause). EQUIVALENT for this group: `_rated` keeps only
-# winning candidates, so with none `rated` is empty and the mutant still answers
-# None; it only differs when a candidate wins with R = 0, where it names an
-# objective on a winning `m*` — which `ObjectiveCovers` allows. Survived
-# its first run (ruling C4-R round 2).
+# Retired from this group: "an objective is named with no winning candidate"
+# (dropping the `max(rate) <= 0` clause) is EQUIVALENT for the link — it differs
+# only when a candidate wins with R = 0, where it names an objective on a winning
+# `m*`, which `ObjectiveCovers` allows. It lives in GEAR_OBJECTIVE_R_ZERO below,
+# killed by the unit test of that branch (ruling C4-R2 item 2).
+GEAR_OBJECTIVE_R_ZERO_MUTATIONS = [
+    ("gear objective: every candidate rating zero still names an objective",
+     "    if not rated or max(rate for _, rate in rated) <= 0:\n        return None\n",
+     "    if not rated:\n        return None\n"),
+]
 # Ruling C4-R I3: the E-tower's `loadoutAdequate := held`, `gearGap :=
 # len(missing)`, killed by formal/diff/test_gear_objective_e_binding_diff.py.
 GEAR_E_BINDING_MUTATIONS = [
@@ -13829,6 +13833,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_gear_objective_arming_diff.py", survivors)
     run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_LINK_MUTATIONS,
               "formal/diff/test_gear_objective_link_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_R_ZERO_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
     run_group(GEAR_OBJECTIVE_RESULT_SRC, GEAR_E_BINDING_MUTATIONS,
               "formal/diff/test_gear_objective_e_binding_diff.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
