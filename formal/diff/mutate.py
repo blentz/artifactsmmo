@@ -9157,12 +9157,33 @@ GREY_CURRENCY_MUTATIONS = [
 # The reachability-claims census indexes module constants (plan C Task 6,
 # ruling C6-2‴): the register's one claim is about one. Killed by
 # tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
-# The census loadout's parent table and its seed (plan C Task 6 fix round 1, I-1).
+# The census loadout's own mechanics (plan C Task 6 fix round 1, I-1/I-2).
 # Killed by tests/test_audit/test_census_gear.py.
 CENSUS_GEAR_MUTATIONS = [
     ("census gear: a seeded table is not installed",
      "    for key, gear in table.items():\n        _CENSUS_GEAR.remember(memo, key, dict(gear))\n",
      "    for key, gear in table.items():\n        pass\n"),
+    ("census gear: a rung does not wear the rung below",
+     "        worn = census_gear(below, events, geared, game_data) if below is not None else {}\n",
+     "        worn = {}\n"),
+    ("census gear: a level with no objective keeps nothing",
+     "dict(objective.loadout) if objective is not None else worn)\n",
+     "dict(objective.loadout) if objective is not None else {})\n"),
+    ("census gear: the ladder's floor is level 0",
+     "    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n",
+     "    return max(0, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n"),
+    ("census gear: the ladder steps from the level itself",
+     "    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n",
+     "    return max(1, level // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP - 1)\n"),
+    ("census gear: level 1 has a rung below",
+     "    if level <= 1:\n        return None\n",
+     "    if level < 1:\n        return None\n"),
+    ("census gear: the memo forgets geared",
+     "    key = (char_level, events, geared)\n    if key not in memo:\n",
+     "    key = (char_level, events, False)\n    if key not in memo:\n"),
+    ("census gear: the memo forgets the events",
+     "    key = (char_level, events, geared)\n    if key not in memo:\n",
+     "    key = (char_level, frozenset(), geared)\n    if key not in memo:\n"),
 ]
 REACHABILITY_CONSTANT_MUTATIONS = [
     ("reachability claims: module constants are not indexed",

@@ -1,5 +1,6 @@
 """The census loadout's own mechanics (`craft_completeness.census_gear`):
-the parent-computed table and its seed.
+the parent-computed table and its seed, the growth along the rungs, the
+keep-what-it-wore fallback, the rung ladder and the memo key.
 
 The gear objective itself is replaced by a recording stand-in, so each test
 asks exactly the property it names on a fresh catalogue (the memo is scoped
@@ -14,6 +15,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_completeness import (
     CensusGearKey,
+    _rung_below,
     census_gear,
     census_gear_table,
     seed_census_gear,
@@ -59,3 +61,46 @@ def test_the_table_holds_every_rung_it_grew_along(calls: list[Call]) -> None:
     asked = len(calls)
     assert census_gear_table([(12, frozenset(), False)], gd) == table
     assert len(calls) == asked
+
+
+def test_each_rung_wears_the_rung_below(calls: list[Call]) -> None:
+    """Growth: a level's objective is asked wearing the loadout of the rung
+    below; level 1 wears nothing."""
+    gd = GameData()
+    census_gear(12, frozenset(), False, gd)
+    worn = {c[0]: c[3] for c in calls}
+    assert worn[1] == {}
+    assert worn[5] == {"weapon_slot": "w1-[]-False"}
+    assert worn[10] == {"weapon_slot": "w5-[]-False"}
+    assert worn[12] == {"weapon_slot": "w10-[]-False"}
+
+
+def test_a_level_with_no_objective_keeps_what_it_wore(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No loadout pays XP at a level: the character keeps the rung below's."""
+    def stand_in(char_level: int, _events: frozenset[str], _geared: bool,
+                 _worn: dict[str, str], _game_data: GameData) -> GearObjective | None:
+        return None if char_level == 12 else _objective({"weapon_slot": f"w{char_level}"})
+
+    monkeypatch.setattr(craft_completeness, "_census_objective", stand_in)
+    assert census_gear(12, frozenset(), False, GameData()) == {"weapon_slot": "w10"}
+
+
+def test_the_rung_ladder_is_one_then_every_step() -> None:
+    assert _rung_below(1) is None
+    assert _rung_below(2) == 1
+    assert _rung_below(5) == 1
+    assert _rung_below(6) == 5
+    assert _rung_below(10) == 5
+    assert _rung_below(12) == 10
+
+
+def test_the_memo_keys_on_events_and_geared(calls: list[Call]) -> None:
+    """Each of `events` and `geared` is part of the key, whichever is asked first."""
+    gd = GameData()
+    live = frozenset({"full_moon"})
+    geared = census_gear(12, frozenset(), True, gd)
+    evented = census_gear(12, live, False, gd)
+    plain = census_gear(12, frozenset(), False, gd)
+    assert geared == {"weapon_slot": "w12-[]-True"}
+    assert evented == {"weapon_slot": "w12-['full_moon']-False"}
+    assert plain == {"weapon_slot": "w12-[]-False"}
