@@ -39,7 +39,6 @@ import Formal.NearestTile
 import Formal.BankExpansionTiming
 import Formal.EventWindow
 import Formal.NpcBuyInventory
-import Formal.Extracted.CombatPicker
 import Formal.Extracted.NearestTile
 import Formal.Extracted.NpcBuyCore
 import Formal.Extracted.PriorityBand

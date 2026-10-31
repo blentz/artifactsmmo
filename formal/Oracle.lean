@@ -2276,34 +2276,6 @@ def runWinnableCascade (args : Array Json) : Json :=
       pathWinnable := intArg args 2 != 0 }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
-/-- Compute one combat_picker result via the SAME proved
-`pickWinnableWindowed` (window-preferred picker with the P0-2026-06-09
-xp>0 liveness fallback).
-args layout:
-  [charLevel, nMonsters,
-   m0.code, m0.level, m0.winnable(0/1), m0.xpPositive(0/1),
-   m1.code, m1.level, m1.winnable(0/1), m1.xpPositive(0/1), ...]
-Monster codes are small ints (unique per request — the predicates are
-keyed by code via first-match lookup).
-Output: { result: code | null }. -/
-def runCombatPicker (args : Array Json) : Json :=
-  let charLevel := intArg args 0
-  let n := (intArg args 1).toNat
-  let entry := fun (k : Nat) =>
-    (intArg args (2 + 4 * k), intArg args (3 + 4 * k),
-     intArg args (4 + 4 * k) != 0, intArg args (5 + 4 * k) != 0)
-  let entries : List (Int × Int × Bool × Bool) := (List.range n).map entry
-  let monsters : List Formal.CombatTargetExistence.Monster :=
-    entries.map (fun e => { code := e.1, level := e.2.1 })
-  let winnable : Formal.CombatTargetExistence.WinnableFn := fun m =>
-    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.1)).getD false
-  let xpPos : Formal.CombatTargetExistence.WinnableFn := fun m =>
-    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.2)).getD false
-  match Formal.CombatTargetExistence.pickWinnableWindowed
-      charLevel winnable xpPos monsters with
-  | none => Json.mkObj [("result", Json.null)]
-  | some m => Json.mkObj [("result", Json.num m.code)]
-
 /-- Run the cheapest-path greedy model.
 args layout:
   [current, target, maxXp, xpInLevel, nMonsters,
@@ -3315,8 +3287,6 @@ def runOne (item : Json) : Json :=
     runStoreWarmup args
   else if kind == "winnable_cascade" then
     runWinnableCascade args
-  else if kind == "combat_picker" then
-    runCombatPicker args
   else if kind == "cheapest_path" then
     runCheapestPath args
   else if kind == "items_task_run" then

@@ -881,14 +881,7 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
 
--- CombatTargetExistence (Phase G3; the windowed picker, kept for GearTierLeveling
--- pending a ruling, and the two-arm grind target since plan C Task 4):
-#check @Formal.CombatTargetExistence.pickWinnable_some_of_exists
-#check @Formal.CombatTargetExistence.pickBest_some_of_acc_some
-#check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_prefers_window
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
+-- CombatTargetExistence (Phase G3; the two-arm grind target since plan C Task 4):
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
 #check @Formal.CombatTargetExistence.winnableFarmTarget_none_no_task
@@ -1102,7 +1095,6 @@ open Formal.PriorityBand
 -- scripts/extract_lean.py; these hand-written bridges prove them equal to the
 -- hand models, so every hand theorem transfers and Python drift turns the gate red.
 #check @Extracted.Bridges.nearest_tile_bridge                         -- extracted = hand, pointwise
-#check @Extracted.Bridges.combat_picker_bridge                        -- extracted ∘ encode = encode ∘ hand
 #check @Extracted.Bridges.npc_buy_is_applicable_bridge                -- pointwise under used ≤ cap (hwf)
 #check @Extracted.Bridges.npc_buy_apply_delta                         -- dict update mints exactly +quantity
 #check @Extracted.Bridges.npc_buy_apply_bridge                        -- commutes with slot-projection apply
@@ -1216,7 +1208,7 @@ open Formal.PriorityBand
 -- src/artifactsmmo_cli/ai/equip_value.py and proved against the hand
 -- models (Formal/Extracted/Bridges7.lean). The element-keyed score bridges
 -- are universal over an arbitrary INJECTIVE Int→String element embedding
--- (the CombatPicker code-embedding precedent). The augmented Rank value
+-- (the retired CombatPicker code-embedding precedent). The augmented Rank value
 -- (`equip_value_pure`) was retired onto the unified GearValue hand pins
 -- below; only the live `tool_value_pure` duality remains extracted here.
 #check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings

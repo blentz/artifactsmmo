@@ -40,11 +40,8 @@ just "would it win") imports this constant instead of copying the `2`:
 `gear_objective._candidates` and `obtain_model.drop_routes` do. A target picked
 by stat-winnability alone but outside this window is unplannable —
 `GrindCharacterXP` reaches 0 nodes — so they must agree or the grind target is
-one the planner can never execute.
-`ai.combat_picker.pick_winnable_monster_pure` also encodes this bound (its own
-bare `char_level + 2`, proven equal to this gate by
-`formal/Formal/CombatTargetExistence.lean` / `formal/diff/
-test_combat_picker_diff.py`); the player stopped calling it in plan C Task 4."""
+one the planner can never execute. The Lean liveness vocabulary's
+`CombatTargetExistence.notOverleveled` states the same bound."""
 
 LOADOUT_PENALTY = 5.0
 """Added to Fight cost when the loadout is suboptimal for the monster, so the

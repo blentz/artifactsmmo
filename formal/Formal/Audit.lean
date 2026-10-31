@@ -747,12 +747,6 @@ open Formal.PriorityBand
 #print axioms Formal.PurposeRouting.pickGatherSlot_score_optimal
 #print axioms Formal.PurposeRouting.argminBy_le
 #print axioms Formal.PurposeRouting.argminBy_mem
-#print axioms Formal.CombatTargetExistence.pickWinnable_some_of_exists
-#print axioms Formal.CombatTargetExistence.pickBest_some_of_acc_some
-#print axioms Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
-#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive
-#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_prefers_window
-#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_none_no_task
@@ -910,7 +904,6 @@ open Formal.PriorityBand
 #print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists
 #print axioms Formal.Liveness.ItemsTaskRun.held_accounts
 #print axioms Extracted.Bridges.nearest_tile_bridge
-#print axioms Extracted.Bridges.combat_picker_bridge
 #print axioms Extracted.Bridges.npc_buy_is_applicable_bridge
 #print axioms Extracted.Bridges.npc_buy_apply_delta
 #print axioms Extracted.Bridges.npc_buy_apply_bridge

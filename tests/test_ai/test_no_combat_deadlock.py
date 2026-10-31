@@ -15,15 +15,14 @@ These tests lock the fixed chain against the trace state:
   2. objective_step_goal yields a combat goal (GrindCharacterXPGoal).
 
 The player's windowed pick (`_pick_winnable_monster`) is gone since plan C
-Task 4: the grind target is `farm_target`'s. `pick_winnable_monster_pure`
-keeps its applicability property test below.
+Task 4: the grind target is `farm_target`'s, and its picker core
+(`pick_winnable_monster_pure`) went with ruling C4-b.
 
 No mocking of the units under test: real GameData catalog stats, the real
 predict_win-backed `_is_winnable`, action, and dispatch.
 """
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -155,59 +154,6 @@ class TestNoCombatDeadlock:
         # drop-farm bypass must never leak into plain xp-grind fights.
         fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())
         assert fight.is_applicable(state, gd) is False
-
-    def test_every_picker_target_is_applicable(self) -> None:
-        """Picker ⟷ applicability consistency: every monster that
-        pick_winnable_monster_pure can return passes FightAction.is_applicable
-        when transient gates are held true (full HP, 1+ free inventory slot,
-        spawn location present for every monster in the catalog).
-
-        This locks the P0-revision alignment: the picker's gates (xp>0 lower
-        bound and level+2 suicide guard) are exactly the structural gates in
-        is_applicable. A regression that adds a gear-level check to either
-        one but not the other would be caught here."""
-        # Catalog: one monster per level 1..12, spanning all levels relevant
-        # to char_levels 1..10.  Winnability is held True so the picker's
-        # only active filters are xp>0 and the level+2 suicide guard.
-        catalog: list[tuple[str, int]] = [(f"m{lvl}", lvl) for lvl in range(1, 13)]
-
-        checked = 0
-        for char_level in range(1, 11):
-            gd = GameData()
-            gd._monster_level = {code: lvl for code, lvl in catalog}
-            gd._monster_hp = {code: 50 for code, _ in catalog}
-            gd._monster_attack = {code: {} for code, _ in catalog}
-            gd._monster_resistance = {code: {} for code, _ in catalog}
-            gd._monster_critical_strike = {code: 0 for code, _ in catalog}
-            gd._monster_initiative = {code: 0 for code, _ in catalog}
-            gd._monster_locations = {code: [(0, lvl)] for code, lvl in catalog}
-            # Full HP (150/150 = 100% >> 50% threshold), empty inventory
-            # (100 free slots >> MIN_FREE_SLOTS=1), correct char level.
-            state = make_state(
-                level=char_level, hp=150, max_hp=150,
-                inventory={}, inventory_max=100,
-            )
-            # cl=char_level default-arg captures the loop variable per iteration.
-            target = pick_winnable_monster_pure(
-                char_level,
-                catalog,
-                is_winnable=lambda _code: True,
-                xp_positive=lambda code, cl=char_level, gd=gd: gd.xp_per_kill(code, cl) > 0,
-            )
-            if target is None:
-                continue
-            locations = frozenset({(0, gd._monster_level[target])})
-            fight = FightAction(monster_code=target, locations=locations, learned_drops=LearnedDrops.empty())
-            checked += 1
-            assert fight.is_applicable(state, gd), (
-                f"Picker-applicability divergence at char_level={char_level}: "
-                f"picker returned {target!r} (monster_level="
-                f"{gd._monster_level[target]}) but FightAction.is_applicable "
-                f"returned False. Picker and is_applicable gates must stay aligned."
-            )
-        assert checked >= 1, (
-            "property test exercised no targets — picker returned None for every level"
-        )
 
     def test_fight_applicable_when_winnable_despite_low_gear_level(self) -> None:
         """Regression: a level-3 char in all level-1 gear must be able to fight a

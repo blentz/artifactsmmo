@@ -16,7 +16,7 @@ onto the unified `Formal.GearValue.rankValue` hand pin):
   by `Int` (fire/earth/water/air as 0..3) while the Python (and therefore
   the extracted image) keys them by `String`. The bridges are UNIVERSAL
   over an arbitrary INJECTIVE element embedding `enc : Int → String`
-  (the CombatPicker code-embedding precedent): the extracted score over
+  (the retired CombatPicker code-embedding precedent): the extracted score over
   the encoded dicts equals the hand score over the original `ElemStats`,
   for EVERY item / monster profile. The production embedding
   (`fire ↦ "fire"`, ...) is one instance.

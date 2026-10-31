@@ -284,12 +284,6 @@ class TypeEnv:
 # ---------------------------------------------------------------------------
 MODULES: tuple[ModuleSpec, ...] = (
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/combat_picker.py",
-        output=f"{GENERATED_DIR}/CombatPicker.lean",
-        core_name="CombatPicker",
-        functions=("pick_winnable_monster_pure",),
-    ),
-    ModuleSpec(
         source="src/artifactsmmo_cli/ai/nearest_tile.py",
         output=f"{GENERATED_DIR}/NearestTile.lean",
         core_name="NearestTile",

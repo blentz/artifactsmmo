@@ -37,7 +37,7 @@ KEY FACT making the DECISION gate float-free: inside the band the formula's
 minimum value is ≈1.27 (worst case player 11 / monster 1 / penalty 0.7:
 20/11 · 0.7), which rounds to ≥ 1 under ANY rounding mode; outside the band the
 penalty factor is 0. Hence production's targeting gate `xp_per_kill(code, level) > 0`
-(player.py:1574 → combat_picker) is EXACTLY the integer predicate proved here —
+(`gear_objective._candidates`) is EXACTLY the integer predicate proved here —
 no float, no rounding-mode dependence. The differential
 (`formal/diff/test_xp_positive_diff.py`) pins the real float path's `> 0`
 verdict to this gate over random catalogs; the mutation group anchors the
