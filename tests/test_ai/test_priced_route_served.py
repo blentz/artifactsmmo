@@ -34,8 +34,10 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, load_bundle_game_data
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import make_state
 from tests.test_ai.scenarios.routing import BUNDLE
 
 TICKET = "event_ticket"
@@ -141,3 +143,17 @@ def test_the_ranking_is_the_fill_the_price_makes() -> None:
     assert [(option.venue, unit) for option, unit in ranked] == [("chicken", 87),
                                                                  ("shrimp_spot", 200)]
     assert priced_route(TICKET, 1, options, {})[1] == ranked[0][0]
+
+
+def test_two_options_one_walk_route_rank_at_the_cheaper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A banked copy and a sibling's craft (CRAFT at the bank) are both this
+    character's withdraw: the walk route ranks at the cheaper of the two."""
+    options = {"x": [
+        RouteOption(kind="withdraw", venue=BANK_VENUE, actions_per_application=1, yield_per=1,
+                    capacity=1),
+        RouteOption(kind="craft", venue=BANK_VENUE, actions_per_application=7, yield_per=1,
+                    capacity=UNBOUNDED_CAPACITY)]}
+    monkeypatch.setattr(acquisition_cost, "acquisition_options", lambda *a, **k: options)
+    ranked = route_order("x", make_state(), GameData(), NO_PROFILE_CONTEXT, policy=DECOMPOSE_POLICY,
+                         pocket=0, store=None)
+    assert ranked == {(SourceKind.WITHDRAW, "x"): 1}

@@ -8794,11 +8794,22 @@ PARTY_LOADOUT_PLAYER_MUTATIONS = [
 # levelling. Killed by tests/test_ai/test_dual_role_currency.py.
 PIECE_PASSIVE_CURRENCY_MUTATIONS = [
     ("passive currency: an L* piece's medals are capped by the tickets held",
-     "                if funded is not None and not piece:\n",
+     "                if funded is not None and not farmed:\n",
      "                if funded is not None:\n"),
     ("passive currency: an L* medal worn for itself waits on the tickets held",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if _passively_funded(code, state, game_data) == 0:\n"),
+    # The ticket farm (live 2026-10-31): a piece's currency is farmed only
+    # while the piece leads the objective's own order.
+    ("passive currency: a piece behind a better one farms its tickets",
+     "        farmed = piece and _piece_leads(code, state, ctx)\n",
+     "        farmed = piece\n"),
+    ("passive currency: a piece awaiting delivery holds the farm back",
+     "        if not piece.awaits_delivery(state):\n            return False\n",
+     "        if True:\n            return False\n"),
+    ("passive currency: the leading piece is never recognised",
+     "        if piece.code == code:\n            return True\n",
+     "        if False:\n            return True\n"),
     ("passive currency: every equippable is an L* piece",
      "        piece = is_missing_piece(code, ctx)\n",
      "        piece = True\n"),
@@ -9294,7 +9305,7 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
      "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
      "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
     ("passive: an item bought with tickets farms them",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if False:\n"),
 ]
 SERVER_LAG_MUTATIONS = [

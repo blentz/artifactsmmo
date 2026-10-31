@@ -173,6 +173,24 @@ def is_missing_piece(code: str, ctx: SelectionContext) -> bool:
     return objective is not None and any(piece.code == code for piece in objective.missing)
 
 
+def _piece_leads(code: str, state: WorldState, ctx: SelectionContext) -> bool:
+    """`code`, a missing `L*` piece, heads the objective's missing pieces in
+    their own order (`gear_objective`'s `piece_order_key`: layer, then gain
+    per price, the measure the root walk ranks its work by,
+    `WhichPieceIsNext`), passing over only a piece that awaits a sibling's
+    delivery (`GearPiece.awaits_delivery`), which has no step of its own.
+    A piece behind a better one is not the walk's current work, so its
+    passive currency is not farmed in its stead."""
+    objective = ctx.gear_objective
+    assert objective is not None, "only a missing piece is asked whether it leads"
+    for piece in objective.missing:
+        if piece.code == code:
+            return True
+        if not piece.awaits_delivery(state):
+            return False
+    raise AssertionError(f"{code} is not a missing piece of the objective")
+
+
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
                      ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal | None:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
@@ -268,7 +286,16 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # missing piece's passive currency is farmed as one. Its cost orders
         # the piece (the capacity-honest price, ruling T14a-B'); it is not a
         # refusal. Every other equippable keeps the rule.
+        #
+        # BY VALUE, NOT BY KIND (the ticket farm, live 2026-10-31): the farm
+        # stands in for the walk's own work only while the piece LEADS it, no
+        # other missing piece ranked ahead of it by the measure the root walk
+        # orders its work by (`_piece_leads`). Robby's trophy (gain 0.24 for
+        # ~69k actions) ranked behind its amulet (0.55 for ~34k) and still
+        # farmed 266 gathers for one ticket; behind a better piece the funded
+        # cap applies, as for any other equippable.
         piece = is_missing_piece(code, ctx)
+        farmed = piece and _piece_leads(code, state, ctx)
         purchases = [(price, currency)
                      for price, currency in _permanent_vendor_purchases(code, game_data)
                      if currency != "gold"
@@ -287,12 +314,12 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 fleet = held + pooled
                 want = currency_grind_target_pure(fleet, price) - fleet
                 funded = _passively_funded(currency, state, game_data)
-                if funded is not None and not piece:
+                if funded is not None and not farmed:
                     # The currency is BOUGHT with a passive one (a medal for 100
                     # event_ticket): the same rule one level down — buy what
                     # the tickets already held pay for, never farm the tickets
                     # (live 2026-10-13: 472 gathers for 4 tickets, 1 in 200).
-                    # Not for an `L*` piece (see `piece` above).
+                    # Not for an `L*` piece that leads (see `farmed` above).
                     want = min(want, funded)
                     if want == 0:
                         return None
@@ -302,13 +329,13 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 return GatherMaterialsGoal(target_item=currency,
                                            needed={currency: held + want},
                                            fight_gold=piece)
-        if _passively_funded(code, state, game_data) == 0 and not piece:
+        if _passively_funded(code, state, game_data) == 0 and not farmed:
             # The ITEM itself is bought with a passive currency (a medal worn
             # as an artifact): the "plain buy attempt" above is not
             # unplannable, GatherMaterials' currency injection farms the
             # tickets as a drop (live 2026-10-13: HAL and Lor, 163 gathers).
             # Buy once held tickets pay for it; until then, level — except an
-            # `L*` piece, whose tickets are farmed (see `piece` above).
+            # `L*` piece that leads, whose tickets are farmed (see `farmed`).
             return None
         # An `L*` piece the objective prices through fight gold is served by
         # that fight (plan B Task 15): its walk may earn the gold the pocket

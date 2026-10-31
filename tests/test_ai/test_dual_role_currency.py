@@ -177,3 +177,60 @@ def test_an_l_star_medal_worn_for_itself_farms_its_tickets(monkeypatch):
     assert goal.fight_gold is True
     assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd,
                             NO_PROFILE_CONTEXT) is None
+
+
+def _robby_ctx():  # type: ignore[no-untyped-def]
+    """Robby's objective, live 2026-10-31 (`plan Robby`): the amulet first
+    (gain 0.5497 for 33,766 actions), the trophy behind it (0.2423 for
+    69,264)."""
+    amulet = GearPiece("amulet_slot", "greater_sapphire_amulet", 0, Fraction("0.5497"),
+                       Fraction(33766), SourceKind.CRAFT)
+    trophy = GearPiece("artifact1_slot", "lich_race_trophy", 0, Fraction("0.2423"),
+                       Fraction(69264), SourceKind.BUY)
+    return replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "hellhound", {"amulet_slot": amulet.code, "artifact1_slot": trophy.code},
+        Fraction(1), (amulet, trophy)))
+
+
+def test_a_piece_behind_a_better_one_farms_no_tickets(monkeypatch):
+    """The ticket farm (live 2026-10-31): Robby's trophy, gain 0.24 for ~69k
+    actions, ranks behind its amulet by the measure the root walk orders its
+    work by, and 2 held tickets pay for no medal: no farm step. The trophy is
+    then the funded cap's, as any other equippable's."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    robby = make_state(level=41, inventory={"lich_race_medal": 2}, bank_items={"event_ticket": 2})
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", robby, gd, _robby_ctx()) is None
+    # 150 tickets held buy one medal, and only one
+    funded = replace(robby, bank_items={"event_ticket": 150})
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", funded, gd, _robby_ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": 2 + 1}
+
+
+def test_a_piece_ahead_that_awaits_a_sibling_does_not_hold_the_farm_back(monkeypatch):
+    """A piece a sibling crafts for this character (`awaits_delivery`) has no
+    step of its own, so the trophy behind it still leads the walk's work."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    robby = make_state(level=41, inventory={"lich_race_medal": 2}, bank_items={"event_ticket": 2})
+    ctx = _robby_ctx()
+    objective = ctx.gear_objective
+    assert objective is not None
+    awaited = replace(objective.missing[0], route=SourceKind.WITHDRAW)
+    waiting = replace(ctx, gear_objective=replace(objective,
+                                                  missing=(awaited, objective.missing[1])))
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", robby, gd, waiting)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": currency_grind_target_pure(2, 10)}
+
+
+def test_a_medal_worn_for_itself_behind_a_better_piece_is_bought_with_tickets_held(monkeypatch):
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    poor = make_state(level=30, inventory={"event_ticket": 20}, bank_items={"event_ticket": 79})
+    medal = GearPiece("artifact2_slot", "lich_race_medal", 0, Fraction(1, 10), Fraction(10),
+                      SourceKind.BUY)
+    better = GearPiece("amulet_slot", "greater_sapphire_amulet", 0, Fraction(1), Fraction(10),
+                       SourceKind.CRAFT)
+    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"amulet_slot": better.code, "artifact2_slot": medal.code}, Fraction(1),
+        (better, medal)))
+    assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd, ctx) is None
