@@ -29,9 +29,16 @@ under the suicide guard exists at every band level for the band's WITNESS loadou
 Production's gear objective reads its own predicate instead: a `_candidates` monster
 whose `L*` fighter wins at the real state with `R > 0`. `ObjectiveCovers` is the
 hypothesis that such a candidate gives production an objective whose `m*` is one
-(bound by a bundle differential); `objective_of_winning_candidate` applies it. The
-transfer from the catalogue witness to a winning `L*` at a real state is NOT proved
-here: it is a named residual of `LevelFiftyReachableP`.
+(bound by a bundle differential).
+
+WHAT THE CAPSTONE SAYS, PLAINLY. `objective_of_winning_candidate` is the hypothesis
+`hcov` applied to a winning candidate `hwin`: its first five conjuncts are `hcov hwin`
+verbatim, and its last two (the grind target is `m*` while `L*` is held, none while
+not) are definitional facts of `grindTarget`. It proves nothing about production
+beyond what `hcov` assumes; its content is that the assumption is the right one —
+satisfiable, not trivially true, and bound by the differential. The transfer from
+the catalogue witness to a winning `L*` at a real state is NOT proved here: it is a
+named residual of `LevelFiftyReachableP`.
 
 Plan C Task 4 retired the windowed-picker grounding this module used to carry
 (`combatTargetExists_of_gearTier`: the deleted picker returned `some` target):
@@ -134,10 +141,11 @@ def ObjectiveCovers (cands : List Int) (fighterWins ratePos : Int → Bool)
     ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
       fighterWins o.monster = true ∧ ratePos o.monster = true
 
-/-- **Production's objective at a state with a winning candidate.** This is the
-    hypothesis `hcov` applied to `hwin`; the last two conjuncts are definitional
-    (`grindTarget` is `m*` exactly while `L*` is held), restated so the two halves of
-    the root walk read off the same objective. -/
+/-- **Production's objective at a state with a winning candidate.** Plainly: the
+    hypothesis `hcov` applied to `hwin` (the first five conjuncts, verbatim), with
+    two definitional conjuncts appended (`grindTarget` is `m*` exactly while `L*` is
+    held, `fight_armed_of_held` / `no_xp_fight_of_not_held`), so the two halves of the
+    root walk read off the same objective. No production fact beyond `hcov`. -/
 theorem objective_of_winning_candidate
     (cands : List Int) (fighterWins ratePos : Int → Bool)
     (objective : Option ObjectiveView)
