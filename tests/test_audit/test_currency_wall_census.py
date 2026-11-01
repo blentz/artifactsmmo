@@ -223,7 +223,17 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
 
     21 -> 22 (ruling T14a-B', capacity is priced): on `l20_relief_full_bank`
     the census's LEGACY rune price sold the one banked sap for 18,500 gold;
-    the sell route delivers 135, so the rune is honestly gold-walled there."""
+    the sell route delivers 135, so the rune is honestly gold-walled there.
+
+    7 -> 11 resolved roots, walls still 22 (ruling "seconds inside",
+    2026-10-31): on `l48_capstone_approach`, `l48_band_adequate`,
+    `l48_raid_active` and `l48_event_active` the rune was already a walled
+    alternative; it now heads the walk over `goblin_guard_shield`. Its gold is
+    fought for off a grey `highwayman` (4 gold a win) whose fight takes 5.2 s,
+    the 5 s cooldown floor every captured 1-3 turn fight shows, where it was
+    charged one ~36 s action a win: the rune fell from 5263 to 1224 actions.
+    The shield's ~1894 drop fights take ~46 s each, so it rose from 1897 to
+    2458. Gain per price now ranks the rune first."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
@@ -232,7 +242,8 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     assert {r.scenario for r in walls if r.is_resolved_root} == {
         "l32_items_task", "l32_held_task_workable", "l32_held_task_closable",
         "l32_held_task_open", "l20_dual_utility", "l20_dual_utility_one_stocked",
-        "l24_fisher_cooking_rung"}
+        "l24_fisher_cooking_rung", "l48_capstone_approach", "l48_band_adequate",
+        "l48_raid_active", "l48_event_active"}
     assert "walled 22" in summary_line(results)
 
 
