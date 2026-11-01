@@ -38,11 +38,13 @@ def test_a_new_tier_identifier_fails() -> None:
     camelCase and plural spellings of the words."""
     source = ("def gear_tier(level: int) -> int:\n    return level // 10\n\n\n"
               "class IsMyGearBehindMyTier:\n    pass\n\n\n"
-              "next_rungs = []\nMILESTONE = 10\nlevel_band = 3\n")
+              "next_rungs = []\nMILESTONE = 10\nlevel_band = 3\n"
+              "is_tiered = tiering_cap = banded = LadderedCost = subtier = 0\n")
     result = run_gate({MODULE: source}, homes={})
     assert not result.passed
     assert [hit.name for hit in result.violations] == [
-        "gear_tier", "IsMyGearBehindMyTier", "next_rungs", "MILESTONE", "level_band"]
+        "gear_tier", "IsMyGearBehindMyTier", "next_rungs", "MILESTONE", "level_band",
+        "is_tiered", "tiering_cap", "banded", "LadderedCost", "subtier"]
     assert result.violations[0] == Hit("ai/new_helper", 1, "gear_tier")
 
 
@@ -84,6 +86,10 @@ def test_words_are_matched_on_parts_not_substrings() -> None:
     assert not names_the_concept("frontier")
     assert not names_the_concept("husband")
     assert not names_the_concept("bandwidth")
+    assert not names_the_concept("tiara")
+    for inflected in ("Tiered", "tiering", "banded", "laddered", "subtier", "rungs",
+                      "Milestones", "midband"):
+        assert names_the_concept(inflected), inflected
     assert scan("ai/x", "frontier = husband\n") == []
 
 

@@ -13,7 +13,8 @@ NAME TOKENS ONLY. Every `src/` file goes through Python's `tokenize`, and only
 a definition, and passes. The words are matched against an identifier's PARTS:
 its snake_case segments, each split again on camelCase humps. So `gear_tier`,
 `IsMyGearBehindMyTier` and `BAND_MARGIN` are caught, while `frontier` and
-`husband` are not. A plural part (`tiers`, `rungs`) counts as the word.
+`husband` are not. An inflected or prefixed part (`tiers`, `tiered`,
+`subtier`) counts as the word.
 
 ALLOWED BY NAME, NOT BY PATTERN (plan C, Review Focus 5). Some live vocabulary
 shares a word without being the deleted concept: the arbiter's priority bands,
@@ -187,9 +188,26 @@ def parts(name: str) -> list[str]:
     return found
 
 
+INFLECTIONS = ("", "s", "es", "ed", "ing", "er", "ers")
+"""Endings a part may add to a word and still be it: `tiers`, `tiered`,
+`tiering`, `banded`, `laddered`, `rungs`, `milestones` (Task 8 review M1). A
+part must still START with the word, so `bandwidth` is another word."""
+
+PREFIXES = ("", "sub", "super", "multi", "inter", "intra", "mid", "pre", "next", "top")
+"""Prefixes a part may put in front of a word and still be it (`subtier`,
+`midband`, `nexttier`). An explicit list, not "ends with the word", because
+`frontier` and `husband` end with one and are not it."""
+
+
+def _is_the_word(part: str) -> bool:
+    return any(part == f"{prefix}{word}{ending}"
+               for word in WORDS for prefix in PREFIXES for ending in INFLECTIONS)
+
+
 def names_the_concept(name: str) -> bool:
-    """Whether a part of `name` is one of `WORDS`, or its plural."""
-    return any(p in WORDS or (p.endswith("s") and p[:-1] in WORDS) for p in parts(name))
+    """Whether a part of `name` is one of `WORDS`, inflected (`INFLECTIONS`)
+    or prefixed (`PREFIXES`)."""
+    return any(_is_the_word(p) for p in parts(name))
 
 
 def scan(module: str, text: str) -> list[Hit]:
