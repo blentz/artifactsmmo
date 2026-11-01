@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_gate
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.region_edges import (
@@ -529,13 +530,16 @@ class ObtainModel:
         """Every vendor selling `item`. `VENDOR_PERMANENT` is what the legacy
         model required (an event vendor was not reliably reachable, so could not
         anchor a plan); `VENDOR_TRADEABLE` is the finer question the
-        `event_vendors` policy asks instead (D-F)."""
+        `event_vendors` policy asks instead (D-F). SPAWN_KNOWN is the walk's
+        reach over the vendor's tiles (`vendor_reach.vendor_gate`, Task 8a), as
+        for a fight or a gather: a vendor past a door names the door."""
         out: list[Route] = []
         for npc, price, currency in self._gd.npc_purchases(item):
             gates = (
                 Gate(GateKind.VENDOR_PERMANENT, npc, not self._gd.is_event_npc(npc)),
                 Gate(GateKind.VENDOR_LOCATED, npc, self._gd.npc_location(npc) is not None),
                 Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),
+                vendor_gate(npc, self._gd, self._reach(), self._crossing),
             )
             out.append(Route(item, SourceKind.BUY, npc, 1, UNBOUNDED_CAPACITY, gates,
                              inputs={currency: price}))
@@ -592,7 +596,8 @@ class ObtainModel:
         authority the SELL_IDLE means asks, so the route never prices a sale the
         means would refuse. Reachability is `event_npc_tradeable`, not the blunt
         `is_event_npc` refusal BUY uses: every NPC in the game that buys items
-        is an event NPC (55 of 55 buyer rows)."""
+        is an event NPC (55 of 55 buyer rows). SPAWN_KNOWN is the buyer's reach,
+        as BUY's (`vendor_reach.vendor_gate`, Task 8a)."""
         if item != GOLD_CODE:
             return []
         out: list[Route] = []
@@ -604,6 +609,7 @@ class ObtainModel:
                 gates = (
                     Gate(GateKind.VENDOR_LOCATED, npc, self._gd.npc_location(npc) is not None),
                     Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),
+                    vendor_gate(npc, self._gd, self._reach(), self._crossing),
                 )
                 out.append(Route(item, SourceKind.SELL, code, price, copies * price, gates,
                                  agent=npc))

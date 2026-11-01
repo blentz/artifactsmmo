@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, monster_reached
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_tiles
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.objective import (
@@ -1036,9 +1037,10 @@ def _vendor_sources(leaf: str, state: WorldState, game_data: GameData,
     """One verdict per vendor the cell would buy `leaf` from — present here
     (`_present_vendor`) and selling for a currency the planner directly
     acquires (`_currency_directly_attainable`), the vendors `_permanently_buyable`
-    counts — each True when the vendor's region (`GameData.npc_region`) is in
-    `reach`."""
-    return [game_data.npc_region(npc) in reach
+    counts — each True when some tile of the vendor lies in `reach`
+    (`region_edges.content_reached` over `vendor_reach.vendor_tiles`, the
+    test production's vendor gate asks: Task 8a)."""
+    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)
             for npc, _price, currency in game_data.npc_purchases(leaf)
             if _present_vendor(npc, game_data)
             and _currency_directly_attainable(currency, state, game_data)]
@@ -1055,7 +1057,7 @@ def _leaf_behind_crossing(leaf: str, state: WorldState, game_data: GameData,
       here (`_drop_winnable`), reached by `monster_reached`;
     - a resource that spawns (`_gather_resources`), reached by
       `region_edges.content_reached`;
-    - a vendor `_vendor_sources` counts, reached by its region;
+    - a vendor `_vendor_sources` counts, reached by its tiles;
     - a task reward (`GameData.is_task_earnable`), the always-available task
       loop `_leaf_status` reads it as, so always reached.
 

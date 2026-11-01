@@ -56,13 +56,20 @@ from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import Route
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_gate
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
     SourceKind,
     obtain_sources,
 )
-from artifactsmmo_cli.ai.region_edges import door_legs, door_toll, leg_states, leg_tolls
+from artifactsmmo_cli.ai.region_edges import (
+    door_legs,
+    door_toll,
+    leg_states,
+    leg_tolls,
+    reachable_regions_now,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -312,16 +319,22 @@ def _sale_of(item: str, state: WorldState,
     """`(npc, price)` for the best tradeable buyer of `item`.
 
     Same contract as `npc_price_of`, and the gates must be the SAME ones
-    `ObtainModel._sell` applied — price, known location, and
-    `event_npc_tradeable` — or the two would pick different buyers for one
+    `ObtainModel._sell` applied — price, known location, the buyer's reach
+    (`vendor_reach.vendor_gate`: reached now, or past a door the route's
+    unlock pays, Task 8a) and `event_npc_tradeable` — or the two would pick
+    different buyers for one
     source and the venue would name an NPC the model never admitted. That is why
     `state` is threaded here rather than the item alone.
 
     A missing row would mean the two calls disagreed about game data inside a
     single decision, which cannot happen, so this raises rather than defaulting,
     per the API-data rule. `now` is the cycle clock (`SelectionContext.now`)."""
+    reach = reachable_regions_now(state, game_data)
     for npc_code, price in game_data.npcs_buying_item(item):
         if price <= 0 or game_data.npc_location(npc_code) is None:
+            continue
+        gate = vendor_gate(npc_code, game_data, reach, state)
+        if not (gate.satisfied or gate.doors):
             continue
         if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
                                active_events=state.active_events, now=now):
@@ -843,9 +856,10 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
                   policy: Policy, gated_drop: bool,
                   opening: frozenset[Door], served: Sequence[RouteOption],
                   crossing: WorldState) -> list[RouteOption]:
-    """The fights and gathers for `item` whose content stands past a key door
-    (Task 14e, M-3), each priced as its ready route is plus the door as its
-    unlock: the key's (or the fee's gold's) own price and the crossing.
+    """The fights, gathers and vendors (Task 8a) for `item` whose content
+    stands past a key door (Task 14e, M-3), each priced as its ready route is
+    plus the door as its unlock: the key's (or the fee's gold's) own price and
+    the crossing.
 
     THE SAME SEAM `_gated_skill_option` AND `_gated_drop_option` STATE. The
     reachability authority stays strict (`region_edges.reachable_regions_now`:
@@ -952,6 +966,13 @@ def _reentry_actions(item: str, route: Route, door: Door, state: WorldState,
                                                strict=True))
     if reentry >= UNOBTAINABLE_PER_UNIT:
         return None
+    if route.kind in (SourceKind.BUY, SourceKind.SELL):
+        # A vendor past a tolled door (Task 8a): one trade per application. A
+        # buy adds its units to the bag, so a bag it fills pays the re-entry
+        # share a gather's drops pay; a sale adds none (gold takes no slot).
+        units = route.yield_per if route.kind is SourceKind.BUY else 0
+        return trip_share(Fraction(reentry), Fraction(units),
+                          state.inventory_max - carried_keep(state, game_data, ctx))
     evidence = ctx.drops()
     if route.kind is SourceKind.GATHER:
         prospecting = gather_prospecting(route.via, state, game_data)

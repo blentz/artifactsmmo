@@ -39,6 +39,8 @@ class Policy:
     reachable region of any layer (True, as `drop_obtainability` asks of a
     monster), or a live overworld tile (False, as `obtain_sources` asks; D-D).
     The action pool builds fights and gathers for both kinds of tile.
+    A BUY or SELL route's SPAWN_KNOWN (its vendor's reach, Task 8a) is
+    enforced whatever this says: a vendor has no live-tile alternative.
     `allow_grey`: a zero-xp dropper counts (True) or not (False). The legacy
     walk had no grey rule; `drop_obtainability`'s callers choose it.
     `vendor_routes`: BUY routes are offered (True) or not (False, for a caller

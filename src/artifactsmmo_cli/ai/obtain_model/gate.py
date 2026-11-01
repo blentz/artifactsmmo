@@ -33,7 +33,9 @@ class GateKind(Enum):
     SPAWN_KNOWN = "spawn_known"
     """Monster or resource `subject` has a tile, live or on any layer, in a
     region the walk reaches from here now (`region_edges.content_reached` over
-    `reachable_regions_now`: rulings T14a-E, I-3, R3-M1)."""
+    `reachable_regions_now`: rulings T14a-E, I-3, R3-M1). On a BUY or SELL
+    route `subject` is the vendor NPC, its tiles `vendor_reach.vendor_tiles`
+    (Task 8a): the same gate, enforced under every policy."""
     XP_POSITIVE = "xp_positive"
     """Monster `subject` pays experience at the character's level (not grey)."""
     WINNABLE = "winnable"

@@ -407,6 +407,7 @@ ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_c
 SKILL_CREDIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_credit.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
+VENDOR_REACH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "vendor_reach.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -8271,7 +8272,7 @@ CENSUS_CROSSING_MUTATIONS = [
      "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks\n",
      "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach)\n"),
     ("census: a vendor past a crossing is reached",
-     "    return [game_data.npc_region(npc) in reach\n",
+     "    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)\n",
      "    return [True\n"),
     ("census: an absent vendor is a source",
      "            if _present_vendor(npc, game_data)\n            and _currency_directly_attainable(",
@@ -8708,6 +8709,60 @@ GATHER_REACH_MUTATIONS = [
      "            known = content_reached(resource, tiles, self._gd, self._reach())\n",
      "            known = self._gd.resource_spawn_known(resource) and content_reached(\n"
      "                resource, tiles, self._gd, self._reach())\n"),
+]
+# Task 8a (Ruling C-3): a vendor route asks the one reach authority, as a
+# fight or a gather does. Killed by tests/test_ai/test_vendor_reach.py.
+VENDOR_REACH_GATE_MUTATIONS = [
+    ("vendor reach: every vendor is reached",
+     "    known = content_reached(npc, tiles, game_data, reach)\n",
+     "    known = True\n"),
+    ("vendor reach: a vendor past a door names no door",
+     "    doors = () if known else doors_to(npc, tiles, crossing, game_data)\n",
+     "    doors = ()\n"),
+    ("vendor reach: an event vendor stands on its catalogue spawn, not its read",
+     "    if read is not None:\n        return [(x, y) for x, y, _layer in read]\n",
+     "    if read is not None and False:\n        return [(x, y) for x, y, _layer in read]\n"),
+    ("vendor reach: a permanent vendor's own tile is not read",
+     "        return [tile]\n",
+     "        return []\n"),
+    ("vendor reach: a tile a live event takes still holds its vendor",
+     "                or (*tile, \"overworld\") in game_data.world.taken_tiles()):\n",
+     "                ):\n"),
+    ("vendor reach: an off-overworld vendor's tile is read as overworld",
+     "        if (tile is None or npc in game_data.world.npc_layers\n",
+     "        if (tile is None\n"),
+    ("vendor reach: an event vendor with no read stands nowhere",
+     "    return [] if spawn is None else [spawn]\n",
+     "    return []\n"),
+]
+VENDOR_REACH_MODEL_MUTATIONS = [
+    ("obtain_model: a buy asks no reach",
+     "                Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"
+     "                vendor_gate(npc, self._gd, self._reach(), self._crossing),\n",
+     "                Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"),
+    ("obtain_model: a sale asks no reach",
+     "                    Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"
+     "                    vendor_gate(npc, self._gd, self._reach(), self._crossing),\n",
+     "                    Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"),
+]
+VENDOR_REACH_PRICE_MUTATIONS = [
+    ("sale_of: a buyer no door opens is a venue",
+     "        if not (gate.satisfied or gate.doors):\n            continue\n",
+     "        if False:\n            continue\n"),
+    ("sale_of: a buyer past a door is no venue",
+     "        if not (gate.satisfied or gate.doors):\n            continue\n",
+     "        if not gate.satisfied:\n            continue\n"),
+    ("reentry: a buy adds nothing to the bag",
+     "        units = route.yield_per if route.kind is SourceKind.BUY else 0\n",
+     "        units = 0\n"),
+    ("reentry: a sale adds its gold to the bag",
+     "        units = route.yield_per if route.kind is SourceKind.BUY else 0\n",
+     "        units = route.yield_per\n"),
+]
+VENDOR_REACH_CENSUS_MUTATIONS = [
+    ("census: a vendor is reached by its catalogue region",
+     "    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)\n",
+     "    return [game_data.npc_region(npc) in reach\n"),
 ]
 # Task 14e (M-3): a key door is a route through its key. Killed by
 # tests/test_ai/test_key_door_route.py.
@@ -9785,6 +9840,7 @@ _ALL_SRCS = [
     OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SRC,
     ACQUISITION_COST_SRC,
     OBTAIN_MODEL_DROP_SRC,
+    VENDOR_REACH_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -14442,6 +14498,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(OBTAIN_MODEL_SRC, GATHER_REACH_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(VENDOR_REACH_SRC, VENDOR_REACH_GATE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, VENDOR_REACH_MODEL_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(ACQUISITION_COST_SRC, VENDOR_REACH_PRICE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, VENDOR_REACH_CENSUS_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
     run_group(TRANSITION_SRC, KEY_DOOR_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, KEY_DOOR_REACH_MUTATIONS,
