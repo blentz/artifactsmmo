@@ -61,17 +61,43 @@ LIVE_ANCHOR_LEVEL_6 = {
     "captured_at": "2026-06-20T15:31:40.332273+00:00",
 }
 # Read-only algebraic captures, 2026-10-31: each live sheet (GET
-# /characters/{name}) less the catalogue stats of every worn non-utility piece.
-# All five read initiative 100, critical strike 0, zero attack and resistance,
-# and max_hp = 115 + 5 * level.
-# The measured values are written literally, never through the formula.
+# /characters/{name}) less the catalogue stats of every worn non-utility piece
+# (the bundle's item stats). Each value is written as measured, per character:
+# `sheet` is the live total, `gear` the worn pieces' sum, and the base the
+# difference. Attack and resistance read 0 on every element after the
+# subtraction, recorded per character.
+_ZERO_ELEMENTS = {"fire": 0, "earth": 0, "water": 0, "air": 0}
 LIVE_ANCHORS_2026_10_31 = [
-    {"level": level, "character": character, "max_hp": max_hp,
-     "initiative": 100, "critical_strike": 0,
+    {"character": "Robby", "level": 41, "captured_at": "2026-10-31",
      "source": "algebraic_subtraction_from_equipped_character_stats",
-     "captured_at": "2026-10-31"}
-    for character, level, max_hp in (("Robby", 41, 320), ("R2D2", 37, 300), ("C3P0", 36, 295),
-                                     ("HAL", 39, 310), ("Lor", 36, 295))
+     "sheet": {"initiative": 330, "max_hp": 845, "critical_strike": 38},
+     "gear": {"initiative": 230, "max_hp": 525, "critical_strike": 38},
+     "initiative": 100, "max_hp": 320, "critical_strike": 0,
+     "attack": dict(_ZERO_ELEMENTS), "resistance": dict(_ZERO_ELEMENTS)},
+    {"character": "R2D2", "level": 37, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "sheet": {"initiative": 330, "max_hp": 1040, "critical_strike": 28},
+     "gear": {"initiative": 230, "max_hp": 740, "critical_strike": 28},
+     "initiative": 100, "max_hp": 300, "critical_strike": 0,
+     "attack": dict(_ZERO_ELEMENTS), "resistance": dict(_ZERO_ELEMENTS)},
+    {"character": "C3P0", "level": 36, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "sheet": {"initiative": 250, "max_hp": 945, "critical_strike": 14},
+     "gear": {"initiative": 150, "max_hp": 650, "critical_strike": 14},
+     "initiative": 100, "max_hp": 295, "critical_strike": 0,
+     "attack": dict(_ZERO_ELEMENTS), "resistance": dict(_ZERO_ELEMENTS)},
+    {"character": "HAL", "level": 39, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "sheet": {"initiative": 305, "max_hp": 880, "critical_strike": 18},
+     "gear": {"initiative": 205, "max_hp": 570, "critical_strike": 18},
+     "initiative": 100, "max_hp": 310, "critical_strike": 0,
+     "attack": dict(_ZERO_ELEMENTS), "resistance": dict(_ZERO_ELEMENTS)},
+    {"character": "Lor", "level": 36, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "sheet": {"initiative": 410, "max_hp": 1075, "critical_strike": 24},
+     "gear": {"initiative": 310, "max_hp": 780, "critical_strike": 24},
+     "initiative": 100, "max_hp": 295, "critical_strike": 0,
+     "attack": dict(_ZERO_ELEMENTS), "resistance": dict(_ZERO_ELEMENTS)},
 ]
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parent / "character_base_stats.json"

@@ -856,48 +856,158 @@
         "source": "algebraic_subtraction_from_equipped_character_stats"
       },
       {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
         "captured_at": "2026-10-31",
         "character": "Robby",
         "critical_strike": 0,
+        "gear": {
+          "critical_strike": 38,
+          "initiative": 230,
+          "max_hp": 525
+        },
         "initiative": 100,
         "level": 41,
         "max_hp": 320,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "critical_strike": 38,
+          "initiative": 330,
+          "max_hp": 845
+        },
         "source": "algebraic_subtraction_from_equipped_character_stats"
       },
       {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
         "captured_at": "2026-10-31",
         "character": "R2D2",
         "critical_strike": 0,
+        "gear": {
+          "critical_strike": 28,
+          "initiative": 230,
+          "max_hp": 740
+        },
         "initiative": 100,
         "level": 37,
         "max_hp": 300,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "critical_strike": 28,
+          "initiative": 330,
+          "max_hp": 1040
+        },
         "source": "algebraic_subtraction_from_equipped_character_stats"
       },
       {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
         "captured_at": "2026-10-31",
         "character": "C3P0",
         "critical_strike": 0,
+        "gear": {
+          "critical_strike": 14,
+          "initiative": 150,
+          "max_hp": 650
+        },
         "initiative": 100,
         "level": 36,
         "max_hp": 295,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "critical_strike": 14,
+          "initiative": 250,
+          "max_hp": 945
+        },
         "source": "algebraic_subtraction_from_equipped_character_stats"
       },
       {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
         "captured_at": "2026-10-31",
         "character": "HAL",
         "critical_strike": 0,
+        "gear": {
+          "critical_strike": 18,
+          "initiative": 205,
+          "max_hp": 570
+        },
         "initiative": 100,
         "level": 39,
         "max_hp": 310,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "critical_strike": 18,
+          "initiative": 305,
+          "max_hp": 880
+        },
         "source": "algebraic_subtraction_from_equipped_character_stats"
       },
       {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
         "captured_at": "2026-10-31",
         "character": "Lor",
         "critical_strike": 0,
+        "gear": {
+          "critical_strike": 24,
+          "initiative": 310,
+          "max_hp": 780
+        },
         "initiative": 100,
         "level": 36,
         "max_hp": 295,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "critical_strike": 24,
+          "initiative": 410,
+          "max_hp": 1075
+        },
         "source": "algebraic_subtraction_from_equipped_character_stats"
       }
     ]

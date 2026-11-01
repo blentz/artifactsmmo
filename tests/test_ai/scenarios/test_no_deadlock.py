@@ -197,7 +197,12 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     more of it (`cycles_per_kill`) and a feather is dearer: the coat's five
     feathers take its chain from 80 to 82 actions, the legs' two take theirs
     from 81 to 82, and of the two equal rungs the first listed is the
-    `copper_legs_armor`: the copper, a chicken's feathers, then the legs."""
+    `copper_legs_armor`: the copper, a chicken's feathers, then the legs.
+    PRICING-UNIT DEPENDENCY (review I2): this pin rests on `cycles_per_kill`
+    pricing a fight's Rest as rest seconds over fight seconds, so a shorter
+    fight makes its Rest dearer in actions while a gather keeps its unit.
+    Seconds-consistent route pricing lands with the ticket-farm hotfix and is
+    expected to move this rung."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)

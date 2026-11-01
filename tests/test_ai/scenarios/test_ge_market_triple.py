@@ -73,7 +73,13 @@ legs' 81). Plan C Task 7 (a derived character starts at the base sheet's
 initiative 100) makes it the legs again: the character moves first against
 `chicken`, a turn shorter a fight, so the Rest a win forces costs more of it
 (`cycles_per_kill`) and a feather is dearer; the coat takes five, the legs
-two, and both chains price 83, the legs listed first."""
+two, and both chains price 83, the legs listed first.
+
+PRICING-UNIT DEPENDENCY (review I2): the rung rests on `cycles_per_kill`
+pricing a fight's Rest as rest seconds over fight seconds, so a shorter fight
+makes its Rest dearer in actions while a gather keeps its unit.
+Seconds-consistent route pricing lands with the ticket-farm hotfix and is
+expected to move it."""
 
 DESCENT_RUNG = "feather_coat"
 """An unheld gearcrafting rung with a standing sell order in the busy book (248
