@@ -569,6 +569,41 @@ def test_the_gear_chain_under_a_door_is_priced_with_that_door_shut(
                 state) is None
 
 
+def test_a_gear_unlock_s_deficit_is_computed_once_per_decision(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Review I5: HAL's walk of the trophy asked `_gear_unlock` 216 times for
+    eight distinct (monster, state) deficits, 20.6 s of a 37.8 s `plan`. The
+    full-hp deficit is memoised through the store's decision episode, keyed on
+    the state a price reads; outside an episode, or without a store, it is
+    computed afresh."""
+    state, world, _player = _seeded("l30_band_entry")
+    asked: list[int] = []
+
+    def deficit(s, g, monster):  # type: ignore[no-untyped-def]
+        asked.append(s.hp)
+        return CombatDeficit(monster, -1, (), False)
+
+    monkeypatch.setattr(acquisition_cost, "combat_deficit", deficit)
+    gear = acquisition_cost._gear_unlock
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    store = LearningStore(db_path=str(tmp_path / "e.db"), character="hero")
+    try:
+        hurt = replace(state, hp=1)
+        with store.search_cache():
+            for _ in range(3):
+                assert gear("x", hurt, world, ctx, store, DECOMPOSE_POLICY, frozenset(),
+                            hurt) is None
+            richer = replace(hurt, gold=hurt.gold + 1)
+            assert gear("x", richer, world, ctx, store, DECOMPOSE_POLICY, frozenset(),
+                        richer) is None
+        assert asked == [state.max_hp, state.max_hp]
+        assert gear("x", hurt, world, ctx, store, DECOMPOSE_POLICY, frozenset(), hurt) is None
+        assert gear("x", hurt, world, ctx, None, DECOMPOSE_POLICY, frozenset(), hurt) is None
+        assert len(asked) == 4
+    finally:
+        store.close()
+
+
 def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ruling T14e-m5: the gear chain that opens a fight past a door is priced
     with the door closed to it (`opening`). A chain that needs the very item

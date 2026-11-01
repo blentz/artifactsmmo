@@ -39,7 +39,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 )
 from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_prospecting
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
-from artifactsmmo_cli.ai.combat_deficit import combat_deficit
+from artifactsmmo_cli.ai.combat_deficit import CombatDeficit, combat_deficit
 from artifactsmmo_cli.ai.drop_leg import DropLeg
 from artifactsmmo_cli.ai.dual_role_currency import fleet_pooled
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -660,6 +660,24 @@ def _amortized_fleet_climb(skill: str, level: int, state: WorldState, game_data:
     return ceil(amortized_climb_seconds(Fraction(remaining), units))
 
 
+def _rested_deficit(monster: str, state: WorldState, game_data: GameData,
+                    store: LearningStore | None) -> CombatDeficit | None:
+    """`combat_deficit` against `monster` at full hp, memoised through the
+    store's decision episode (`LearningStore.cached`) on everything of `state`
+    a price reads (`price_key`, which `door_price` already keys the deficit's
+    callers on). Review I5: HAL's walk of the trophy priced eight distinct
+    deficits 216 times, 20.6 s of a 37.8 s `plan`. Without a store it is
+    computed afresh. One episode prices against one catalogue; the entry
+    holds it, and a different one is a defect, not a cache miss."""
+    rested = replace(state, hp=state.max_hp)
+    if store is None:
+        return combat_deficit(rested, game_data, monster)
+    pinned = store.cached(("rested_deficit", monster, *price_key(rested)),
+                          lambda: (game_data, combat_deficit(rested, game_data, monster)))
+    assert pinned[0] is game_data, "one search_cache episode prices one catalogue"
+    return pinned[1]
+
+
 def _gear_unlock(monster: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
                  store: LearningStore | None, policy: Policy,
                  opening: frozenset[Door], crossing: WorldState) -> int | None:
@@ -669,7 +687,7 @@ def _gear_unlock(monster: str, state: WorldState, game_data: GameData, ctx: Sele
     chain priced under a door's key never re-prices that door (ruling
     T14e-m5), and its crossings asked of `crossing` (`route_options`'). None
     when no deficit closes or the chain cannot be priced."""
-    deficit = combat_deficit(replace(state, hp=state.max_hp), game_data, monster)
+    deficit = _rested_deficit(monster, state, game_data, store)
     if deficit is None or not deficit.closes:
         return None
     unlock_actions = sum(

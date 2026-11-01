@@ -5647,6 +5647,16 @@ FLEET_FARM_PLAYER_MUTATIONS = [
      "                or not is_dual_role(goal.target_item, game_data)):\n",
      "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)):\n"),
 ]
+# Review I5: a gear unlock's full-hp deficit is computed once per decision.
+# Killed by tests/test_ai/test_key_door_route.py.
+RESTED_DEFICIT_MUTATIONS = [
+    ("rested deficit: the memo keys on no state",
+     "    pinned = store.cached((\"rested_deficit\", monster, *price_key(rested)),\n",
+     "    pinned = store.cached((\"rested_deficit\", monster),\n"),
+    ("rested deficit: the deficit is asked at the live hp",
+     "    rested = replace(state, hp=state.max_hp)\n    if store is None:\n",
+     "    rested = state\n    if store is None:\n"),
+]
 # Review M6: the trace says whether the claim can buy now. Killed by
 # tests/test_ai/test_trace_coordination_fields.py.
 FLEET_FARM_TRACE_MUTATIONS = [
@@ -14904,6 +14914,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(PLAYER_SRC, FLEET_FARM_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(ACQUISITION_COST_SRC, RESTED_DEFICIT_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
     run_group(PLAYER_SRC, FLEET_FARM_TRACE_MUTATIONS,
               "tests/test_ai/test_trace_coordination_fields.py", survivors)
     run_group(OBTAIN_ITEM_ROUTING_SRC, FARMED_FOR_ROUTING_MUTATIONS,
