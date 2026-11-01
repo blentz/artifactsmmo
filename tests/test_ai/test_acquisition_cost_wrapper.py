@@ -50,11 +50,14 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     acquisition_cost,
 )
 from artifactsmmo_cli.ai.drop_leg import DropLeg
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_objective import _price
 from artifactsmmo_cli.ai.gold_rate import gold_spend_actions
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.drop_observations import fleet_k, learned_drops
+from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -1789,3 +1792,19 @@ def test_a_farm_is_priced_at_the_prospecting_its_fight_loadout_wears(
                          ctx) == Fraction(8, 3) * win
     assert _drop_actions("feather", "chicken", rate, low, high, state, game_data,
                          ctx) == 8 * win
+
+
+def test_every_action_is_priced_at_its_kinds_measured_seconds(state, game_data) -> None:
+    """Ruling "seconds inside" (2026-10-31): a withdraw is its measured 3
+    seconds and a gather its 34, each over a planner action's measured
+    seconds, not one planner action each; a win is its fight and the rest it
+    forces at the fight's own learned seconds, not one fight-equivalent."""
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    assert Fraction(3) / ctx.action_seconds_of() == WITHDRAW
+    assert ctx.seconds_of("gathering") / ctx.action_seconds_of() == GATHER
+    assert WITHDRAW < GATHER
+    fight = walk_seconds(state, game_data, "chicken", (), ctx.timing())
+    per_kill = cycles_per_kill(expected_damage_per_fight(state, game_data, "chicken"),
+                               state.max_hp, fight)
+    assert _kill_actions("chicken", state, game_data, ctx, ()) == per_kill * fight / \
+        ctx.action_seconds_of()
