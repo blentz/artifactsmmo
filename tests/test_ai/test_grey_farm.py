@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import (
-    GREY_FARM_NEXT_TIER_MARGIN,
+    GREY_FARM_NEXT_RECIPE_MARGIN,
     grey_farm_allowed,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -168,8 +168,8 @@ class TestGreyFarmPolicy:
     def test_boundary_exactly_margin_away_is_close(self) -> None:
         """gap == margin: still 'close' (grind it), > margin: farm."""
         gd = _gd(alchemy_next_tier_level=20)
-        at_margin = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_TIER_MARGIN})
-        beyond = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_TIER_MARGIN - 1})
+        at_margin = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_RECIPE_MARGIN})
+        beyond = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_RECIPE_MARGIN - 1})
         assert grey_farm_allowed("feather", at_margin, gd) is False
         assert grey_farm_allowed("feather", beyond, gd) is True
 

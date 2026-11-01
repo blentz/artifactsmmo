@@ -164,7 +164,7 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     but unreached) crafting-skill gate — the old selected_goal was
     `GatherMaterials(feather, {feather:3})`: gather feathers, via
     Fight(chicken), for boots the character cannot craft at ANY quantity of
-    feathers. `CanICraftCurrentTier` now runs BEFORE the monster-drop check,
+    feathers. `CanICraftThisAtAll` now runs BEFORE the monster-drop check,
     so the skill-gated root raises gearcrafting instead — still never
     GrindCharacterXP, and now for the actual reason the craft chain was
     blocked rather than a masked one.
@@ -448,7 +448,7 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     mask the crafting-skill gate — the old goal was the feather grey-farm
     (`GatherMaterials(feather...)` via `Fight(chicken)`), gathering feathers
     for boots the character could not craft at ANY quantity of feathers.
-    `CanICraftCurrentTier` now runs BEFORE the monster-drop check, so the
+    `CanICraftThisAtAll` now runs BEFORE the monster-drop check, so the
     skill-gated root raises gearcrafting instead of grey-farming a material
     that could not have paid off yet — still never GrindCharacterXP, and the
     grey-farm route is picked back up once the skill has risen.

@@ -15,7 +15,7 @@ MECHANISM (confirmed offline before any fix): `wool` is `type=resource,
 subtype=mob` — not gatherable. Its only source is the level-5 `sheep`, GREY at
 character level 21, so `GatherMaterialsGoal.relevant_actions` asked
 `grey_farm_allowed("wool", ...)`, which said False (every recipe consuming wool
-has a same-family next tier within `GREY_FARM_NEXT_TIER_MARGIN`), and
+has a same-family next tier within `GREY_FARM_NEXT_RECIPE_MARGIN`), and
 `select_drop_fight` therefore emitted NO fight. The goal had no acquisition edge
 at all — hence `nodes=4 depth=2`, a search that gave up immediately.
 

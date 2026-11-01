@@ -169,7 +169,7 @@ def test_a_refused_fight_is_named_in_the_log(capsys: pytest.CaptureFixture[str])
     with (patch.object(player._arbiter, "select", return_value=(None, [], [])),
           patch.object(player, "_record_decision_targets", return_value=None),
           patch.object(player, "_selection_context", return_value=ctx)):
-        player._decide_band(make_state(), GameData(), [])
+        player._decide_and_select(make_state(), GameData(), [])
     assert refusal_line("ogre") in capsys.readouterr().out
 
 

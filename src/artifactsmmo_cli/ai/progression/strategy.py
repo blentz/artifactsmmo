@@ -284,7 +284,7 @@ class StrategyEngine:
         `step_decline` is the cycle's answer for a root's step
         (`decisions.root.StepDecline`): a gear target whose step it declines
         cannot head the walk. `ctx` is the caller's
-        per-cycle `SelectionContext` (see `GamePlayer._decide_band` /
+        per-cycle `SelectionContext` (see `GamePlayer._decide_and_select` /
         `plan_from_state`), forwarded to every `actionable_step` call so the
         descent stops at a node with any ready `ai/obtain_sources` route
         instead of falling into its recipe (one-obtain-model epic, Task 5;

@@ -250,7 +250,7 @@ def test_the_objective_line_names_the_target_and_the_first_missing_piece() -> No
 
 def test_every_decided_cycle_logs_its_objective(
         monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    """The line is printed where the cycle's context is built (`_decide_band`),
+    """The line is printed where the cycle's context is built (`_decide_and_select`),
     before the decision, so it is there even when the decision raises."""
     player = _player(monkeypatch, MISSING, [])
 
@@ -263,7 +263,7 @@ def test_every_decided_cycle_logs_its_objective(
     player._strategy = StrategyEngine(objective=CharacterObjective.from_game_data(GameData()))
     monkeypatch.setattr(StrategyEngine, "decide", stop)
     with pytest.raises(_Stop):
-        player._decide_band(player.state, player.game_data, [])
+        player._decide_and_select(player.state, player.game_data, [])
     assert "Gear objective: target wolf; first missing iron_helm (helmet_slot); 1 missing" \
         in capsys.readouterr().out
 

@@ -330,7 +330,7 @@ class IsThisTargetBlocked(Decision[MetaGoal]):
             # +1, not `blocking_skill_level`: the graph re-derives from live
             # state every cycle, so the increment advances on its own and
             # nothing has to plan the whole climb in one shot. Same rule as
-            # `decisions/obtain_item.CanICraftCurrentTier`, and it reads the
+            # `decisions/obtain_item.CanICraftThisAtAll`, and it reads the
             # character's skills the same way that site does.
             current = state.skills.get(self.target.blocking_skill, 1)
             return tool_first(

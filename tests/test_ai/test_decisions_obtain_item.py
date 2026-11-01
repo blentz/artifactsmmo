@@ -121,7 +121,7 @@ def test_a_skill_gated_step_that_is_itself_the_equippable_raises_the_skill(
         bundle_game_data):
     """THE SIBLING of the test above, and the half that was missing.
 
-    `CanICraftCurrentTier` sits behind `IsThisAnIntermediateOnAChain`, which is
+    `CanICraftThisAtAll` sits behind `IsThisAnIntermediateOnAChain`, which is
     only reached when the step is NOT equippable.
     `IsTheStepTheEquippableItself` runs FIRST and, for any equippable step,
     routed straight to `_equippable_goal` without ever asking whether the craft

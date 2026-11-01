@@ -328,7 +328,7 @@ class TestArbiterSelection:
         the two-plan-producers trap. It was once synergy-blind that way, so the
         whole scenario suite and the `plan` diagnostic ran synergy inert.
 
-        Pinned as a KEY-SET comparison against `_decide_band`'s own call rather
+        Pinned as a KEY-SET comparison against `_decide_and_select`'s own call rather
         than as a list of names, so the next parameter added to one site and
         forgotten at the other fails here without anyone remembering to extend
         this test."""
@@ -349,7 +349,7 @@ class TestArbiterSelection:
 
         with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
             with pytest.raises(_Stop):
-                player._decide_band(player.state, player.game_data, [])
+                player._decide_and_select(player.state, player.game_data, [])
         live_kwargs = spy.call_args.kwargs
 
         assert set(diagnostic_kwargs) == set(live_kwargs)

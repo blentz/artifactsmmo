@@ -119,15 +119,15 @@ class CraftCell:
     docs/PLAN_group_fights.md increment 2)."""
 
 
-def tier_of(craft_level: int) -> int:
-    """The decade-inclusive tier bucket of a craft level: (L-1)//10+1, so
-    craft_level=10 is the LAST level of tier 1, not the first of tier 2."""
+def decade_of(craft_level: int) -> int:
+    """The decade-inclusive bucket of a craft level: (L-1)//10+1, so
+    craft_level=10 is the LAST level of decade 1, not the first of decade 2."""
     return (craft_level - 1) // 10 + 1
 
 
 def nominal_char_level(craft_level: int) -> int:
-    """The tier's nominal character level: 1 for tier 1 (L<=9), else 10*tier."""
-    return 1 if craft_level <= 9 else 10 * tier_of(craft_level)
+    """The decade's nominal character level: 1 for decade 1 (L<=9), else 10*decade."""
+    return 1 if craft_level <= 9 else 10 * decade_of(craft_level)
 
 
 def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
@@ -141,7 +141,7 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
     yielding fewer cells. `recipe`'s tier bucket is the decade its
     crafting_level falls into ((craft_level-1)//10+1, so crafting_level=10
     is the LAST level of tier 1, not the first of tier 2) — the boundary
-    offsets `10*tier±2` straddle that decade line; for a tier-1 recipe
+    offsets `10*decade±2` straddle that decade line; for a tier-1 recipe
     (crafting_level<=9) the nominal cell is 1 (any starting character),
     while a decade-boundary recipe like crafting_level=10 gets nominal=10.
     Returns [] when `recipe` has no crafting recipe (not craftable)."""
@@ -150,11 +150,11 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
         return []
     craft_level = stats.crafting_level
     skill = stats.crafting_skill
-    tier = tier_of(craft_level)
+    decade = decade_of(craft_level)
     nominal = nominal_char_level(craft_level)
     char_levels = sorted({
         max(1, min(50, lvl))
-        for lvl in (nominal, 10 * tier - 2, 10 * tier + 2)
+        for lvl in (nominal, 10 * decade - 2, 10 * decade + 2)
     })
     skill_levels = sorted({max(1, craft_level - 5), craft_level})
     return [CraftCell(cl, skill, sl)

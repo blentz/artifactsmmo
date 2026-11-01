@@ -352,7 +352,7 @@ class UpgradeEquipmentGoal(Goal):
         alternative — suppression would re-create the Wait livelock this
         emission exists to fix (l35 witness: enchanter_boots, equip_value 485
         > old_boots 371, crafts at gearcrafting 35 vs skill 30, within
-        GREY_FARM_NEXT_TIER_MARGIN — the margin rule would suppress the only
+        GREY_FARM_NEXT_RECIPE_MARGIN — the margin rule would suppress the only
         live route while no goal grinds gearcrafting). The demand gate holds
         structurally: the drop IS the goal's target, so a grey fight emitted
         here can never serve an xp-grind plan."""

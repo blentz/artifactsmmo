@@ -4,7 +4,7 @@ Transcribed verbatim from the `if isinstance(step, ObtainItem):` branch of
 `strategy_driver.objective_step_goal` (originally lines 882-1006). Each class
 below is one branch of that if-pile, chained in the order the if-pile
 evaluated them -- EXCEPT for one deliberate reordering (PF-2, see
-`.superpowers/sdd/PLAN_goal_decision_graph/progress.md`): `CanICraftCurrentTier`
+`.superpowers/sdd/PLAN_goal_decision_graph/progress.md`): `CanICraftThisAtAll`
 (the crafting-skill gate, originally line 972) now runs BEFORE
 `DoesTheRecipeNeedAMonsterDrop` (originally line 924). Measured against the
 committed bundle: `_recipe_has_combat_drop_input` returns `True` for every
@@ -183,7 +183,7 @@ def craft_skill_gate(stats: ItemStats, state: WorldState) -> ReachSkillGoal | No
     else None.
 
     THE ONE PRODUCER of "this craft is skill-blocked, raise the skill". Both
-    `CanICraftCurrentTier` (the step is an intermediate on a chain) and
+    `CanICraftThisAtAll` (the step is an intermediate on a chain) and
     `IsTheStepTheEquippableItself` (the step IS the gear) ask it, so the two
     paths cannot answer differently — they did, and the asymmetry cost a fleet
     39.6 hours (see `IsTheStepTheEquippableItself`).
@@ -216,7 +216,7 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
             # THE SKILL GATE, ASKED ON THIS PATH TOO. This node runs BEFORE
-            # `IsThisAnIntermediateOnAChain`, and `CanICraftCurrentTier` — the
+            # `IsThisAnIntermediateOnAChain`, and `CanICraftThisAtAll` — the
             # only other place the gate is asked — sits behind that node. So an
             # equippable step went straight to `_equippable_goal` and gathered
             # materials for a craft that could not run, while the intermediate
@@ -307,13 +307,13 @@ class IsThisAnIntermediateOnAChain(Decision[Goal]):
             if root_stats is not None:
                 root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_)
                 if root_slots:
-                    return CanICraftCurrentTier(
+                    return CanICraftThisAtAll(
                         self.step, self.root, root_stats, root_slots)
         return GatherMaterialsGoal(target_item=self.step.code,
                                    needed={self.step.code: self.step.quantity})
 
 
-class CanICraftCurrentTier(Decision[Goal]):
+class CanICraftThisAtAll(Decision[Goal]):
     """strategy_driver.py:972 (originally 933-1002). HOISTED per PF-2 to run
     BEFORE `DoesTheRecipeNeedAMonsterDrop` (originally line 924) -- see the
     module docstring for the measurement that forced this. "I cannot craft
@@ -321,7 +321,7 @@ class CanICraftCurrentTier(Decision[Goal]):
     chunking a chain whose final craft cannot run is work that cannot pay
     off."""
 
-    name = "CanICraftCurrentTier"
+    name = "CanICraftThisAtAll"
 
     def __init__(self, step: ObtainItem, root: ObtainItem,
                 root_stats: ItemStats, root_slots: list[str]) -> None:
@@ -365,9 +365,9 @@ class CanICraftCurrentTier(Decision[Goal]):
 
 class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
     """strategy_driver.py:924 (originally 914-932). Reached only once
-    `CanICraftCurrentTier` has confirmed the crafting skill is adequate
+    `CanICraftThisAtAll` has confirmed the crafting skill is adequate
     (PF-2 hoist). Absorbs the depth-budget chunking that previously lived in
-    the second half of `CanICraftCurrentTier` (originally 977-1002), since
+    the second half of `CanICraftThisAtAll` (originally 977-1002), since
     that logic only applies once a skill-adequate craft is in reach."""
 
     name = "DoesTheRecipeNeedAMonsterDrop"

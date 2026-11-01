@@ -5561,7 +5561,7 @@ DECISION_MUTATIONS = [
 
 # Killed by tests/test_ai/test_decisions_obtain_item.py
 # (test_a_skill_gated_root_raises_the_skill_by_one): the Task-5/PF-2 fix.
-# `CanICraftCurrentTier`'s "no" branch used to return GatherMaterials for the
+# `CanICraftThisAtAll`'s "no" branch used to return GatherMaterials for the
 # step -- gather materials for a craft that cannot run -- which was the only
 # link from a skill-gated gear target to the skill it needs, and it pointed
 # at the sibling. 11,434 LevelSkill(weaponcrafting->N) actions ran, target
@@ -5783,14 +5783,14 @@ OBTAIN_ITEM_DECISION_MUTATIONS = [
     # (12/12 checked have a monster-drop recipe input), so the skill gate was
     # unreachable through the ORIGINAL, unhoisted call order. This second
     # mutant reverts the HOIST itself: `IsThisAnIntermediateOnAChain.resolve`
-    # goes straight to the monster-drop check instead of `CanICraftCurrentTier`
+    # goes straight to the monster-drop check instead of `CanICraftThisAtAll`
     # first, restoring the pre-PF-2 order that made the rewire above dead
     # code. Killed by tests/test_ai/test_decisions_obtain_item.py.
     ("obtain_item: the skill-gate hoist is reverted -- intermediate-on-chain"
      " goes straight to the monster-drop check instead of the craftability"
      " check first",
      "                if root_slots:\n"
-     "                    return CanICraftCurrentTier(\n"
+     "                    return CanICraftThisAtAll(\n"
      "                        self.step, self.root, root_stats, root_slots)\n",
      "                if root_slots:\n"
      "                    return DoesTheRecipeNeedAMonsterDrop(\n"

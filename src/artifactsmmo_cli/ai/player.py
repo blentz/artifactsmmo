@@ -719,7 +719,7 @@ class GamePlayer:
     def _record_decision_targets(self, decision: "StrategyDecision") -> str | None:
         """The chosen step's item code.
 
-        ONE PRODUCER. `_decide_band` and `plan_from_state` each carried
+        ONE PRODUCER. `_decide_and_select` and `plan_from_state` each carried
         their own copy of this derivation — `plan_from_state`'s docstring says it
         "mirrors run()'s per-cycle decide+select", and a mirror is what it was:
         the copies drifted the moment `blocked_target` was added to one of them,
@@ -740,7 +740,7 @@ class GamePlayer:
         self._last_decide_crafting_target = crafting_target
         return crafting_target
 
-    def _decide_band(
+    def _decide_and_select(
         self,
         state: "WorldState",
         game_data: GameData,
@@ -818,7 +818,7 @@ class GamePlayer:
             refreshing = refresh_only(
                 cache, self._last_outcome, state.level,
                 goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL, party_called)
-            selected_goal, plan, goals_tried = self._decide_band(state, game_data, actions)
+            selected_goal, plan, goals_tried = self._decide_and_select(state, game_data, actions)
             if refreshing and cache is not None and selected_goal is not None \
                     and repr(selected_goal) == cache.goal_repr:
                 # The same goal again: keep the committed plan (its legs are
@@ -1071,15 +1071,15 @@ class GamePlayer:
         state = self.state
         ctx = self._selection_context()
         self._last_ctx = ctx
-        # Built BEFORE the decision, as `run()` builds it before `_decide_band`:
+        # Built BEFORE the decision, as `run()` builds it before `_decide_and_select`:
         # the root walk asks each gear target's step against this pool
         # (`_step_decline`), and the arbiter selects over the same one.
         actions = self._build_actions()
         # `history` and the search cache are wired here — NOT just in
-        # `_decide_band` — because the whole point of this site is to SHOW what
+        # `_decide_and_select` — because the whole point of this site is to SHOW what
         # production would decide, and a decide site that silently omits an
         # argument production passes is the two-plan-producers trap. It must
-        # keep mirroring `_decide_band` argument for argument.
+        # keep mirroring `_decide_and_select` argument for argument.
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
@@ -2448,7 +2448,7 @@ class GamePlayer:
             # `ctx` is what makes a node with a ready `ai/obtain_sources` route a
             # LEAF in the tier descent, so omitting it here traced a from-scratch
             # descent the bot never ran (whole-branch review, MINOR 5).
-            # `_last_ctx` is this cycle's context, computed in `_decide_band` /
+            # `_last_ctx` is this cycle's context, computed in `_decide_and_select` /
             # the decide path above.
             # THE THIRD CALL SITE. It is a fallback — `_last_decision` is None
             # only on a trace emitted before any real decide() this session —

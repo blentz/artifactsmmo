@@ -50,13 +50,13 @@ not suppress farming for a health potion's materials.
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
-GREY_FARM_NEXT_TIER_MARGIN = 5
+GREY_FARM_NEXT_RECIPE_MARGIN = 5
 """'Too far' threshold: the next-tier recipe suppresses grey farming only when
 its crafting_level is within this many levels of the current skill (half a
 10-level tier — close enough that grinding the skill is the better spend)."""
 
 
-def _next_tier_level(recipe_item: ItemStats, game_data: GameData) -> int | None:
+def _next_recipe_level(recipe_item: ItemStats, game_data: GameData) -> int | None:
     """Smallest crafting_level strictly above `recipe_item`'s among craftable
     same-family items, or None when no higher tier exists."""
     levels = [
@@ -129,10 +129,10 @@ def grey_farm_allowed(item_code: str, state: WorldState,
         # outright.
         return bool(bought)
     for recipe_item in consumers:
-        next_tier = _next_tier_level(recipe_item, game_data)
-        if next_tier is None:
+        next_level = _next_recipe_level(recipe_item, game_data)
+        if next_level is None:
             return True
         skill = state.skills.get(recipe_item.crafting_skill or "", 0)
-        if next_tier > skill + GREY_FARM_NEXT_TIER_MARGIN:
+        if next_level > skill + GREY_FARM_NEXT_RECIPE_MARGIN:
             return True
     return False

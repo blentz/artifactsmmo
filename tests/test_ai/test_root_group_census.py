@@ -83,7 +83,7 @@ def _record(store: LearningStore, decision: StrategyDecision) -> list[Cycle]:
 
 
 def _guard_world() -> GameData:
-    """The smallest catalogue `_decide_band` can run against: one winnable
+    """The smallest catalogue `_decide_and_select` can run against: one winnable
     monster so the walk has a trunk to resolve, a bank and a taskmaster so the
     selection context is buildable, and the shared ladder item stats."""
     gd = served_game_data()
@@ -124,7 +124,7 @@ def _decide_and_record(player: GamePlayer, store: LearningStore) -> list[Cycle]:
     the real cycle write site against whatever that produced."""
     assert player.state is not None
     assert player.game_data is not None
-    selected_goal, _plan, _tried = player._decide_band(
+    selected_goal, _plan, _tried = player._decide_and_select(
         player.state, player.game_data, player._build_actions())
     prev = player.state
     player._record_learning_cycle(
@@ -185,7 +185,7 @@ def test_a_guard_cycle_clears_when_the_next_cycle_is_won_by_the_walk(
     it. A field only written when a guard wins would smear one guard over every
     subsequent cycle until the next one fired.
 
-    Both cycles run through the real `_decide_band`. The second one's group is
+    Both cycles run through the real `_decide_and_select`. The second one's group is
     `none`: this deliberately minimal catalogue (one chicken, no recipes, no
     gear targets) gives `resolve_root` nothing to resolve, so the walk returns
     no root. That is the honest reading of THIS world and the point stands —

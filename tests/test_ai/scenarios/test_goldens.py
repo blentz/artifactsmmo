@@ -132,7 +132,7 @@ EXPECTATIONS: dict[str, Golden] = {
     # `GatherMaterials(iron_ore)`: gather materials for a sword the character
     # cannot craft at ANY quantity of iron_ore. This is the exact bug class
     # Task 5 fixes (weaponcrafting frozen at 10 fleet-wide, 2026-08-16 to
-    # 2026-08-22): `CanICraftCurrentTier` now runs BEFORE the monster-drop
+    # 2026-08-22): `CanICraftThisAtAll` now runs BEFORE the monster-drop
     # check, so a skill-gated root raises the skill instead. First action was
     # therefore LevelSkill(weaponcrafting->N), never a gather.
     #

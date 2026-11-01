@@ -1783,7 +1783,7 @@ def test_objective_step_skill_gated_root_raises_the_skill():
     target to the skill it needs, and it pointed at the sibling (materials),
     never the skill — weaponcrafting sat frozen at level 10 fleet-wide from
     2026-08-16 to 2026-08-22 as a result (11,434 LevelSkill actions, target
-    never once above 10). `CanICraftCurrentTier`'s "no" branch now raises the
+    never once above 10). `CanICraftThisAtAll`'s "no" branch now raises the
     skill by one increment instead (PF-2,
     `.superpowers/sdd/PLAN_goal_decision_graph/progress.md`); the step's
     materials are picked up on a later cycle once the skill has risen, via the

@@ -56,7 +56,7 @@ def _player_with_stub_plan(plan, goal):
         return goal, list(plan), [{"goal": repr(goal)}]
 
     # Replace only the expensive band, the collaborator — not the unit under test.
-    player._decide_band = _fake_decide  # type: ignore[attr-defined]
+    player._decide_and_select = _fake_decide  # type: ignore[attr-defined]
     return player, calls
 
 
@@ -98,7 +98,7 @@ def test_replan_persists_body_and_commitment(tmp_path):
     def _fake_decide(state, game_data, actions):
         return goal, list(plan), [{"goal": repr(goal)}]
 
-    player._decide_band = _fake_decide  # type: ignore[attr-defined]
+    player._decide_and_select = _fake_decide  # type: ignore[attr-defined]
     player._plan_or_reuse(make_state(), None, [])
 
     assert len(store.plan_bodies_for_goal("FakeGoal()")) == 1

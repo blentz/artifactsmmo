@@ -511,7 +511,7 @@ def objective_step_goal(
         # now the `Decision` graph in `decisions/obtain_item.py`, chained
         # from `obtain_item_decision` -- see that module and
         # `.superpowers/sdd/PLAN_goal_decision_graph/progress.md` (PF-2) for
-        # why `CanICraftCurrentTier` (the crafting-skill gate) runs BEFORE
+        # why `CanICraftThisAtAll` (the crafting-skill gate) runs BEFORE
         # `DoesTheRecipeNeedAMonsterDrop`, and `decision.py` for `resolve_node`.
         #
         # `node` is annotated as the full `Decision[Goal] | Goal | None` union
@@ -587,7 +587,7 @@ def objective_step_goal(
         # carries the skill AND the target level (current + 1, re-derived every
         # cycle by the graph), so the mapping is total: `ReachSkillGoal` aims
         # `LevelSkill` at that skill, exactly as `decisions/obtain_item.
-        # CanICraftCurrentTier` does for a skill-gated craft one layer down.
+        # CanICraftThisAtAll` does for a skill-gated craft one layer down.
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
     if isinstance(step, ReachTaskOutcome):
         # Phase 5-2c-iii-c: the task objective's step. A worthless task with a

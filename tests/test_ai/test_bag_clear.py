@@ -487,7 +487,7 @@ def test_the_verdict_reaches_the_log(gd: GameData, monkeypatch: pytest.MonkeyPat
         return None, [], []
 
     monkeypatch.setattr(arbiter, "select", select)
-    player._decide_band(player.state, player.game_data, player._build_actions())
+    player._decide_and_select(player.state, player.game_data, player._build_actions())
     assert f"[bag] {BAG_FULL_ALL_RELATED}" in capsys.readouterr().out
 
 
