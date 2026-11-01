@@ -5,7 +5,7 @@ Walks `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
 whose production `_fires` predicate returns True; None if none fire.
 
 IMPORTANT: this mirror does NOT re-implement `_fires`. It imports the
-REAL production functions from `tiers/guards.py` and `tiers/means.py`
+REAL production functions from `progression/guards.py` and `progression/means.py`
 and dispatches into them. Any divergence from the Lean walk-order is
 also a divergence from production semantics.
 
@@ -23,18 +23,18 @@ from artifactsmmo_cli.ai.fleet_work import supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     GUARD_ORDER,
     GuardKind,
     SelectionContext,
 )
-from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
-from artifactsmmo_cli.ai.tiers.means import (
+from artifactsmmo_cli.ai.progression.guards import _fires as _guard_fires
+from artifactsmmo_cli.ai.progression.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
     MeansKind,
 )
-from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
+from artifactsmmo_cli.ai.progression.means import _fires as _means_fires
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

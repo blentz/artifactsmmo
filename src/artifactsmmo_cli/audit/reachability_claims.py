@@ -56,7 +56,7 @@ VERIFICATION asks the real graph, built from `ast` over all of src/:
     imported module in that file; it deliberately does NOT count a bare
     `obj.name` attribute, because attribute names collide across classes
     (`RequirementGraph.is_obtainable` must not be read as a caller of
-    `tiers/skill_grind_target.is_obtainable`). A METHOD counts attribute
+    `progression/skill_grind_target.is_obtainable`). A METHOD counts attribute
     references, which is the only way a method is ever called. A name that is
     only STORED is bound, not read, and is no reference. Docstring text is never
     a reference: a module that NAMES a constant in prose does not read it.
@@ -79,9 +79,9 @@ from dataclasses import dataclass
 # The bound is TIGHT ON PURPOSE — it is exactly the population carried:
 # `ai/ge_order_config.AVG_CYCLE_SECONDS`, verified true. (Plan C Task 6 deleted
 # `CharacterObjective.utility_potion_targets` with its claim and taught the
-# index module constants; `tiers/skill_grind_target.is_obtainable` left on
+# index module constants; `progression/skill_grind_target.is_obtainable` left on
 # 2026-09-27, when it became the grind's production obtainability walk;
-# `player._tree_band_adequate` and `tiers/progression_tree_core.potion_type_weight`
+# `player._tree_band_adequate` and `progression/progression_tree_core.potion_type_weight`
 # were deleted with their claims by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely

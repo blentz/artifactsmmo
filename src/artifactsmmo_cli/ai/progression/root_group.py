@@ -30,7 +30,7 @@ it, so no promotion follows and `chosen_root` is the pick to group on;
 it gates are the same walk's.
 """
 
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ReachCharLevel, ReachSkillLevel
 
 ROOT_GROUPS = frozenset({"guard", "trunk", "skill_gate", "orphan_skill", "gear", "none"})
 """Every label `root_group_of` can return. The census groups on this set, so a

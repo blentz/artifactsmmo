@@ -74,7 +74,7 @@ class ScenarioCharacter:
     inference (0 when `bank` is known, None/unknown when `bank` is None) — set
     this to give a scenario bank gold distinct from pocket `gold` WITHOUT
     inflating `gold` itself. Needed because `state.gold` (pocket) and
-    `state.bank_gold` are read by DIFFERENT consumers: `tiers/objective.py`'s
+    `state.bank_gold` are read by DIFFERENT consumers: `progression/objective.py`'s
     `is_attainable_now` (near_term_gear candidacy) reads POCKET gold only,
     while `analyze_currency_leaves` (GAP-3/Task 3's reserve-aware gold-buy
     affordability) reads pocket + KNOWN bank gold. A scenario that needs extra

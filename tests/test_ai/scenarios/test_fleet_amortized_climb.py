@@ -35,8 +35,8 @@ from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.role_selection import ROLE_IDLE_WINDOW, ROLE_MIN_HOLD_CYCLES
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_gear_objective import _robby

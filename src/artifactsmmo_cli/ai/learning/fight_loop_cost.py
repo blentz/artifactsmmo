@@ -78,7 +78,7 @@ every other action in this module is priced as a multiple of it."""
 USABLE_HP_FRACTION = 1.0 - CRITICAL_HP_FRACTION
 """Share of max HP a character will actually spend before resting.
 
-Derived from the HP_CRITICAL guard's own threshold (`tiers/guards`) rather than
+Derived from the HP_CRITICAL guard's own threshold (`progression/guards`) rather than
 restated, so the projection cannot drift from the policy the runtime runs. It
 sets how many fights CHAIN between rests; above the three-second floor it does
 not affect the per-fight cost, because a longer chain ends in a proportionally

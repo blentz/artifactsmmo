@@ -12,7 +12,7 @@ import pytest
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
-from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+from artifactsmmo_cli.ai.progression.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
     GRIND_POLICY,

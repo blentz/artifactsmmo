@@ -17,7 +17,7 @@ is pinned separately by `test_skill_xp_positive_diff.py`.
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
+from artifactsmmo_cli.ai.progression.skill_grind_selection import (
     GrindCandidate,
     skill_grind_selection_pure,
 )

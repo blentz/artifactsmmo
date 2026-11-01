@@ -1,7 +1,7 @@
 """Tier-3 → planner bridge: map the strategy's chosen step to a parameterized
 existing goal.
 
-Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
+Lives above goals/ and progression/ (imports both) to avoid the goals→progression cycle."""
 
 import time
 from collections.abc import Mapping
@@ -103,19 +103,19 @@ from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     GuardKind,
     SelectionContext,
     active_guards,
     deposit_context,
     used_fraction,
 )
-from artifactsmmo_cli.ai.tiers.means import (
+from artifactsmmo_cli.ai.progression.means import (
     SELL_PRESSURE_FRACTION,
     MeansKind,
     active_means,
 )
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
@@ -123,13 +123,13 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.objective_needs import (
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective_needs import (
     NeedSet,
     link_demand,
     objective_needs,
 )
-from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
+from artifactsmmo_cli.ai.progression.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from artifactsmmo_cli.ai.world_state import WorldState
 

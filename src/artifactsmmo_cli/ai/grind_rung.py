@@ -9,7 +9,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

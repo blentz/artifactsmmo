@@ -46,8 +46,8 @@ from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.audit import currency_wall_census as cwc
 from artifactsmmo_cli.audit.currency_wall_census import (
     GOLD_ROW,

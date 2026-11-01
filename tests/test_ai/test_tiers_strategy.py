@@ -8,15 +8,15 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
-from artifactsmmo_cli.ai.tiers.strategy import (
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.progression_tree import decide_tree
+from artifactsmmo_cli.ai.progression.strategy import (
     StrategyEngine,
     _prereq_order,
     _producible,

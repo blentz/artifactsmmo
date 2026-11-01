@@ -10,8 +10,8 @@
   The Phase-18 value functions live in `Formal.GoalSystem`. The connection
   pattern is:
 
-    1.  Production's `_fires k s` predicate (from `tiers/guards.py` /
-        `tiers/means.py`, mirrored in `ProductionLadder.fires`) implies
+    1.  Production's `_fires k s` predicate (from `progression/guards.py` /
+        `progression/means.py`, mirrored in `ProductionLadder.fires`) implies
         the corresponding goal's `<goal>Satisfied s` predicate is FALSE,
         AND any extra Phase-18 routing-guards are satisfied.
 

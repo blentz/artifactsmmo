@@ -54,7 +54,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT
 

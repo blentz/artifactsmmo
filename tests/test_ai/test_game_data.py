@@ -1737,7 +1737,7 @@ def test_category_a_hbe_invariant_next_expansion_cost_positive_when_bank_present
     monkeypatch,
 ):
     """GlobalInvariants Category A (hbe): when bank_capacity > 0 (the
-    BANK_EXPAND firing gate in tiers/means.py:108), the server's
+    BANK_EXPAND firing gate in progression/means.py:108), the server's
     next_expansion_cost MUST be > 0. Without this, the Lean liveness
     proof's hbe hypothesis is vacuously satisfied yet semantically
     violated."""

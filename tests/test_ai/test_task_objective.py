@@ -40,10 +40,10 @@ from artifactsmmo_cli.ai.task_horizon import (
     TaskHorizon,
 )
 from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import root_category
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import root_category
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.test_grey_farm import _gd, make_state
 

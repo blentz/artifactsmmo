@@ -64,7 +64,7 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
+from artifactsmmo_cli.ai.progression.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.shared_world import shared_world

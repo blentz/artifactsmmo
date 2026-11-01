@@ -9,8 +9,8 @@
   now described by the list it actually iterates.) Mirrors `_fires` predicates
   from:
 
-    - `src/artifactsmmo_cli/ai/tiers/guards.py:65-88` (`_fires`)
-    - `src/artifactsmmo_cli/ai/tiers/means.py:65-113` (`_fires`)
+    - `src/artifactsmmo_cli/ai/progression/guards.py:65-88` (`_fires`)
+    - `src/artifactsmmo_cli/ai/progression/means.py:65-113` (`_fires`)
 
   `productionLadder s` returns `some k` where `k` is the FIRST `MeansKind`
   in `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [.objectiveStep]
@@ -237,7 +237,7 @@ def sellPressuredFires (s : State) : Bool :=
 
 /-- SUPPLY_BANK demand gate (2026-08-01 human ruling). Mirrors
     `fleet_work.py::SUPPLY_DEMAND_MIN` (Phase 5-2c-iv moved it there from
-    `tiers/means.py` when the rung became the fleet objective). The rung was
+    `progression/means.py` when the rung became the fleet objective). The rung was
     promoted out of
     DISCRETIONARY_ORDER into COLLECT_REWARD_ORDER, i.e. ABOVE `objectiveStep`;
     this threshold is what keeps that promotion from letting a fleet of siblings
@@ -339,20 +339,20 @@ def bankExpandFires (s : State) : Bool :=
   -- does the comparison over Python ints.
   && decide (s.gold + s.bankGold ≥ s.nextExpansionCost + s.goldReserve)
 
-/-- CRAFT_RELIEF. Mirrors `tiers/guards.py::_fires(CRAFT_RELIEF, …)`:
+/-- CRAFT_RELIEF. Mirrors `progression/guards.py::_fires(CRAFT_RELIEF, …)`:
     fires when inv pressure crosses `CRAFT_RELIEF_FRACTION` (0.70) AND a
     goal item is craftable from current inventory. Opaque Bool — the
     Lean state carries production's answer (see `Measure.State`); a diff
     harness asserts agreement with `craft_relief_candidates`. -/
 def craftReliefFires (s : State) : Bool := s.craftReliefFires
 
-/-- GE_CANCEL. Mirrors `tiers/guards.py::_fires(GE_CANCEL, …)`: fires iff
+/-- GE_CANCEL. Mirrors `progression/guards.py::_fires(GE_CANCEL, …)`: fires iff
     `cancel_selection.cancel_targets(...)` is nonempty. NO pressure gate — the
     guard's Python `_fires` is exactly `bool(cancel_targets(...))`, mirroring the
     fire-and-lose shape of `geBidFires`. -/
 def geCancelFires (s : State) : Bool := s.geCancelTargetsNonempty
 
-/-- RECYCLE_RELIEF. Mirrors `tiers/guards.py::_fires(RECYCLE_RELIEF, …)`:
+/-- RECYCLE_RELIEF. Mirrors `progression/guards.py::_fires(RECYCLE_RELIEF, …)`:
     bank full (not bankHasRoom) AND recyclable surplus nonempty. -/
 def recycleReliefFires (s : State) : Bool :=
   !(bankHasRoom s) && s.recyclableSurplusNonempty
@@ -419,7 +419,7 @@ def drainBankJunkFires (s : State) : Bool :=
 def geBidFires (s : State) : Bool :=
   s.geBidCandidateNonempty
 
-/-- SELL_RELIEF. Mirrors `tiers/guards.py::_fires(SELL_RELIEF, …)`:
+/-- SELL_RELIEF. Mirrors `progression/guards.py::_fires(SELL_RELIEF, …)`:
     bank full (not bankHasRoom) AND sellable inventory nonempty. -/
 def sellReliefFires (s : State) : Bool :=
   !(bankHasRoom s) && s.sellableInventoryNonempty

@@ -24,8 +24,8 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind, _fires
 from tests.test_ai.fixtures import make_state, season_8_status, served_game_data
 
 

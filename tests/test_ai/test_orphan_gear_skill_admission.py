@@ -16,7 +16,7 @@ from dataclasses import replace
 from artifactsmmo_cli.ai.craft_demand import craft_demand
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_gather_demand import _gd as _gather_gd
 

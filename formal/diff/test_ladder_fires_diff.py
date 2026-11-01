@@ -2,8 +2,8 @@
 
 Binds the Lean liveness ladder (`Formal.Liveness.ProductionLadder.fires` /
 `productionLadder`, evaluated through the `ladder_fires` oracle entry) to the
-REAL production firing predicates `_guard_fires` (tiers/guards.py) and
-`_means_fires` (tiers/means.py), reached through the real-import bridge
+REAL production firing predicates `_guard_fires` (progression/guards.py) and
+`_means_fires` (progression/means.py), reached through the real-import bridge
 `formal/sim/production_ladder.py`. This closes the trust gap flagged in the
 2026-06-18 SELECT audit: every liveness theorem reasons over the Lean ladder,
 but nothing had ever asserted the Lean ladder MIRRORS production.
@@ -167,8 +167,8 @@ from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -527,7 +527,7 @@ def _currency_turn_in_active(ctx: SelectionContext) -> int:
 def _party_join_active(ctx: SelectionContext) -> int:
     """The Lean `State.partyJoinActive` slot read off production's own ctx:
     `ctx.party_hold is not None` — the SAME condition
-    `tiers/guards.py::_fires(PARTY_JOIN, …)` tests, so the flag cannot drift
+    `progression/guards.py::_fires(PARTY_JOIN, …)` tests, so the flag cannot drift
     between the oracle and production."""
     return 1 if ctx.party_hold is not None else 0
 
@@ -1103,7 +1103,7 @@ def drive_and_contest(
 # ---------------------------------------------------------------------------
 # Slot 1 — craftRelief (arg[27]).  Production CRAFT_RELIEF guard fires iff
 # `used_fraction >= 0.70` AND `craft_relief_candidates(...)` non-empty
-# (tiers/guards.py + craft_relief.py). Net-relief gate requires a multi-input
+# (progression/guards.py + craft_relief.py). Net-relief gate requires a multi-input
 # recipe (input units consumed > 1 output). The items-task deliverable is the
 # priority-0 relief candidate; the production ladder reaches CRAFT_RELIEF via
 # the items-task path (the sim calls `_guard_fires` with an empty step profile,
@@ -1192,7 +1192,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 # ---------------------------------------------------------------------------
 # Slot 2 — recycleSurplus (arg[23]).  Production RECYCLE_SURPLUS means fires
 # iff `used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
-# (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
+# (progression/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
 # authority licenses for destruction (held above BOTH `keep_in_bag` and
 # `keep_owned` — for a bare weapon that is EQUIPPABLE_KEEP=1), skill at recipe
 # level, workshop known.
@@ -1289,7 +1289,7 @@ def test_recycle_surplus_near_miss_at_cap() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 3 — drainBankJunk (arg[31]).  Production DRAIN_BANK_JUNK fires iff
-# `used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (tiers/means.py
+# `used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (progression/means.py
 # + bank_drain.py): a non-objective code held in the BANK above its useful cap.
 # Like recycleSurplus it sits below the lifecycle slots and can only fire-and-
 # lose; the contest drives it TRUE under phase=none where BOTH ladders select
@@ -1381,7 +1381,7 @@ def test_drain_bank_junk_fill_boundary() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 4 — geBid (arg[34]).  Production GE_BID fires iff `ge_bid_candidates(...)`
-# is non-empty (tiers/means.py + ge_bid.py): an objective-step material that is
+# is non-empty (progression/means.py + ge_bid.py): an objective-step material that is
 # needed, not held, slow-to-self-craft, has a live GE buy-anchor + an NPC
 # alternative, no open order, and a `GE_POST` venue verdict. NO pressure gate
 # (geBidFires reads the candidate signal directly). Like drainBankJunk it sits
@@ -1560,7 +1560,7 @@ def test_party_join_near_miss_no_lease() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 1 — restForCombat (arg[25]).  Production `_guard_fires(REST_FOR_COMBAT)`
-# (tiers/guards.py ~136) fires iff: combat_monster set AND state.hp < max_hp AND
+# (progression/guards.py ~136) fires iff: combat_monster set AND state.hp < max_hp AND
 # NOT predict_win(state @ current hp) AND predict_win(state @ hp=max_hp). It is
 # ladder idx 1 (only hpCritical above), so a firing restForCombat WINS selection
 # on both ladders when hpCritical stays quiet — a STRONG contest: a wrong Lean

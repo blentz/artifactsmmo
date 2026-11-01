@@ -1,9 +1,9 @@
 """Whether a character can EVER come to hold an item (`is_suppliable`).
 
-Its own module, outside the `ai.tiers` package, because the gear objective
-(`gear_objective`) asks it and `ai.tiers`' package import runs the strategy
+Its own module, outside the `ai.progression` package, because the gear objective
+(`gear_objective`) asks it and `ai.progression`' package import runs the strategy
 engine, whose root walk reads the task horizon, which reads the gear objective
-(`gear_objective_for`, plan C Task 2): imported from `tiers.objective`, that
+(`gear_objective_for`, plan C Task 2): imported from `progression.objective`, that
 was an import cycle.
 """
 

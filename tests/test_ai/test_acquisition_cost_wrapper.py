@@ -62,7 +62,7 @@ from artifactsmmo_cli.ai.obtain_sources import (
     obtain_sources,
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.skill_grind_target import GRIND_PRICING
+from artifactsmmo_cli.ai.progression.skill_grind_target import GRIND_PRICING
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 

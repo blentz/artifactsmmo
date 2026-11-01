@@ -189,7 +189,7 @@ def test_d4_skill_gates_is_order_independent():
 # --- the two LEGITIMATE axes must SURVIVE ------------------------------------
 
 def test_axis1_edges_are_one_ply_not_a_closure():
-    """`tiers/strategy.py` does its own traversal on top; collapsing this into a
+    """`progression/strategy.py` does its own traversal on top; collapsing this into a
     closure breaks `act_step`."""
     g = build_requirement_graph(_dagger_gd())
     assert requirement_edges(g, "copper_dagger") == {"copper_bar": 6}

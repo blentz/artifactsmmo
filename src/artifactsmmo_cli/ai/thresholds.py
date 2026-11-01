@@ -1,7 +1,7 @@
 """Single source of truth for the HP-critical preempt threshold and the
 inventory space-pressure ladder.
 
-Stdlib-only leaf: imports nothing from the decision layers (goals/, tiers/) so
+Stdlib-only leaf: imports nothing from the decision layers (goals/, progression/) so
 any module can depend on it without an import cycle — the very reason these
 constants used to be re-typed in several places. Consolidating them here removes
 that silent-drift risk (DRY backlog Group A, findings #2 and #3).

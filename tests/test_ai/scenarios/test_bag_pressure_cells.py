@@ -44,7 +44,7 @@ from artifactsmmo_cli.ai.thresholds import (
     PRESSURE_CRITICAL_FRACTION,
     PRESSURE_HIGH_FRACTION,
 )
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
+from artifactsmmo_cli.ai.progression.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 

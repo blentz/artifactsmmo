@@ -35,7 +35,7 @@ weakref per catalogue instead — a fixed handful of bytes — and reclaims the
 sub-cache at exactly the moment the catalogue itself is reclaimed.
 
 WHY THIS IS A MODULE AND NOT A HABIT. `loadout_cache`, `kit_selection`,
-`tiers/skill_grind_target` and `weapon_winnability` each hand-rolled their own
+`progression/skill_grind_target` and `weapon_winnability` each hand-rolled their own
 `_cache_for`, and the fifth site (`unlock_boost`, since retired) hand-rolled it WRONG — no
 reference, no finalizer, no purge. Four copies of an argument about CPython
 deallocation order is four chances to drop the load-bearing line. There is one

@@ -25,13 +25,13 @@ from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_strategy_driver import _ctx
 

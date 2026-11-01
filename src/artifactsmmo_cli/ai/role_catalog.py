@@ -5,7 +5,7 @@ A role is a STRATEGY declaration, the same category of thing as
 "generic over API taxonomy, never hardcoded" rule (which governs item keep/junk
 classification) does not apply. What DOES apply is that a role must not name a
 skill the server lacks: `validate_catalog` checks every declared skill against
-the api-client-derived sets in `tiers/skill_classes.py` and raises rather than
+the api-client-derived sets in `progression/skill_classes.py` and raises rather than
 silently no-opping, per "use only API data or fail with an error".
 
 `skill_classes` exports the RAW schema vocabularies `GATHERING_SKILLS` /
@@ -36,7 +36,7 @@ craft="alchemy"`.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from artifactsmmo_cli.ai.tiers.skill_classes import CRAFT_SKILLS, GATHERING_SKILLS
+from artifactsmmo_cli.ai.progression.skill_classes import CRAFT_SKILLS, GATHERING_SKILLS
 
 
 @dataclass(frozen=True)

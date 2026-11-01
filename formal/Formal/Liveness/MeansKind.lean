@@ -4,18 +4,18 @@
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
   ladder. The ladder is the concatenation
 
-    GUARD_ORDER (from `tiers/guards.py`)          -- REST_FOR_COMBAT after
+    GUARD_ORDER (from `progression/guards.py`)          -- REST_FOR_COMBAT after
                                                      HP_CRITICAL; CRAFT_RELIEF
                                                      between DISCARD_CRITICAL and
                                                      DEPOSIT_FULL; GEAR_REVIEW
                                                      then CRAFT_POTIONS last
                                                      (lowest-priority guards)
-    ++ COLLECT_REWARD_ORDER (from `tiers/means.py`) -- SUPPLY_BANK and
+    ++ COLLECT_REWARD_ORDER (from `progression/means.py`) -- SUPPLY_BANK and
                                                      CURRENCY_TURNIN left it in
                                                      Phase 5-2c-iv (the fleet
                                                      objective's step)
     ++ [OBJECTIVE_STEP]
-    ++ DISCRETIONARY_ORDER (from `tiers/means.py`) -- incl SELL_IDLE
+    ++ DISCRETIONARY_ORDER (from `progression/means.py`) -- incl SELL_IDLE
                                                      and WAIT
 
   `allInLadderOrder` below is the authoritative enumeration; its length is
@@ -24,7 +24,7 @@
 
   Phase 20e-v2 step 2: a `wait` last-resort means is appended to
   DISCRETIONARY_ORDER, mirroring `MeansKind.WAIT` in
-  `src/artifactsmmo_cli/ai/tiers/means.py:32`. Its firing predicate is
+  `src/artifactsmmo_cli/ai/progression/means.py:32`. Its firing predicate is
   unconditionally `true`, so `productionLadder` is unconditionally
   non-`none` — see `Formal/Liveness/NoDeadlockV2.lean`.
 
@@ -39,8 +39,8 @@
 namespace Formal.Liveness.MeansKind
 
 /-- Production MeansKind enum. Mirrors:
-    - `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`
-    - `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`, split into
+    - `src/artifactsmmo_cli/ai/progression/guards.py::GuardKind`
+    - `src/artifactsmmo_cli/ai/progression/means.py::MeansKind`, split into
       COLLECT_REWARD_ORDER and DISCRETIONARY_ORDER
     - OBJECTIVE_STEP — separate single tier (the objective StepGoal).
 

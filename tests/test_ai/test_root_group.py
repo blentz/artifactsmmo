@@ -2,8 +2,8 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.root_group import ROOT_GROUPS, root_group_of
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.root_group import ROOT_GROUPS, root_group_of
 
 
 def test_guard_wins_over_every_root() -> None:

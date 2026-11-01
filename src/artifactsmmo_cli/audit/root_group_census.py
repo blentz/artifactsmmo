@@ -9,7 +9,7 @@ A NULL `root_group` is a row written before the column existed (2026-09-21). It
 is reported as `unattributed` and counted in no group: treating it as a choice
 would let pre-migration history decide a post-migration verdict.
 
-WHAT EACH LABEL COUNTS (see `ai/tiers/root_group.py` for the rule itself):
+WHAT EACH LABEL COUNTS (see `ai/progression/root_group.py` for the rule itself):
 
 * `guard` is a cycle the arbiter's guard ladder took away from the walk — a
   guard that fired AND won `select_pure`, not one that merely fired. About 15%
@@ -31,7 +31,7 @@ two cases and cannot distinguish them. Callers must not read it as a clean
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.tiers.root_group import ROOT_GROUPS
+from artifactsmmo_cli.ai.progression.root_group import ROOT_GROUPS
 
 
 @dataclass(frozen=True)

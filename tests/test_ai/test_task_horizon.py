@@ -58,7 +58,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state

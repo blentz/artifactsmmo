@@ -27,8 +27,8 @@ from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state

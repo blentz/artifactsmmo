@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from tests.test_ai.search_bounds import NO_CLOCK, SEARCH_NODE_BUDGET
 
 _ORE = "supply_ore"

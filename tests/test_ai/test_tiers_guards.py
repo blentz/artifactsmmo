@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     PRESSURE_HIGH_FRACTION,
 )
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     GUARD_ORDER,
     GuardKind,
     SelectionContext,
@@ -223,7 +223,7 @@ def test_fires_returns_false_for_unknown_guard_kind():
     state = make_state(hp=100, max_hp=100)
     ctx = _ctx()
     unknown = object()  # not a GuardKind member
-    with patch("artifactsmmo_cli.ai.tiers.guards.GUARD_ORDER", (unknown,)):  # type: ignore[arg-type]
+    with patch("artifactsmmo_cli.ai.progression.guards.GUARD_ORDER", (unknown,)):  # type: ignore[arg-type]
         result = _fires(unknown, state, GameData(), None, ctx)  # type: ignore[arg-type]
     assert result is False
 
@@ -844,7 +844,7 @@ def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
     proves `fires(DEPOSIT_FULL) => depositInventoryValue > 0`, and the ordering
     that makes it true (DEPOSIT_FULL_FRACTION 0.90 strictly above the goal's
     ramp start 0.85) is spelled out at `DISCARD_HIGH_FRACTION`'s comment in
-    tiers/guards.py. The model has ONE `usedFractionRat`; production had TWO —
+    progression/guards.py. The model has ONE `usedFractionRat`; production had TWO —
     the guard's `used_fraction` is max(QUANTITY, SLOT) while the goal read the
     quantity fraction alone with a binary `slots_free == 0 -> 1.0` override.
 

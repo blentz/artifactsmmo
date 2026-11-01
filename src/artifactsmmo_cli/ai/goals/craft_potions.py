@@ -3,7 +3,7 @@ equip them (docs/PLAN_consumable_utility.md increment 5). The batch is
 `potion_supply.potion_batch` over the chosen loadout: the bag's and bank's
 copies first, then crafted runs sized by the supply ladder; the goal is the
 potions in the bag, then ONE equip into the utility slot `utility_slot_for`
-names. Preemptive guard-tier goal (wired in tiers/guards.py)."""
+names. Preemptive guard-tier goal (wired in progression/guards.py)."""
 
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout

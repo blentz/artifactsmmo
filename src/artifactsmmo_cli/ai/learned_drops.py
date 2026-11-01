@@ -30,7 +30,7 @@ class LearnedDrops:
     `attempts` holds each observed source's attempt count, `hits` each
     `(source, item)` pair's hits; a pair absent from either is 0. Both are
     sorted tuples so the value is hashable: a cache that prices through it
-    keys on it (`tiers.skill_grind_target`)."""
+    keys on it (`progression.skill_grind_target`)."""
 
     attempts: tuple[tuple[str, int], ...]
     hits: tuple[tuple[tuple[str, str], int], ...]

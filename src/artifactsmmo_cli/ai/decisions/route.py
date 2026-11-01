@@ -52,7 +52,7 @@ from artifactsmmo_cli.ai.obtain_sources import obtain_sources
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,

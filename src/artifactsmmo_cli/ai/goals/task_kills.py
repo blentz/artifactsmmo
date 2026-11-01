@@ -1,6 +1,6 @@
 """TaskKillsGoal: one more kill toward the held monsters task (Phase 5-2c-iii-c).
 
-The step of the task objective (`tiers.meta_goal.ReachTaskOutcome`). It is the
+The step of the task objective (`progression.meta_goal.ReachTaskOutcome`). It is the
 task's counterpart to `GrindCharacterXPGoal`, and the difference is the measure:
 a grind wants character XP, a task wants its count. A task monster far below the
 character pays no XP (the server's zero-XP band) yet every kill still counts, so

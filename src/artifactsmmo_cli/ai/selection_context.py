@@ -3,11 +3,11 @@ cores read (guards, keep authority, deposit selection).
 
 It lives in its OWN module, below every consumer, because the keep authority
 (`ai/inventory_keep.py`) and the deposit selector (`ai/bank_selection.py`) both
-need it while `ai/tiers/guards.py` — its historical home — imports THEM. Keeping
+need it while `ai/progression/guards.py` — its historical home — imports THEM. Keeping
 the dataclass in `guards` made `guards -> bank_selection -> inventory_keep ->
 guards` a cycle the moment deposit started asking the keep authority how many
-copies it may bank. `tiers.guards` re-exports the name, so every existing
-`from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
+copies it may bank. `progression.guards` re-exports the name, so every existing
+`from artifactsmmo_cli.ai.progression.guards import SelectionContext` still resolves.
 
 Pure data: no behavior, so this module imports nothing else from the package —
 the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
@@ -43,7 +43,7 @@ class SelectionContext:
     # game_data, None)`), computed by the player per cycle. Threaded here so
     # the BANK_EXPAND means guard applies the SAME reserve gate as the proven
     # should_expand_bank core WITHOUT means.py importing progression_reserve
-    # (which imports back into the tiers package — circular). Default 0 =
+    # (which imports back into the progression package — circular). Default 0 =
     # reserve-free (legacy fixtures keep their old semantics).
     gold_reserve: int = 0
     # 2026-08-19 (S-051 + the USER's no-immediate-redraw rule). True when a task

@@ -40,10 +40,10 @@ and compare the `any()` result against the Lean oracle's `combatCapable` fold.
 """
 import random
 
-import artifactsmmo_cli.ai.tiers.prerequisite_graph as pg_mod
+import artifactsmmo_cli.ai.progression.prerequisite_graph as pg_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import combat_capable, prerequisites
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.prerequisite_graph import combat_capable, prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state

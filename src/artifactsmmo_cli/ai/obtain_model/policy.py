@@ -170,7 +170,7 @@ PIECE_POLICY = Policy(all_gather_routes=True, gather_skill_gate=False, craft_ski
 §2.3, §2.4): what the global gear objective counts as achievable
 (`gear_objective.achievable`), what it prices a piece by
 (`gear_objective._price`) and what the step graph counts as a leaf it can
-produce (`tiers/strategy.actionable_step`). Three policies answered those
+produce (`progression/strategy.actionable_step`). Three policies answered those
 three questions before (plan B), and they disagreed: `lich_race_trophy` was
 achievable through its live event vendor and then declined `no_step_goal`,
 because the step graph refused every event NPC.

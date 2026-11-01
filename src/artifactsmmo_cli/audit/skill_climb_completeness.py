@@ -83,9 +83,9 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_grind_target import grind_model, is_obtainable
+from artifactsmmo_cli.ai.progression.meta_goal import ReachSkillLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.skill_grind_target import grind_model, is_obtainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)

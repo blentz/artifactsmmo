@@ -270,7 +270,7 @@ def combat_deficit(
     # and the same character at 385/385 reported -10 with one that does. A gear
     # plan that moves with transient hp is the same defect as the 7,000x iron-gear
     # price swing, fixed the same way (PLAN_iron_gear_acquisition increment 2),
-    # and `tiers/objective.py` sets the precedent for building `rested` here.
+    # and `progression/objective.py` sets the precedent for building `rested` here.
     state = dataclasses.replace(state, hp=state.max_hp)
     if predict_win(state, game_data, monster):
         return None

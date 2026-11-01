@@ -36,8 +36,8 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_batch import task_batch_size
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai.fixtures import make_state, patched_logs, season_8_status
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
@@ -906,7 +906,7 @@ def test_run_derives_crafting_target_from_fallback_obtain_item():
     """When the top chosen_step is not an ObtainItem, run() walks fallback_steps
     and adopts the first ObtainItem's code as the crafting_target so the bank
     keep-set protects that chain's materials (player.py lines 302-307)."""
-    from artifactsmmo_cli.ai.tiers import ObtainItem
+    from artifactsmmo_cli.ai.progression import ObtainItem
 
     class _FallbackDecision:
         chosen_step = None            # not an ObtainItem -> crafting_target None

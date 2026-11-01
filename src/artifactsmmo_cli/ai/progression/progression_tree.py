@@ -41,9 +41,9 @@ from artifactsmmo_cli.ai.decisions import root as _root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers import strategy
-from artifactsmmo_cli.ai.tiers.meta_goal import StepDecline, no_decline
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression import strategy
+from artifactsmmo_cli.ai.progression.meta_goal import StepDecline, no_decline
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # WAVE 3a deleted four private helpers from here — `_candidate_root`,
@@ -68,14 +68,14 @@ from artifactsmmo_cli.ai.world_state import WorldState
 #
 # WAVE 3b task 4 then deleted the whole ranking substrate that had been left
 # stranded by THE FLIP (re-derived list §3 rows 8/9/10/11/12/16 and §5): the
-# modules `tiers/achievability_core`, `ai/role_alignment`,
-# `tiers/branch_objective`, `tiers/progression_choice` and
-# `tiers/horizon_contribution`, and from this file `_j_by_identity`,
+# modules `progression/achievability_core`, `ai/role_alignment`,
+# `progression/branch_objective`, `progression/progression_choice` and
+# `progression/horizon_contribution`, and from this file `_j_by_identity`,
 # `_synergy_map`, `_achievability_map`, `_role_map`, `_effort_for`,
 # `_skill_gate_levels` and `_synergy_map`'s private `_TRUNK_DEMAND` datum. Each
 # had zero production callers: the only occurrence of every one of those names
-# in `src/` was its own definition. `tiers/synergy_core` STAYS — it has live
-# non-ranking consumer at `tiers/taskmaster_choice.py` (`tiers/means_worth.py` retired).
+# in `src/` was its own definition. `progression/synergy_core` STAYS — it has live
+# non-ranking consumer at `progression/taskmaster_choice.py` (`progression/means_worth.py` retired).
 
 
 def _resolution_rows(state: WorldState, game_data: GameData,

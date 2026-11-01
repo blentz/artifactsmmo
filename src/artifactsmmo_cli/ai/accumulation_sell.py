@@ -100,7 +100,7 @@ def accumulation_excess(held: int, cap: int) -> int:
 
 def _is_sellable(code: str, game_data: GameData) -> bool:
     """An item with a REACHABLE NPC buyer that is tradeable — the per-item rule
-    behind `tiers/guards._has_sellable`. A buyer in the price table whose
+    behind `progression/guards._has_sellable`. A buyer in the price table whose
     `npc_location` is None (a dormant event merchant) does NOT count, matching
     `NpcSellAction.is_applicable`."""
     stats = game_data.item_stats(code)
@@ -185,7 +185,7 @@ def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
     """A held item a buyer can actually take RIGHT NOW.
 
     THE PREDICATE ALL THREE SELL RUNGS ASK — SELL_PRESSURED, SELL_IDLE and the
-    SELL_RELIEF guard. It replaces `tiers/guards._has_sellable`, which asked only
+    SELL_RELIEF guard. It replaces `progression/guards._has_sellable`, which asked only
     whether some held code had a LOCATED buyer and a tradeable flag, and was blind
     to whether that buyer's event window is OPEN.
 

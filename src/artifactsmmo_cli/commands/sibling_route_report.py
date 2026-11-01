@@ -97,7 +97,7 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_sibling_census import (
     BlockedTargetVerdict,

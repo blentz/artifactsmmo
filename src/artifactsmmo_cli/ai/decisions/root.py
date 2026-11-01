@@ -33,8 +33,8 @@ from datetime import UTC, datetime
 
 # MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
-# `tiers.meta_goal` and `tiers.skill_grind_target`, both of which run
-# `ai/tiers/__init__` -> `strategy` -> `progression_tree` -> THIS module. So an
+# `progression.meta_goal` and `progression.skill_grind_target`, both of which run
+# `ai/progression/__init__` -> `strategy` -> `progression_tree` -> THIS module. So an
 # entry that imports `gather_demand` FIRST (e.g. `import
 # artifactsmmo_cli.ai.gather_demand` on its own) reaches this line while
 # `gather_demand` is only half built, and a NAME import of `gather_demand`/
@@ -46,12 +46,12 @@ from artifactsmmo_cli.ai import gather_demand as _gather_demand
 
 # `skill_grindable` is imported as a MODULE, not as `from ... import
 # skill_is_grindable`, and that is load-bearing rather than stylistic. It
-# imports `ai.tiers.skill_grind_target`, which runs `ai/tiers/__init__.py` ->
+# imports `ai.progression.skill_grind_target`, which runs `ai/progression/__init__.py` ->
 # `strategy` -> `progression_tree` -> THIS module: so whenever it is the first
 # of the two to be imported, root.py executes while it is only half built and a
 # NAME import raises ImportError. Binding the module object defers the
 # attribute lookup to CALL time, by which point both halves are complete.
-# Exactly the idiom `tiers/strategy.py:13` and `tiers/progression_tree.py:37`
+# Exactly the idiom `progression/strategy.py:13` and `progression/progression_tree.py:37`
 # already use on each other, for this reason. (It used to be `level_skill`,
 # whose `LevelSkill.is_applicable` wrapped this same predicate.)
 from artifactsmmo_cli.ai import skill_grindable as _skill_grindable
@@ -59,7 +59,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.decision import Decision, resolve_node
 
 # MODULE import, same idiom as `_skill_grindable` above and for the same reason:
-# `route` imports `tiers.meta_goal`, which runs `tiers/__init__` ->
+# `route` imports `progression.meta_goal`, which runs `progression/__init__` ->
 # `strategy` -> `progression_tree` -> THIS module, so whichever of the two
 # is reached first executes while the other is half built. A NAME import
 # of `route_price` raises ImportError when `decisions.route` is the entry.
@@ -84,7 +84,7 @@ from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
 from artifactsmmo_cli.ai.task_worth import task_worth_for
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachFleetOutcome,
@@ -93,7 +93,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     StepDecline,
     no_decline,
 )
-from artifactsmmo_cli.ai.tiers.objective import (
+from artifactsmmo_cli.ai.progression.objective import (
     CharacterObjective,
     GearTarget,
 )

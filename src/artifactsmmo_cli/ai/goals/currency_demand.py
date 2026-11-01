@@ -34,8 +34,8 @@ leaf is never blocked by its own reservation, only by OTHER unmet targets.
 Item-currency legs are untouched: the reserve is gold-denominated only.
 Threading: `analyze_currency_leaves` already receives `state`/`game_data`, so
 `progression_reserve.reserve_floor` is called directly here — `ai/goals/` has
-no back-edge into the `tiers` package (`progression_reserve` reads
-`ai/equip_value`, outside `tiers`), confirmed by `gathering.py` already
+no back-edge into the `progression` package (`progression_reserve` reads
+`ai/equip_value`, outside `progression`), confirmed by `gathering.py` already
 importing `reserve_floor` directly for the craft-vs-buy gate, and by a direct
 import smoke test. No new SelectionContext threading needed.
 
@@ -145,7 +145,7 @@ from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plann
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi
 from artifactsmmo_cli.ai.requirement_projections import demand_set
-from artifactsmmo_cli.ai.tiers.objective import GOLD
+from artifactsmmo_cli.ai.progression.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 

@@ -11,12 +11,12 @@ coverage over the mirrored inductives at elaboration time.
 share this harness was retired with the flat ranking in progression-tree
 Phase 4b.)
 """
-from artifactsmmo_cli.ai.tiers.decide_key import (
+from artifactsmmo_cli.ai.progression.decide_key import (
     goal_repr_of_guard,
     goal_repr_of_means,
 )
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
-from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.progression.guards import GuardKind
+from artifactsmmo_cli.ai.progression.means import MeansKind
 from formal.diff.oracle_client import run_oracle
 
 # --- Dispatcher exhaustiveness ---------------------------------------------

@@ -72,8 +72,8 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachTaskOutcome
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world

@@ -48,7 +48,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 

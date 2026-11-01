@@ -1221,7 +1221,7 @@ open Formal.PriorityBand
 #check @Formal.RefusalFact.game_fact_voids_on_redefinition  -- a redefined item re-opens it
 
 -- LeafAttainable required roles (acquisition-leaf attainability;
--- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):
+-- src/artifactsmmo_cli/ai/progression/leaf_attainable_core.py + progression/objective.py is_attainable):
 #check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
 #check @Formal.LeafAttainable.leafAttainable_task_earnable   -- task source alone ⇒ attainable
 #check @Formal.LeafAttainable.leafAttainable_monotone_task   -- monotone in the task source

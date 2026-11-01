@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
@@ -40,7 +40,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     StepDecline,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.tool_objective import drop_tool_target, tool_first
 from artifactsmmo_cli.ai.world_state import WorldState
 

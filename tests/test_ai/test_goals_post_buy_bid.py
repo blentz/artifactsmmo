@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.means import MeansKind, means_fires
+from artifactsmmo_cli.ai.progression.means import MeansKind, means_fires
 from tests.test_ai.fixtures import make_state
 
 

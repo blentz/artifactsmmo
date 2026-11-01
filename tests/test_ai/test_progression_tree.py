@@ -34,13 +34,13 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.progression_tree import decide_tree
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, season_8_status
 from tests.test_ai.shared_world import attached, shared_world
 

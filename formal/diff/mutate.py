@@ -44,33 +44,33 @@ SHED_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
                    / "shed_reachability_completeness.py")
 LIVENESS_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
                        / "liveness_completeness.py")
-GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "guards.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
 OPTIMIZE_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "optimize_loadout.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
-SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
+SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "skill_grind_selection.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
-PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
+PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "prerequisite_graph.py"
 RECYCLE_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "recycle.py"
 DESTRUCTIVE_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "destructive_license.py"
-OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
-STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
+OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "objective.py"
+STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
 KIT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "kit_selection.py"
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
-OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
+OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "owned_count.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
-DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
+DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "decide_key.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
@@ -112,9 +112,9 @@ CHOSEN_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "chosen_loadout.
 UTILITY_SLOT_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "utility_slot.py"
 CRAFT_POTIONS_GOAL_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "craft_potions.py"
 CONSUMABLE_FLOOR_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
-MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
+MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "means.py"
 FLEET_WORK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_work.py"
-GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "guards.py"
 THRESHOLDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "thresholds.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
@@ -183,7 +183,7 @@ TRANSITION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "transit
 DROP_ROUTES_SRC_T14A = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model"
                         / "drop_routes.py")
 CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
-SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
+SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ROLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_selection.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
@@ -197,7 +197,7 @@ GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_pre
 FOOD_PRODUCER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "food_producer.py"
 BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
-TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
+TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "taskmaster_choice.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
 # Task 9 (formal/mutation debt for the fleet-currency-turn-in epic).
@@ -400,7 +400,7 @@ FIGHT_OPPONENT_RECORD_MUTATIONS = [
 ]
 
 # Doomed-memo (2026-06-15 feather_coat CPU-peg fix).
-LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
+LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "leaf_attainable_core.py"
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
@@ -3020,7 +3020,7 @@ _GRIND_GUARD = (
 # theorem above without touching skill_grind_selection.py). Killed by
 # tests/test_ai/scenarios/test_grind_deep_chain.py, which drives the REAL
 # catalog.
-SKILL_GRIND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_target.py"
+SKILL_GRIND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "skill_grind_target.py"
 
 SKILL_GRIND_TARGET_MUTATIONS = [
     # THE REGRESSION: go back to counting recipe entries instead of chain
@@ -5368,7 +5368,7 @@ GRIND_OBTAINABLE_MUTATIONS = [
 ]
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
 # `is_suppliable` (its own module since plan C Task 2: the gear objective asks
-# it, and importing it from `tiers.objective` closed an import cycle). Killed by
+# it, and importing it from `progression.objective` closed an import cycle). Killed by
 # the test the near-term group runs, tests/test_ai/test_tiers_objective.py.
 SUPPLIABLE_MUTATIONS = [
     ("objective: every candidate is suppliable",
@@ -7221,7 +7221,7 @@ SYNERGY_CORE_MUTATIONS = [
 # the role-owned-skills group. Every one anchored a line in a file that no longer
 # exists, or in `player.py`'s `_role_owned_skills`, whose only reader was
 # `_role_map`. `SYNERGY_CORE_MUTATIONS` and `MEMO_ENRICH_MUTATIONS` STAY:
-# `tiers/synergy_core` and the enriched requirement multiset both have live
+# `progression/synergy_core` and the enriched requirement multiset both have live
 # non-ranking consumers.
 
 # RequirementGraphMemo.requirement_multiset_for — the enriched (item + skill +
@@ -11178,7 +11178,7 @@ TELEPORT_COST_MUTATIONS = [
 
 # O5.4 Brick 5 — ladder firing-predicate mutations. These perturb the NUMERIC
 # thresholds / comparators / structural conjuncts of the guard- and means-tier
-# `_fires` predicates (tiers/guards.py + tiers/means.py). They are killed by
+# `_fires` predicates (progression/guards.py + progression/means.py). They are killed by
 # formal/diff/test_ladder_fires_diff.py, which binds the Lean
 # `Formal.Liveness.ProductionLadder.fires`/`productionLadder` (via the
 # `ladder_fires` oracle) to these SAME `_fires` predicates through the
@@ -13054,7 +13054,7 @@ TASK_EXCHANGE_GOAL_MUTATIONS = [
 
 TASK_CANCEL_GOAL_MUTATIONS = [
     # Anchor refreshed 2026-08-25: the goal no longer re-derives the cancel REASON
-    # (`task_decision == PIVOT`) — `tiers/means._fires` is the sole producer of it,
+    # (`task_decision == PIVOT`) — `progression/means._fires` is the sole producer of it,
     # and re-deriving only its third arm made the goal report 0.0 for the two other
     # arms, on three of three offline cells where it is actually SELECTED. What
     # survives here is the scalar the arbiter records as `goal_rank`.

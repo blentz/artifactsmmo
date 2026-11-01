@@ -7,13 +7,13 @@ A new enum variant added without a table entry raises `KeyError` here.
 """
 import pytest
 
-from artifactsmmo_cli.ai.tiers.decide_key import (
+from artifactsmmo_cli.ai.progression.decide_key import (
     _MEANS_REPR,
     goal_repr_of_guard,
     goal_repr_of_means,
 )
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
-from artifactsmmo_cli.ai.tiers.means import (
+from artifactsmmo_cli.ai.progression.guards import GuardKind
+from artifactsmmo_cli.ai.progression.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
     MeansKind,

@@ -111,7 +111,7 @@ class CycleBase(SQLModel):
 
     root_group: str | None = Field(default=None, index=True)
     """Which branch of the root walk produced this cycle's root — one of
-    `tiers/root_group.ROOT_GROUPS`, or None on a row written before this column
+    `progression/root_group.ROOT_GROUPS`, or None on a row written before this column
     existed (2026-09-21).
 
     `selected_goal` records the STEP that ran, which cannot tell an orphan skill

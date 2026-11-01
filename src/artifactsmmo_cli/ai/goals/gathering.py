@@ -434,7 +434,7 @@ class GatherMaterialsGoal(Goal):
         # (drop the dominated ones). Mirrors the GatherSelection narrowing above:
         # kills replace gathers; monsters replace resource nodes. An item with no
         # winnable dropper contributes no FightAction (it also reads as
-        # not-producible in tiers/strategy._producible, so no unreachable plan).
+        # not-producible in progression/strategy._producible, so no unreachable plan).
         # The narrowing itself now lives in ai/drop_fight_selection.py, shared
         # with UpgradeEquipmentGoal rather than copied into it.
         # Emit a fight for EVERY monster-drop in the full recipe closure, not just
@@ -451,7 +451,7 @@ class GatherMaterialsGoal(Goal):
             # One selection, shared with UpgradeEquipmentGoal's target and
             # material edges (ai/drop_fight_selection.py), which in turn asks
             # the shared oracle ai/drop_obtainability — the SAME verdict the
-            # tiers/ reachability walks consult. Nothing is decided here that
+            # progression/ reachability walks consult. Nothing is decided here that
             # selection cannot see except this action pool itself (the oracle's
             # named residual). Live Robby L12 could not gather feathers from L1
             # chickens without the drop_farm variant the selection returns (the

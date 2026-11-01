@@ -14,7 +14,7 @@ import pytest
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
 import artifactsmmo_cli.ai.objective_demand as objective_demand_mod
 import artifactsmmo_cli.ai.player as player_mod
-import artifactsmmo_cli.ai.tiers.skill_grind_target as grind_mod
+import artifactsmmo_cli.ai.progression.skill_grind_target as grind_mod
 from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route_options
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.game_data import GameData
@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.skill_grind_target import _cache_key, build_selectable_grind_candidates
+from artifactsmmo_cli.ai.progression.skill_grind_target import _cache_key, build_selectable_grind_candidates
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 CTX = TIMED_NO_PROFILE_CONTEXT

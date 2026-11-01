@@ -25,7 +25,7 @@ behind four separate bugs here, and why `stat_projection_completeness` records
 it as a claim about the constant `AVG_CYCLE_SECONDS` and checks it against the
 real reference graph on every gate run. It fails the day code loads the
 constant. The module itself is consumed — `cancel_selection`,
-`goals/post_buy_bid` and `tiers/means` all import `TTL_CYCLES`.)
+`goals/post_buy_bid` and `progression/means` all import `TTL_CYCLES`.)
 """
 
 TTL_CYCLES = 20

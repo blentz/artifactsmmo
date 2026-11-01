@@ -295,7 +295,7 @@ class MonsterCatalog:
         """Level of a monster, or 0 when unknown.
 
         Invariant-OK silent default: every caller (FightAction.is_applicable,
-        task_feasibility, unlock_bank, reach_unlock_level, tiers/guards) treats
+        task_feasibility, unlock_bank, reach_unlock_level, progression/guards) treats
         `0` as a documented "not a known monster" probe. Changing this to
         raise would force adding try/except in 5 places (multiple-error-handling
         antipattern). The probe semantics is the contract."""

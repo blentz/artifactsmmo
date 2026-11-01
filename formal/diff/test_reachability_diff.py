@@ -31,8 +31,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
-from artifactsmmo_cli.ai.tiers import strategy
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression import strategy
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )

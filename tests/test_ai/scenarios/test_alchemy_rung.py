@@ -24,8 +24,8 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT

@@ -7,12 +7,12 @@ src/` finds and pins what each one actually does with the number. Four compare
 Rank values to each other WITHIN one slot or one item type (scale-free); one
 compares against 0.
 
-A seventh consumer, `tiers/progression_tree._utility_candidates`, was pinned
+A seventh consumer, `progression/progression_tree._utility_candidates`, was pinned
 here (gate on `gain > 0`) until wave 3b deleted it — zero production callers,
 since `decide_tree` stopped reading it in wave 3a and its last diagnostic
 reader was retired in wave 3b. Its test went with it, not renumbered away
 quietly: this paragraph is that record. So did consumer 1,
-`tiers/objective.CharacterObjective.from_game_data`'s endgame gear sheet,
+`progression/objective.CharacterObjective.from_game_data`'s endgame gear sheet,
 deleted in plan C Task 6 (the gear objective `L*` is the one gear sheet).
 
 If a new Rank consumer appears, it belongs here.
@@ -31,7 +31,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
+from artifactsmmo_cli.ai.progression.prerequisite_graph import best_attainable_weapon
 from tests.test_ai.fixtures import make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -41,7 +41,7 @@ def _bundle() -> GameData:
     return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
 
 
-# --- 2. tiers/prerequisite_graph.best_attainable_weapon ---------------------
+# --- 2. progression/prerequisite_graph.best_attainable_weapon ---------------------
 
 def test_best_attainable_weapon_is_the_argmax_over_weapons_only() -> None:
     """Scans `type_ == "weapon"` exclusively, so it stays inside the weapon

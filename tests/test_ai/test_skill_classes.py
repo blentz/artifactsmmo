@@ -4,7 +4,7 @@ derived sets equal the historical hand-typed literals (no behavior drift)."""
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 
-from artifactsmmo_cli.ai.tiers.skill_classes import (
+from artifactsmmo_cli.ai.progression.skill_classes import (
     COMBAT_CRAFT_SKILLS,
     CONSUMABLE_CRAFT_SKILLS,
     GATHER_SKILLS,

@@ -40,9 +40,9 @@ from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
 from artifactsmmo_cli.ai.recovery import StuckSignal
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
+from artifactsmmo_cli.ai.progression import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from tests.test_ai.fixtures import make_state, served_game_data

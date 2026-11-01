@@ -3,7 +3,7 @@
 The base vocabulary is the API schema's `CraftSkill` / `GatheringSkill` enums.
 The craft skills split into gear-producing ("combat craft": weapon/armor/jewelry)
 and consumable-producing (the kitchen skills cooking/alchemy). That split sets
-ranking-prior TIERS (see `tiers/strategy.py` PRIOR_* constants) and is a value
+ranking-prior TIERS (see `progression/strategy.py` PRIOR_* constants) and is a value
 POLICY, not derivable from the enum names alone — but it reduces to ONE policy
 seed, `_CONSUMABLE_KITCHEN` (which craft skills make consumables); the combat
 and gather sets then fall out by set algebra against the enums, so they cannot
@@ -24,7 +24,7 @@ This module exports two kinds of set, and callers must pick the right kind:
   membership. Use these for ranking priors and tier logic.
 
 Leaf module (imports only the api-client enums) so both `strategy.py` and
-`prerequisite_graph.py` import it without a tiers-package cycle.
+`prerequisite_graph.py` import it without a progression-package cycle.
 """
 
 from artifactsmmo_api_client.models.craft_skill import CraftSkill

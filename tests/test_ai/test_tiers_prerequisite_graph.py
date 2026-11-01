@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.prerequisite_graph import (
     best_attainable_weapon,
     combat_capable,
     prerequisites,

@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, HORIZON_OUT_OF_REACH, TaskHorizon
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due, short_items, task_worth_for
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 
 

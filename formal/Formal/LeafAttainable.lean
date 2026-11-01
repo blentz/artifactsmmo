@@ -2,8 +2,8 @@
 -- @concept: core, planner @property: validity, monotonicity
 /-
 Acquisition-leaf attainability, mirroring
-`src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py::leaf_attainable_pure`
-and the `leaf_ok` disjunction in `tiers/objective.py::is_attainable`.
+`src/artifactsmmo_cli/ai/progression/leaf_attainable_core.py::leaf_attainable_pure`
+and the `leaf_ok` disjunction in `progression/objective.py::is_attainable`.
 
 A recipe-closure LEAF is attainable iff some acquisition source applies:
 gatherable, dropped by a known-spawn monster, EARNED BY COMPLETING TASKS

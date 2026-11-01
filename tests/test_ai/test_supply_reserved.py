@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
+from artifactsmmo_cli.ai.progression.guards import GuardKind
 from tests.test_ai.fixtures import make_state
 
 _STATS = {

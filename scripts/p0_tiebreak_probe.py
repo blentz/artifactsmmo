@@ -7,10 +7,10 @@ the load-bearing fix is sticky WIP-retention (Site C). Read-only, no actions.
 
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots
-from artifactsmmo_cli.ai.tiers.strategy import root_cost
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.progression.prerequisite_graph import objective_roots
+from artifactsmmo_cli.ai.progression.strategy import root_cost
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 

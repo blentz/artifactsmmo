@@ -2,7 +2,7 @@
 counts as producible (P3 engagement expansion — tailor leathers @ hides)."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.strategy import _producible
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 

@@ -30,8 +30,8 @@ from artifactsmmo_cli.ai.destructive_license import (
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
 
 

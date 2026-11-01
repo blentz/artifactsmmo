@@ -10,8 +10,8 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"

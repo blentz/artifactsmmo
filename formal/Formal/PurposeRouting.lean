@@ -200,7 +200,7 @@ says: a weapon that is worse at fighting but carries 100 prospecting IS worth
 more overall, on the same terms an artifact is. Which weapon is pursued is the
 gear objective's question (`L*`, ranked by the fight loop's rate); the scalar
 dominance proof that used to answer it one layer up was retired with
-`tiers/pursuit_value` in plan C Task 6. -/
+`progression/pursuit_value` in plan C Task 6. -/
 theorem weaponScore_strict_of_strict_wscore
     (a b : CombatItem) (monsterRes : ElemStats)
     (wisdom prospecting inventorySpace haste : Int)

@@ -1,5 +1,5 @@
 """When the coordination tables name fleet work for this character (Phase
-5-2c-iv, `tiers.meta_goal.ReachFleetOutcome`). Read by the root walk, which
+5-2c-iv, `progression.meta_goal.ReachFleetOutcome`). Read by the root walk, which
 offers the fleet objective only while one of these holds.
 """
 

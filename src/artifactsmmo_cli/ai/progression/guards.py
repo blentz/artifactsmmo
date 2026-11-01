@@ -24,7 +24,7 @@ from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.rest_first import rest_pays
 
 # Explicit re-export (`X as X`): `SelectionContext` lives one layer down now, but
-# `tiers.guards` remains its public home for every existing importer.
+# `progression.guards` remains its public home for every existing importer.
 from artifactsmmo_cli.ai.selection_context import SelectionContext as SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     CRITICAL_HP_FRACTION,
@@ -61,7 +61,7 @@ MAX_ACHIEVABLE_GAP = 5
 # (`ai/bank_selection.py`) both need it, and this module imports both — defining
 # it here made `guards -> bank_selection -> inventory_keep -> guards` a cycle the
 # moment deposit started asking the authority how many copies it may bank. Every
-# `from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
+# `from artifactsmmo_cli.ai.progression.guards import SelectionContext` still resolves.
 
 
 # EVERY protection-role CODE-SET IS GONE (item-protection-authority epic, Tasks 6-9).

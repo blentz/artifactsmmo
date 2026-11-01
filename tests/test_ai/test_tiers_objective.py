@@ -7,8 +7,8 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.suppliable import is_suppliable
-from artifactsmmo_cli.ai.tiers import objective as objective_mod
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, feasible_now, is_attainable, near_term_model
+from artifactsmmo_cli.ai.progression import objective as objective_mod
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, feasible_now, is_attainable, near_term_model
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, obtainable_now
 

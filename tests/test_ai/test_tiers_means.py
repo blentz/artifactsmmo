@@ -8,8 +8,8 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import (
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.means import (
     COLLECT_REWARD_ORDER,
     DISCRETIONARY_ORDER,
     INTERRUPT_MEANS,

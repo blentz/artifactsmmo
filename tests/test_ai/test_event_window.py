@@ -2,7 +2,7 @@
 AND still be up long enough to finish what we planned? (epic P2)
 
 `WorldState.active_events` has carried expirations all along, but nothing outside
-`event_availability` read them -- grepping `expir` across ai/goals/ and ai/tiers/
+`event_availability` read them -- grepping `expir` across ai/goals/ and ai/progression/
 returned zero hits. So the planner would commit a 40-step chain to content that
 expires in 90 seconds.
 

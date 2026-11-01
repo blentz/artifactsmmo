@@ -1,7 +1,7 @@
 -- @concept: items @property: safety, monotonicity
 /-
 Formal model of `owned_count` from
-`src/artifactsmmo_cli/ai/tiers/owned_count.py` (`owned_count_pure`).
+`src/artifactsmmo_cli/ai/progression/owned_count.py` (`owned_count_pure`).
 
 `owned_count` answers "how many of item `code` does the character own?" across
 three stores:

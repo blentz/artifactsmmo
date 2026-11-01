@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.planner import PlanStats
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 
 

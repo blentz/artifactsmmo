@@ -34,7 +34,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     keep_owned,
     reason_quantity,
 )
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
+from artifactsmmo_cli.ai.progression.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from artifactsmmo_cli.audit.inventory_completeness import (
     BANDS,

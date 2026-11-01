@@ -97,8 +97,8 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)

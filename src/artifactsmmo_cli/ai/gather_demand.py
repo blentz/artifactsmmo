@@ -15,8 +15,8 @@ from collections.abc import Sequence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

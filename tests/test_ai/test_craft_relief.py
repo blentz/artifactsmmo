@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, map_guard
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     CRAFT_RELIEF_FRACTION,
     DEPOSIT_FULL_FRACTION,
     GuardKind,

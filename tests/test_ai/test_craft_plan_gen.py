@@ -46,7 +46,7 @@ from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -854,7 +854,7 @@ def _gd_drop_leaf(char_beats_chicken: bool = True) -> GameData:
     gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
     # The chicken's spawn tile, matching the FightAction `_drop_leaf_actions`
     # hands in. The shared drop oracle (ai/drop_obtainability) gates on
-    # `monster_spawn_known`, exactly as tiers/strategy._producible always has,
+    # `monster_spawn_known`, exactly as progression/strategy._producible always has,
     # so a fixture that supplies a Fight for a monster with no spawn on file is
     # describing a world the reachability walks call unreachable.
     gd._monster_locations = {"chicken": [(0, 1)]}

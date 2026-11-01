@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 1c25e73450467c509c27d1a3c06ad91c84c6366e05231fa451667942e353bc0b) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/progression/skill_grind_selection.py (sha256: 1c25e73450467c509c27d1a3c06ad91c84c6366e05231fa451667942e353bc0b) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection

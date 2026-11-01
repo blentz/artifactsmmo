@@ -4,22 +4,22 @@ P1: Tier-1 objective.
 P2: Tier-2 meta-goal nodes + prerequisite graph (search substrate)."""
 
 from artifactsmmo_cli.ai.equip_value import equip_value
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
     owned_count,
 )
-from artifactsmmo_cli.ai.tiers.objective import (
+from artifactsmmo_cli.ai.progression.objective import (
     CharacterObjective,
     is_attainable,
 )
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
+from artifactsmmo_cli.ai.progression.prerequisite_graph import (
     best_attainable_weapon,
     combat_capable,
     prerequisites,
 )
-from artifactsmmo_cli.ai.tiers.strategy import (
+from artifactsmmo_cli.ai.progression.strategy import (
     RootScore,
     StrategyDecision,
     StrategyEngine,

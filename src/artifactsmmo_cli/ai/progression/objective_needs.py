@@ -29,7 +29,7 @@ from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.requirement_projections import requirement_closure
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,

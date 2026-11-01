@@ -1,6 +1,6 @@
 -- @concept: crafting, items, characters @property: reachability, dominance
 /-
-Formal model of `is_attainable` from `src/artifactsmmo_cli/ai/tiers/objective.py`.
+Formal model of `is_attainable` from `src/artifactsmmo_cli/ai/progression/objective.py`.
 
 ## `is_attainable(code, game_data, _path) -> bool`
 

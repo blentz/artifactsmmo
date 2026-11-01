@@ -50,7 +50,7 @@ from artifactsmmo_cli.ai.region_edges import _reach_key
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
+from artifactsmmo_cli.ai.progression.skill_grind_selection import (
     GrindCandidate,
     skill_grind_selection_pure,
 )

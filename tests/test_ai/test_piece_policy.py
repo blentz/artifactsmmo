@@ -1,7 +1,7 @@
 """One route policy judges, prices and serves an `L*` piece (plan B Task 2).
 
 `PIECE_POLICY` is the policy `gear_objective.achievable` judges a piece by,
-`gear_objective._price` prices it by and `tiers/strategy.actionable_step`
+`gear_objective._price` prices it by and `progression/strategy.actionable_step`
 counts a leaf by. Three policies once answered those three questions, and
 they disagreed: an event vendor's item was achievable and then declined
 `no_step_goal`, because the step graph refused every event NPC; a GE order
@@ -72,9 +72,9 @@ from artifactsmmo_cli.ai.scenario import (
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import attached, shared_world

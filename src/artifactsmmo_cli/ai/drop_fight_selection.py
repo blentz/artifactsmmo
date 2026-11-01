@@ -10,7 +10,7 @@ proved `select_monster_for_drop` core has a single live wrapper again.
 
 WHICH droppers are eligible at all is NOT decided here: that is the shared
 oracle `ai/drop_obtainability.fightable_droppers`, the same verdict the
-reachability walks in `tiers/` consult (spawn-known + winnable + grey policy).
+reachability walks in `progression/` consult (spawn-known + winnable + grey policy).
 This module only RANKS what the oracle approved and looks up the action —
 adding no refusal the oracle did not already predict, except the one named
 residual in the oracle's docstring (no FightAction in the passed pool). Before

@@ -70,7 +70,7 @@ from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
-from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+from artifactsmmo_cli.ai.progression.skill_grind_target import (
     GRIND_POLICY,
     build_selectable_grind_candidates,
     grind_model,

@@ -2,7 +2,7 @@
 /-
 Formal model of the data-derived EDGE STRUCTURE of `prerequisites` and the
 `combat_capable` aggregation from
-`src/artifactsmmo_cli/ai/tiers/prerequisite_graph.py`.
+`src/artifactsmmo_cli/ai/progression/prerequisite_graph.py`.
 
 ## `prerequisites(node, state, game_data)` — the `ObtainItem code` branch
 

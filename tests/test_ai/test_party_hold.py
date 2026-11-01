@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import PARTY_ASSEMBLY_SECONDS, GamePlayer
 from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
+from artifactsmmo_cli.ai.progression.guards import GuardKind
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 from tests.test_ai.test_strategy_driver import _ctx

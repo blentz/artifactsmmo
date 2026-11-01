@@ -1,5 +1,5 @@
 """Test whether craft XP is PROPORTIONAL to `craft_level` -- the numerator
-`_beats` (`ai/tiers/skill_grind_selection.py`) uses as the CARDINAL term of an
+`_beats` (`ai/progression/skill_grind_selection.py`) uses as the CARDINAL term of an
 XP-per-action rate.
 
 Server-axiom-signoff discipline, the same one `gather_xp_replay.py` applies to

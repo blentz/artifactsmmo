@@ -7,7 +7,7 @@ from typing import Protocol
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -164,7 +164,7 @@ at all), or None when it can be served or only the search can say. The player
 builds it over the cycle's action pool (`GamePlayer._step_decline`); it is the
 same question the arbiter asks of the same goal. Defined beside `MetaGoal`
 because both the walk (`decisions.root`) and `StrategyEngine.decide` take it,
-and every other home is an import cycle through `tiers/__init__`."""
+and every other home is an import cycle through `progression/__init__`."""
 
 
 def no_decline(_root: MetaGoal) -> str | None:

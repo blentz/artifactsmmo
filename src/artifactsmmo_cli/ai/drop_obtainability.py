@@ -3,9 +3,9 @@
 ONE answer, consulted by both sides of the plan pipeline:
 
   * SELECTION  — the reachability walks that decide WHAT to pursue. The
-    obtain model (`tiers/skill_grind_target.is_obtainable`,
-    `tiers/objective.is_attainable_now`) reads the same drop gates through
-    `obtain_model/drop_routes.py`; `tiers/strategy._producible` calls this
+    obtain model (`progression/skill_grind_target.is_obtainable`,
+    `progression/objective.is_attainable_now`) reads the same drop gates through
+    `obtain_model/drop_routes.py`; `progression/strategy._producible` calls this
     oracle. These are pure game-data walks: they run before any action list
     exists and must not depend on one.
   * EMISSION   — `ai/drop_fight_selection.select_drop_fight`, which turns the
@@ -90,7 +90,7 @@ veto is `player.PlanReport`'s diagnostic drop listing, which says so at its call
 site and is deliberately not routed through here.
 
 SITES THAT ASK A NEARBY BUT DIFFERENT QUESTION, and why they stay separate:
-  * `tiers/objective._drops_from_spawning_monster` — state-INDEPENDENT (no
+  * `progression/objective._drops_from_spawning_monster` — state-INDEPENDENT (no
     `is_winnable` at all): the perfect-sheet target assumes full progression, so
     any spawning monster's drops count. A different question, not a weaker one.
   * `audit/craft_completeness._leaf_gap` — must report WHICH limit blocks a leaf
@@ -129,7 +129,7 @@ def fightable_droppers(item: str, state: WorldState, game_data: GameData,
     damaged character really does lose fights a healthy one wins), and that is
     the right basis for the runtime question "take this fight NOW", still asked
     at `player.py:1047`, `player.py:3742`, `combat_targets.py:88` and
-    `tiers/guards.py:215`. Asking it HERE made route existence swing on combat
+    `progression/guards.py:215`. Asking it HERE made route existence swing on combat
     noise: measured live 2026-08-17, C3P0 at 63/315 hp had no route to `wool`
     and priced `iron_shield` at 3,000,926; the same character at 315/315 priced
     it at 926 — a factor of ~7,000 in a RANKING key.

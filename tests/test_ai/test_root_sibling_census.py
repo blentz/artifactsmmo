@@ -32,8 +32,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_sibling_census import root_sibling_verdicts
 from artifactsmmo_cli.audit.sibling_route_census import sibling_route_verdicts

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.strategy import _producible
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 

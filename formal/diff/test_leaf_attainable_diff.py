@@ -4,7 +4,7 @@
 from hypothesis import given
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
+from artifactsmmo_cli.ai.progression.leaf_attainable_core import leaf_attainable_pure
 from formal.diff.oracle_client import run_oracle
 
 

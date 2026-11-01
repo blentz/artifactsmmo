@@ -30,15 +30,15 @@ from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachFleetOutcome,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import root_category
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import root_category
 from tests.test_ai import test_grey_farm
 from tests.test_ai.fixtures import make_state, served_game_data
 from tests.test_ai.test_dual_role_fixtures import medal_game_data

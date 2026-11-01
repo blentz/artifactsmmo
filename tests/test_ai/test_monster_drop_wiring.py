@@ -1,6 +1,6 @@
 """Wiring for the proven `select_monster_for_drop` core onto a LIVE planner path.
 
-Producibility (tiers/strategy._producible): a monster-drop item is producible iff
+Producibility (progression/strategy._producible): a monster-drop item is producible iff
 some monster dropping it is WINNABLE (else it would create an unreachable plan).
 
 Emission + narrowing (GatherMaterialsGoal.relevant_actions): for a needed item that
@@ -14,9 +14,9 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.strategy import _producible
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 

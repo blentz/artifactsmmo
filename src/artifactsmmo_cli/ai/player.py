@@ -206,18 +206,18 @@ from artifactsmmo_cli.ai.strategy_driver import (
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import pool_draw
-from artifactsmmo_cli.ai.tiers import (
+from artifactsmmo_cli.ai.progression import (
     CharacterObjective,
     ObtainItem,
     StrategyDecision,
     StrategyEngine,
 )
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
 )
-from artifactsmmo_cli.ai.tiers.root_group import root_group_of
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.ai.progression.root_group import root_group_of
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState

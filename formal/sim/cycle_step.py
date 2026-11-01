@@ -131,7 +131,7 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
 
 # ---------------------------------------------------------------------------
 # fires — mirror of `Formal.Liveness.ProductionLadder.fires`.  Closed-form,
-# pure-Python; does NOT call into `tiers/guards.py` / `tiers/means.py` (which
+# pure-Python; does NOT call into `progression/guards.py` / `progression/means.py` (which
 # would force a real production WorldState/GameData). This mirror operates on
 # the abstract `CycleState` opaque-Bools, matching Lean exactly.
 # ---------------------------------------------------------------------------

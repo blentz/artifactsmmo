@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.accumulation_sell import (
     worst_accumulation_steps,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 

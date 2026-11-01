@@ -12,8 +12,8 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers import progression_tree
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression import progression_tree
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
@@ -23,8 +23,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     StepDecline,
     no_decline,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -243,7 +243,7 @@ class StrategyDecision:
     fallback_roots: list[MetaGoal] = field(default_factory=list)
     # The gear code whose CRAFTING-SKILL GATE produced a `ReachSkillLevel` root
     # (`decisions/root.RootWalk.blocked_target`). Carried for the trace's
-    # `root_group` (`tiers/root_group.root_group_of`), which tells a skill gate
+    # `root_group` (`progression/root_group.root_group_of`), which tells a skill gate
     # from an orphan climb by it. Fleet demand no longer reads it: the player
     # publishes every missing piece of the gear objective `L*` instead.
     blocked_target: str | None = None

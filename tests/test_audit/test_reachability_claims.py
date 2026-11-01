@@ -86,7 +86,7 @@ def test_a_function_referenced_only_inside_its_own_body_stays_true() -> None:
 
 def test_an_attribute_on_a_plain_object_is_not_a_caller() -> None:
     """`RequirementGraph.is_obtainable` must not count as a caller of
-    `tiers/skill_grind_target.is_obtainable`. Attribute names collide; only a
+    `progression/skill_grind_target.is_obtainable`. Attribute names collide; only a
     reference through an imported MODULE counts for a module-level name."""
     sources = {
         "src/pkg/a.py": 'def is_obtainable() -> int:\n    """NO PRODUCTION CALLER."""\n    return 1\n',

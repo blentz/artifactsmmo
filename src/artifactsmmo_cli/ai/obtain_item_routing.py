@@ -19,9 +19,9 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import _permanent_vendor_purchases
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import _permanent_vendor_purchases
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

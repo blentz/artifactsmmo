@@ -63,7 +63,7 @@ from artifactsmmo_cli.ai.region_edges import door_reaches, door_toll, doors_to, 
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from artifactsmmo_cli.audit import craft_completeness
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state

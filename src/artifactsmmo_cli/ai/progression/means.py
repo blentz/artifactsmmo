@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     SelectionContext,
     used_fraction,
 )
@@ -175,7 +175,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # A bank expansion is never a reserved gear code, so the player threads
         # reserve_floor(state, gd, None) as ctx.gold_reserve, mirroring the goal.
         # `account_gold` is imported directly: progression_reserve reaches this
-        # package not at all (it reads `ai/equip_value`, outside `tiers`), so
+        # package not at all (it reads `ai/equip_value`, outside `progression`), so
         # there is no cycle in either import order. Only
         # `reserve_floor` stays on the ctx, because it needs game_data and the
         # player already computes it. (The goal also raises `used` by the

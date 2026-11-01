@@ -31,7 +31,7 @@ cells only — the single DECLARED liveness exemption (`KEEP_ALL_SENTINEL`).
 
 PRESSURE IS SPLIT slot-vs-quantity because that distinction is where the HTTP 497
 livelock lived (a live bag sat at 68/124 QUANTITY while 20/20 SLOTS): the relief
-guards read `max(quantity_fraction, slot_fraction)` (`tiers.guards.used_fraction`)
+guards read `max(quantity_fraction, slot_fraction)` (`progression.guards.used_fraction`)
 while the DESTRUCTIVE discard guards deliberately stay quantity-only, so a
 slot-pressured bag and a quantity-pressured bag reach DIFFERENT production routes.
 A census with one "full" state would be blind to half of them.
@@ -100,10 +100,10 @@ from artifactsmmo_cli.ai.strategy_driver import (
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, TASKS_COIN_CODE, WorldState
 
 SURPLUS = 6

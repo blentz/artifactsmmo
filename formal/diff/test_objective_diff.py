@@ -13,7 +13,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.tiers.objective import is_attainable
+from artifactsmmo_cli.ai.progression.objective import is_attainable
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 

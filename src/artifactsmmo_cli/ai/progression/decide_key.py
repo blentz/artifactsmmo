@@ -22,8 +22,8 @@ the retired flat scalar ranking's `StrategyEngine.decide`. That comparator was
 deleted with the flat ranking in progression-tree Phase 4b; the dispatcher
 tables below bind the LIVE arbiter dispatchers and stay.)
 """
-from artifactsmmo_cli.ai.tiers.guards import GuardKind
-from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.progression.guards import GuardKind
+from artifactsmmo_cli.ai.progression.means import MeansKind
 
 # --- guard/means dispatcher repr maps --------------------------------------
 # These mirror the strings the parameterized Goal instances `map_guard`/

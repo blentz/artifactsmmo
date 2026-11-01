@@ -21,7 +21,7 @@ def gear_components(stats: ItemStats, purpose: object) -> tuple[int, int]:
     EVERY item and every purpose this accepts — the split is a partition of the
     one ruler, not a second ruler.
 
-    This exists so the ECONOMICS layer (`tiers/pursuit_value`, which must let
+    This exists so the ECONOMICS layer (`progression/pursuit_value`, which must let
     combat dominate utility CROSS-SLOT) can re-read the ruler's own two terms
     lexicographically rather than re-summing the stats on a scale of its own.
     Before this, that layer ran on a flat 8-stat sum (`combat_raw` = attack +

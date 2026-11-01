@@ -7,7 +7,7 @@ sourced from the running goal + action. No planning or I/O."""
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,
@@ -16,8 +16,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 
@@ -70,7 +70,7 @@ def _label(node: MetaGoal) -> tuple[str, str]:
     if isinstance(node, ReachCharLevel):
         return f"character → {node.level}", "charlevel"
     if isinstance(node, ReachSkillLevel):
-        # "skill" matches tiers.strategy.root_category's naming for this
+        # "skill" matches progression.strategy.root_category's naming for this
         # category, so the plan pane and the resolved root's own category
         # agree on what kind of root this is.
         return f"{node.skill} → {node.level}", "skill"

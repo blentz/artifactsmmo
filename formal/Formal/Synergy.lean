@@ -1,7 +1,7 @@
 -- @concept: synergy @property: safety, boundedness
 /-
 Formal model of the pure synergy core
-`src/artifactsmmo_cli/ai/tiers/synergy_core.py`
+`src/artifactsmmo_cli/ai/progression/synergy_core.py`
 (spec docs/superpowers/specs/2026-07-19-synergy-weighting-design.md §3).
 The Python core is bound to these semantics by the SYNERGY_CORE_MUTATIONS
 group (unit-killed, formal/diff/mutate.py).

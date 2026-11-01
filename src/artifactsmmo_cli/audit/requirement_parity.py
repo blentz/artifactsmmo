@@ -55,9 +55,9 @@ from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.task_feasibility import _item_skill_gap
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective_needs import objective_needs
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 from artifactsmmo_cli.audit.craft_census import craftable_recipes
 

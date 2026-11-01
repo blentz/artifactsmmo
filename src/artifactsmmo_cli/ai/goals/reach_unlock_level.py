@@ -22,7 +22,7 @@ clears the prerequisite first. Below RestoreHP critical (110) and the
 hard survival floor."""
 
 MAX_ACHIEVABLE_GAP = 5
-"""TWO DEFINITIONS OF THIS NUMBER, AND THE OTHER ONE DECIDES. `tiers/guards.py`
+"""TWO DEFINITIONS OF THIS NUMBER, AND THE OTHER ONE DECIDES. `progression/guards.py`
 declares its own `MAX_ACHIEVABLE_GAP = 5` and `_fires(REACH_UNLOCK_LEVEL)` uses
 it as `ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP`; the branch
 below is the exact complement (`> MAX_ACHIEVABLE_GAP -> 0.0`). So the goal-side

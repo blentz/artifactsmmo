@@ -5,7 +5,7 @@ _GOOD = """### tasks
 - **Concept → player**: gold, tasks_coin, items, XP (docs: tasks)
 - **Strategic uses**: steady gold + coin economy (docs)
 - **Opportunity cost × tier**: T1 cheap; competes with gear gather (content_tiers.md)
-- **Behavior coverage**: PursueTask/AcceptTask/CompleteTask/TaskExchange (tiers/means.py)
+- **Behavior coverage**: PursueTask/AcceptTask/CompleteTask/TaskExchange (progression/means.py)
 - **Proof coverage**: TaskDecision.req_none_pursues [dominance] (PROOF_CONCEPT_INDEX)
 - **Gap + policy**: UNPROVEN — act; prove reachability (synthesis)
 """
