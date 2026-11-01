@@ -3,8 +3,9 @@ incumbent?
 
 `pick_loadout` (via `equipment.scoring`) decides which owned item occupies a
 slot. It is MONSTER-RELATIVE. The acquisition path — `UpgradeEquipmentGoal`
-(`goals/progression.py`) — ranks items on the MONSTER-INDEPENDENT
-`pursuit_value`/`equip_value` ruler. Two rulers over the same slot is a livelock:
+(`goals/progression.py`) — ranked items on the MONSTER-INDEPENDENT
+`pursuit_value`/`equip_value` ruler (live 2026-08-04; `pursuit_value` was
+deleted in plan C Task 6 and the pursuit now follows the gear objective `L*`). Two rulers over the same slot is a livelock:
 live 2026-08-04, Robby (level 21) wore `fire_and_earth_amulet` and owned
 `life_amulet`; the tree scored the swap `+10000` and equipped `life_amulet`, the
 next `OptimizeLoadout(wolf)` scored `fire_and_earth_amulet` 48000 vs 6000 and

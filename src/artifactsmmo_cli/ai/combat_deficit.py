@@ -160,7 +160,7 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
 
     Owning, not wearing: `predict_win` / `pick_loadout` already choose the best
     on-hand loadout per monster's resistances, so the honest question for "is this
-    worth acquiring" is marginal — the same framing `weapon_winnability` uses.
+    worth acquiring" is marginal.
     """
     trial = dict(inventory)
     trial[code] = trial.get(code, 0) + 1

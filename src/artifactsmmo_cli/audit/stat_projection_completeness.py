@@ -1,7 +1,8 @@
 """Stat-projection completeness census — can the objective SEE what an item grants?
 
-The unified objective `J` prices a gear candidate by projecting the character
-holding it and asking `cheapest_path_to_level` how the grind changes. That
+The unified objective `J` priced a gear candidate by projecting the character
+holding it and asking `cheapest_path_to_level` (both since deleted) how the
+grind changes. The gear objective's fighter asks the same of a loadout, and the
 question reaches gear through exactly one channel:
 `ai/equipment/projection.project_loadout_stats`, whose `ProjectedStats` result is
 what `is_winnable` and `expected_damage_per_fight` read.

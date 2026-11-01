@@ -7,11 +7,12 @@ discharged by an AST census over the package; this module is the single hole it
 leaves, so the graph has one cost model rather than one per node.
 
 INERT ON ARRIVAL (wave 4 increment 4.1b). It ships before its first caller
-because the alternative is worse: `WhichSlotClosesTheFight` (increment 4.2) needs
+because the alternative is worse: `WhichSlotClosesTheFight` (increment 4.2,
+deleted in plan C Task 2) needed
 a price, and pricing it in `decisions/root.py` would put the first forbidden
 import inside the package and make O6 red the day it was written. Landing the
-funnel first costs nothing — an unused module with its own tests — and means 4.2
-adds a call rather than an exception.
+funnel first cost nothing — an unused module with its own tests — and meant 4.2
+added a call rather than an exception.
 
 TOTAL over `META_GOAL_KINDS`, with a drift assertion in the same shape as
 `prerequisite_graph.prerequisites`: a new root kind cannot silently return an

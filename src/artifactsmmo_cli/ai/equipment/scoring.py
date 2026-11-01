@@ -30,8 +30,8 @@ terms), which left weapons at twice armor's magnitude for the same real swing.
 Live witness on the pinned bundle at the canonical adversary: ``copper_dagger``
 (level 1) scored 282_001 and ``steel_armor`` (level 20) scored 282_000 — a tie —
 while the dagger's true contribution is 7.05 HP of swing per turn and the
-armor's is 14.10, exactly 2x. Cross-slot rankings (``progression/pursuit_value``,
-``progression/progression_tree``) compare the two by design, so the factor was an
+armor's is 14.10, exactly 2x. Cross-slot rankings (the old ``tiers/pursuit_value``,
+deleted in plan C Task 6, and ``progression/progression_tree``) compared the two by design, so the factor was an
 unearned thumb on the scale for every weapon. Applying it to the WHOLE ruler
 keeps the tie-break safe AND makes the two slots commensurable, because
 commensurability is then a property of the definition (one constant, one place)
@@ -103,9 +103,9 @@ def gear_score_efficiency_pure(wisdom: int, prospecting: int,
 
     These four are the stats that buy TIME rather than damage: an XP rate, a
     drop rate, carrying capacity and a cooldown reduction. Splitting them out is
-    what lets ``progression/pursuit_value`` read the ONE ruler with combat dominating
-    utility WITHOUT recomputing utility on a second scale — the pursuit score
-    reuses this exact term instead of re-summing the stats, so utility cannot be
+    what let the old ``tiers/pursuit_value`` (deleted in plan C Task 6) read the ONE
+    ruler with combat dominating utility WITHOUT recomputing utility on a second
+    scale; ``ai/gear_value`` reuses this exact term instead of re-summing the stats, so utility cannot be
     counted twice. See ``armor_score_combat_pure`` / ``weapon_score_combat_pure``
     for the other halves, and ``armor_score_pure`` / ``weapon_score_pure`` for
     the identities that they partition the score.
@@ -242,8 +242,8 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     The two summands PARTITION the score: every stat reaches exactly one of
     them, so ``armor_score_combat_pure + gear_score_efficiency_pure`` is the
     whole score and nothing is double-counted. That identity is what
-    ``progression/pursuit_value`` rides — it re-reads these two existing terms
-    lexicographically instead of building a second scorer. ``weapon_score_pure``
+    ``ai/gear_value.gear_components`` rides: it hands back these two existing
+    terms instead of building a second scorer. ``weapon_score_pure``
     is the SAME two-term shape over the SAME efficiency function, which is why a
     stat prices identically whichever slot carries it.
 

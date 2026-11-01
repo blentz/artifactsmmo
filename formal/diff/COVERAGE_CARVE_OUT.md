@@ -20,7 +20,7 @@ real bugs because the implementations are deterministic glue.
 
 ## Configuration values (no algorithmic content)
 
-- `progression/personality.py` — personality weight table. Constants only;
+- `tiers/personality.py` — personality weight table. Constants only;
   mutating them changes ranking outputs but those outputs are
   themselves tested at the strategy-ranking level
   (`test_strategy_blend_diff.py`).

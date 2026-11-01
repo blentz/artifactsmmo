@@ -4,7 +4,7 @@ ONE answer, consulted by both sides of the plan pipeline:
 
   * SELECTION  — the reachability walks that decide WHAT to pursue. The
     obtain model (`progression/skill_grind_target.is_obtainable`,
-    `progression/objective.is_attainable_now`) reads the same drop gates through
+    `progression/objective.feasible_now`) reads the same drop gates through
     `obtain_model/drop_routes.py`; `progression/strategy._producible` calls this
     oracle. These are pure game-data walks: they run before any action list
     exists and must not depend on one.

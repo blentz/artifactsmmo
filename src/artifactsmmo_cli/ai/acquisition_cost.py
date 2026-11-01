@@ -125,8 +125,8 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     takes (`LearnedDrops.attempts_per_unit`, the learned chance proved in
     `Formal.DropChance`, at the fight loadout's prospecting,
     `fight_prospecting`) times `cycles_per_kill` — the SAME
-    fight-plus-forced-rest figure `cheapest_path_to_level` spends, so a drop farm
-    and a level grind are quoted in identical units. Using a bare kill count here
+    fight-plus-forced-rest figure every fight leg is priced at, so a drop farm
+    and a fight for XP are quoted in identical units. Using a bare kill count here
     would price the farm at roughly half its real cost, which is the defect
     `fight_loop_cost` was written to fix.
 

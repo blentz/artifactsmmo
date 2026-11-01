@@ -221,7 +221,7 @@ def test_rank_keeps_the_non_tool_tiebreak() -> None:
 
 def test_gear_components_partition_the_ruler() -> None:
     """`combat + efficiency == gear_value` on BOTH branches, for every item.
-    This identity is what makes `progression/pursuit_value` a re-reading of the one
+    This identity is what makes `tiers/pursuit_value` a re-reading of the one
     ruler rather than a second scorer. Mirrors `GearValue.rankValue_decomp`."""
     for stats in (MUSHMUSH_JACKET, ADVENTURER_VEST, LIFE_AMULET,
                   FIRE_AND_EARTH_AMULET,

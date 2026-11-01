@@ -81,7 +81,7 @@ from dataclasses import dataclass
 # `CharacterObjective.utility_potion_targets` with its claim and taught the
 # index module constants; `progression/skill_grind_target.is_obtainable` left on
 # 2026-09-27, when it became the grind's production obtainability walk;
-# `player._tree_band_adequate` and `progression/progression_tree_core.potion_type_weight`
+# `player._tree_band_adequate` and `tiers/progression_tree_core.potion_type_weight`
 # were deleted with their claims by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely

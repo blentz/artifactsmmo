@@ -13,8 +13,9 @@ scenarios (`l1_fresh`, `l10_weapon_upgrade`, `l10_copper_adequate`,
     level-12 character in a full copper set losing to a 60-hp chicken;
   * that fiction became LOAD-BEARING at the flip. The retired ranking read
     `near_term_gear`, capped by LEVEL and blind to winnability. The resolution
-    walk read `gear_targets_with_blockers` (deleted by plan C Task 3), which
-    geared for `tier_progress.gear_target_tier` — the rung being CLEARED. With no attack
+    walk read `gear_targets_with_blockers`, which geared for
+    `tier_progress.gear_target_tier` — the rung being CLEARED (all three
+    deleted by plan C Tasks 3 and 6). With no attack
     nothing clears, so `gear_target_tier` pinned to 1 and all four goldens
     collapsed onto ONE answer, `GatherMaterials(ash_wood)`. A golden suite that
     cannot tell four scenarios apart is testing nothing.
@@ -75,7 +76,7 @@ class ScenarioCharacter:
     this to give a scenario bank gold distinct from pocket `gold` WITHOUT
     inflating `gold` itself. Needed because `state.gold` (pocket) and
     `state.bank_gold` are read by DIFFERENT consumers: `progression/objective.py`'s
-    `is_attainable_now` (near_term_gear candidacy) reads POCKET gold only,
+    `near_term_model` (`classify_target`'s feasibility) reads POCKET gold only,
     while `analyze_currency_leaves` (GAP-3/Task 3's reserve-aware gold-buy
     affordability) reads pocket + KNOWN bank gold. A scenario that needs extra
     TOTAL gold to clear the progression-reserve floor for one purchase, without
@@ -477,6 +478,22 @@ def _ge_market_cell(name: str, *, gearcrafting: int, ge_market: bool,
         ge_market=ge_market, description=description)
 
 
+# HISTORICAL DERIVATIONS. The comments on the scenarios below record how each
+# sheet was BUILT, against rankers plan C has since deleted: `near_term_gear`
+# and the `pursuit_value` ruler it ranked on, `has_structural_upgrade`,
+# `is_attainable_now` (now `progression/objective.feasible_now`),
+# `gear_target_tier`, `bootstrap_potion_target`, `utility_potion_targets` and
+# `_slot_assignments`. A sheet is pinned data; its derivation is the record of
+# why it holds what it holds, not a claim that those functions still run. Each
+# scenario's CURRENT outcome is pinned by its tests (RE-DERIVED notes there).
+# HISTORICAL DERIVATIONS. The comments on the scenarios below record how each
+# sheet was BUILT, against rankers plan C has since deleted: `near_term_gear`
+# and the `pursuit_value` ruler it ranked on, `has_structural_upgrade`,
+# `is_attainable_now` (now `progression/objective.feasible_now`),
+# `gear_target_tier`, `bootstrap_potion_target`, `utility_potion_targets` and
+# `_slot_assignments`. A sheet is pinned data; its derivation is the record of
+# why it holds what it holds, not a claim that those functions still run. Each
+# scenario's CURRENT outcome is pinned by its tests (RE-DERIVED notes there).
 SCENARIOS: dict[str, ScenarioCharacter] = {
     "l1_fresh": ScenarioCharacter(
         name="l1_fresh", level=1, max_hp=120,
@@ -774,7 +791,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own. Slots that were a fixed point only
             # for the retired flat `combat_raw` sum are re-converged here, so
             # this scenario keeps isolating the gap it was built for instead of
@@ -820,7 +837,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # non-bag slot at its fixed point, which is this scenario's whole
             # isolation methodology.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own. Slots that were a fixed point only
             # for the retired flat `combat_raw` sum are re-converged here, so
             # this scenario keeps isolating the gap it was built for instead of
@@ -884,7 +901,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "snakeskin_boots",
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -947,7 +964,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "snakeskin_boots",
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             "ring1_slot": "gold_ring",
@@ -1024,7 +1041,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # again. Equipping the true argmax restores this scenario's "every
             # other slot at its own fixed point, rune_slot the SOLE target".
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             "weapon_slot": "battlestaff", "helmet_slot": "lucky_wizard_hat",
@@ -1090,7 +1107,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # "no structural gear candidate" design intent (band-adequate), so
             # the XP-outranks-empty-utility verdict is isolated again.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -1132,7 +1149,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # helmet/body RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value) —
             # see l20_dual_utility's comment; same combat-argmax fixed point.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -1618,8 +1635,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # a recipe ({hardwood_plank:6, ogre_eye:4, hard_leather:2, king_slimeball:2})
     # and `hardwood_plank` is a third ({ash_wood:4, birch_wood:6}).
     #
-    # Reaching it needs a CHARACTER, not a field (design §4.3). `gear_target_tier`
-    # is the rung being CLEARED, so a level-47 character in the best catalogue
+    # Reaching it needed a CHARACTER, not a field (design §4.3). `gear_target_tier`
+    # (deleted in plan C Task 3) was the rung being CLEARED, so a level-47 character in the best catalogue
     # loadout at or below its own level clears through rung 25 and gears for
     # rung 30 — at which the amulet slot's best candidate IS the depth-3 amulet.
     # The slot is left EMPTY so it is the one slot behind its target; every other

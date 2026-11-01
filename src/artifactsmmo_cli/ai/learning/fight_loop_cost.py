@@ -1,6 +1,6 @@
 """What one KILL really costs: the Fight, plus the share of a Rest it forces.
 
-`cheapest_path_to_level` priced a kill at exactly one cycle
+`cheapest_path_to_level` (deleted in plan C Task 4) priced a kill at exactly one cycle
 (`FIGHT_ACTIONS_PER_KILL`) — the fight action and nothing else. Measured over the
 2026-08-07 traces, every character ran almost exactly one Rest per Fight:
 
@@ -163,9 +163,9 @@ def rest_actions_per_fight(expected_damage: int, max_hp: int, fight_seconds: Fra
 def cycles_per_kill(expected_damage: int, max_hp: int, fight_seconds: Fraction) -> Fraction:
     """Total planner actions one kill costs: the Fight plus the Rest it forces.
 
-    This is the denominator `cheapest_path_to_level` divides xp-per-kill by, so
-    it must be in the SAME unit as the xp figure it meets there — Fight-
-    equivalents, never raw seconds and never a mix (`FIGHT_CYCLES_PER_KILL` was a
+    It is the per-kill action count a fight leg is priced at (`_drop_actions`,
+    `_kill_actions`), so it must be in the SAME unit as every other leg —
+    Fight-equivalents, never raw seconds and never a mix (`FIGHT_CYCLES_PER_KILL` was a
     30-second cooldown named cycles until 2026-08-07, and the projection ran ~80x
     high)."""
     return FIGHT_ACTIONS_PER_KILL + rest_actions_per_fight(expected_damage, max_hp, fight_seconds)

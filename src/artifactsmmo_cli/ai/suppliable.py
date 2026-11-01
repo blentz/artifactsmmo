@@ -25,7 +25,7 @@ def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
     that drops it, a monster that drops it, a vendor that sells it, or the task
     board that pays it. Supply is unbounded, so the answer is yes, and it stays
     yes while every one of those routes is closed today. Whether a route is open
-    RIGHT NOW is `is_attainable_now`'s separate question, and a target that
+    RIGHT NOW is `progression/objective.feasible_now`'s separate question, and a target that
     answers no there and yes here is exactly the skill-gated / gear-gated /
     unaffordable root the walk exists to grind toward. Those must keep being
     pursued, so this predicate must never be used as a substitute for that one.

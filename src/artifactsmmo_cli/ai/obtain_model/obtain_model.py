@@ -566,8 +566,8 @@ class ObtainModel:
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop
         (accept, do, turn in). No gate: the loop runs from any state
-        (`ReachCurrencyGoal` plans it), which is why `is_attainable_now` always
-        counted a task-earned currency. `yield_per` is 1, the least any award
+        (`ReachCurrencyGoal` plans it), which is why `feasible_now` (and
+        `is_attainable_now` before it) counts a task-earned currency. `yield_per` is 1, the least any award
         pays (the loader enforces >= 1 for coins): with no inputs and no
         capacity limit, the yield cannot change a feasibility answer, and a cost
         reads the task tables' real amounts itself."""

@@ -592,7 +592,7 @@ def _currency_directly_attainable(currency: str, state: WorldState,
     """A purchase currency the planner can acquire with a DIRECT action edge:
     gold, a located gatherable, or a winnable permanent monster drop (the
     Fight×N → NpcBuy chain grey_farm.py already serves). Deliberately NARROWER
-    than `is_attainable_now`, which also credits a TASK-earned currency
+    than `progression/objective.feasible_now`, which also credits a TASK-earned currency
     (tasks_coin) — earning a task coin then exchanging it is a recursive
     buy-edge the planner does not yet plan (npc_purchase_acquisition Phase 2-4),
     so a task-only currency is NOT directly attainable here."""
@@ -665,7 +665,7 @@ def _has_located_gather_source(leaf: str, game_data: GameData) -> bool:
 def _leaf_status(leaf: str, state: WorldState,
                  game_data: GameData) -> GapClass | None:
     """The blocker class for a single closure leaf at the cell state, or None
-    when the leaf is reachable now. Mirrors `is_attainable_now`'s leaf walk
+    when the leaf is reachable now. Mirrors `feasible_now`'s leaf walk
     (gatherable → drop-winnable → task-earnable → buyable) but reports WHICH
     limit blocks an unreachable leaf so `classify_gap` can rank causes.
 

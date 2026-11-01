@@ -7,8 +7,8 @@ kept consuming the same helpers the flat ranking had. That is no longer true of
 the RANKING helpers — wave 3a's resolution walk stopped calling them and wave 3b
 deleted them (see the WAVE 3b note above `_resolution_rows`). What still
 holds, and is why the cutover was safe, is the CANDIDATE side: the builder
-below and `pursuit_value` are the same ones the flat ranking read, so the walk
-ranks the same facts about the same world.
+below and `pursuit_value` (deleted in plan C Task 6) were the same ones the
+flat ranking read, so the walk ranked the same facts about the same world.
 `_utility_candidates` and its caller `objective_candidates` were the OTHER
 builder — utility-slot candidates, weighted by `potion_type_weight` — but
 wave 3b deleted both: decide_tree stopped reading them in wave 3a (potions no
@@ -68,14 +68,14 @@ from artifactsmmo_cli.ai.world_state import WorldState
 #
 # WAVE 3b task 4 then deleted the whole ranking substrate that had been left
 # stranded by THE FLIP (re-derived list §3 rows 8/9/10/11/12/16 and §5): the
-# modules `progression/achievability_core`, `ai/role_alignment`,
-# `progression/branch_objective`, `progression/progression_choice` and
-# `progression/horizon_contribution`, and from this file `_j_by_identity`,
+# modules `tiers/achievability_core`, `ai/role_alignment`,
+# `tiers/branch_objective`, `tiers/progression_choice` and
+# `tiers/horizon_contribution`, and from this file `_j_by_identity`,
 # `_synergy_map`, `_achievability_map`, `_role_map`, `_effort_for`,
 # `_skill_gate_levels` and `_synergy_map`'s private `_TRUNK_DEMAND` datum. Each
 # had zero production callers: the only occurrence of every one of those names
 # in `src/` was its own definition. `progression/synergy_core` STAYS — it has live
-# non-ranking consumer at `progression/taskmaster_choice.py` (`progression/means_worth.py` retired).
+# non-ranking consumer at `progression/taskmaster_choice.py` (`tiers/means_worth.py` retired).
 
 
 def _resolution_rows(state: WorldState, game_data: GameData,

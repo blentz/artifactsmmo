@@ -187,8 +187,8 @@ class RootScore:
     """The unified objective's value for this root — LOWER IS BETTER, the
     opposite of `score`, which is why it is a separate field and not folded in.
 
-    `score` is `pursuit_value` for gear and the constant `Fraction(1)` for the xp
-    trunk. Those are two unrelated scales sharing a column, and printed together
+    `score` was `pursuit_value` for gear (deleted in plan C Task 6) and the
+    constant `Fraction(1)` for the xp trunk. Those are two unrelated scales sharing a column, and printed together
     they read as a landslide that never happened: live 2026-08-08, gear showed
     `2.6e8` against the trunk's `1.0` while `J` had the two within 0.006% of each
     other and the trunk winning. Reporting a root's `J` beside its score is what

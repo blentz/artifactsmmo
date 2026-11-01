@@ -5,7 +5,7 @@ planner without a forward action, and the grind target must exist for any gating
 craft skill (monotone progression).
 
 LIV-SKILL-3 (the gating set strictly shrinks) was DELETED in Wave 1 of the
-requirement-model unification epic along with `progression/skill_gates.py`. It asserted
+requirement-model unification epic along with `tiers/skill_gates.py`. It asserted
 a no-livelock property of `gating_skills`, which had zero production call sites —
 so the obligation it discharged was about code the bot never ran. The live
 no-livelock path is LIV-SKILL-2 below, over `skill_grind_target`.

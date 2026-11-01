@@ -154,7 +154,8 @@ def purpose_key(purpose: object) -> tuple[object, ...]:
 
 # RETIRED: `combat_raw(attack, resistance, hp_restore, hp_bonus, dmg,
 # critical_strike, lifesteal, combat_buff)` — a flat 8-stat sum that was
-# `strategic_value`/`pursuit_value`'s "how much combat is in this item" scalar.
+# `strategic_value`/`pursuit_value`'s "how much combat is in this item" scalar
+# (both modules since deleted, plan C Task 6).
 # It added a resistance PERCENTAGE to an HP amount to a damage figure 1:1, the
 # same category error the Rank/Combat unification removed from the gear ruler,
 # surviving one layer up in the ECONOMICS layer. The economics layer now reads

@@ -1012,7 +1012,7 @@ class GamePlayer:
         # game_data.active_event_codes from the freshly-fetched active
         # events): an offline state that declares active events must surface
         # the same event monster/resource/NPC spawns the live planner sees,
-        # or event-gated attainability (near_term_gear via
+        # or event-gated attainability (the obtain model's drop routes via
         # monster_spawn_known) is silently inert in scenarios.
         self.game_data.active_event_codes = set(state.active_events)
         # Same overlay for raids: an open raid opens the RESTRICTED areas, so
@@ -2917,8 +2917,9 @@ class GamePlayer:
         a grey task monster yields a `GrindCharacterXPGoal` that is ranked,
         planned, and CANNOT plan. Live: HAL sat at `GrindCharacterXP(sheep)`
         priority 30.0, plan_len 0 in 3 nodes, for 12 consecutive cycles of `Wait`,
-        because sheep is level 5 against its 17. Tier 3
-        (`_pick_winnable_monster`) has always applied this filter; tier 1 did not,
+        because sheep is level 5 against its 17. The windowed pick
+        (`_pick_winnable_monster`, deleted in plan C Task 4) always applied this
+        filter; the task arm did not,
         so the task could inject a target the action layer would always reject.
 
         A grey task is not thereby abandoned — it is simply not a CHARACTER-XP
