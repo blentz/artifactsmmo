@@ -5508,11 +5508,25 @@ STORE_KIND_SECONDS_MUTATIONS = [
      "    if kind not in (LogType.CRAFTING, LogType.RECYCLING):\n        return 1\n",
      "    if True:\n        return 1\n"),
     ("store kinds: a recorded cycle is one run whatever its quantity",
-     "        seen[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))\n",
-     "        seen[kind.value] = (total + seconds, runs + cycles)\n"),
+     "        out[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))\n",
+     "        out[kind.value] = (total + seconds, runs + cycles)\n"),
     ("store kinds: the store is never read",
-     "        if rows:\n            return store_kind_seconds(rows)\n",
-     "        if False:\n            return store_kind_seconds(rows)\n"),
+     "        timed.update(stored)\n",
+     "        pass\n"),
+    # Fix round 3 (re-review N1): the kinds merge per kind; a whole-store
+    # cutover dropped every kind the logs timed once the store held any row.
+    ("store kinds: the store's kinds replace the logs' whole",
+     "        timed.update(stored)\n",
+     "        timed = stored or timed\n"),
+    ("store kinds: the held sums are dropped on every new cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (held[1], {}) if held is not None else (0, {})\n"),
+    ("store kinds: the held sums are read again from the first cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (0, held[2]) if held is not None else (0, {})\n"),
+    ("store kinds: a replaced table keeps its stale sums",
+     "_KIND_SUMS[0][0] is store and _KIND_SUMS[0][1] <= last else None\n",
+     "_KIND_SUMS[0][0] is store else None\n"),
     ("log kinds: a logged craft is one run per unit made",
      "        return Fraction(quantity, craft_yield(item))\n",
      "        return Fraction(quantity)\n"),
@@ -5526,13 +5540,16 @@ STORE_KIND_SECONDS_MUTATIONS = [
 STORE_COOLDOWNS_QUERY_MUTATIONS = [
     ("store kinds: a failed cycle times its kind",
      "                       Cycle.outcome == \"ok\",\n"
-     "                       col(Cycle.actual_cooldown_seconds) > 0)\n",
-     "                       col(Cycle.actual_cooldown_seconds) > 0)\n"),
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n"),
     ("store kinds: a zero cooldown times its kind",
      "                       Cycle.outcome == \"ok\",\n"
-     "                       col(Cycle.actual_cooldown_seconds) > 0)\n",
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
      "                       Cycle.outcome == \"ok\",\n"
-     "                       col(Cycle.actual_cooldown_seconds) >= 0)\n"),
+     "                       col(Cycle.actual_cooldown_seconds) >= 0,\n"),
+    ("store kinds: the read ignores the id window",
+     "                       col(Cycle.id) > after_id, col(Cycle.id) <= through_id)\n",
+     "                       col(Cycle.id) >= 0)\n"),
 ]
 UNTIMED_KIND_MUTATIONS = [
     ("untimed kind: an untimed kind is the mean action",

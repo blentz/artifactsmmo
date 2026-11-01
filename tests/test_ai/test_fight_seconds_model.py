@@ -375,7 +375,7 @@ def test_the_store_times_each_priced_kind_per_action_run(tmp_path: Path) -> None
         _priced(store, 5, "GatherAction", "Gather(ash_tree)", 30.0)
         _priced(store, 6, "GatherAction", "Gather(ash_tree)", 0.0)
         _priced(store, 7, "RestAction", "Rest", 12.0)
-        rows = store.fleet_action_cooldowns(frozenset(STORE_KINDS))
+        rows = store.fleet_action_cooldowns(frozenset(STORE_KINDS), 0, store.last_cycle_id())
         assert sorted(rows) == [("CraftAction", "Craft(cheese×3)", 15.0, 1),
                                 ("CraftAction", "Craft(copper_bar×1)", 5.0, 1),
                                 ("GatherAction", "Gather(ash_tree)", 30.0, 1),
@@ -383,8 +383,6 @@ def test_the_store_times_each_priced_kind_per_action_run(tmp_path: Path) -> None
         timed = store_kind_seconds(rows)
         assert timed == (("crafting", Fraction(5)), ("gathering", Fraction(30)),
                          ("recycling", Fraction(3)))
-        bootstrap = FleetBootstrap((), (), (("withdraw_gold", 3, None, 1),))
-        assert learned_kind_seconds(store, bootstrap, lambda _item: 1) == timed
         ctx = replace(NO_PROFILE_CONTEXT, kind_seconds=timed)
         assert ctx.seconds_of(LogType.CRAFTING) == 5
         with pytest.raises(UntimedActionKindError) as untimed:
@@ -420,3 +418,59 @@ def test_every_priced_kind_is_a_recorded_action_class_and_the_capture_times_it()
     assert set(STORE_KINDS) == {cls.__name__ for cls in classes}
     assert set(STORE_KINDS.values()) == PRICED_KINDS
     assert {kind.value for kind in PRICED_KINDS} == set(dict(committed_kind_seconds()))
+
+
+def test_each_kind_is_the_store_s_and_otherwise_the_account_log_s(tmp_path: Path) -> None:
+    """The user's ruling (fix round 3, re-review N1): the per-kind seconds
+    merge per kind, real data only. A fresh install whose store has recorded
+    one gather still prices its craft from the `/my/logs` bootstrap, which a
+    whole-store cutover dropped (the craft then raised forever, and was never
+    recorded). A kind the store has timed is the store's; a kind neither
+    timed is absent and raises where it is priced."""
+    store = _store(tmp_path)
+    try:
+        _priced(store, 1, "GatherAction", "Gather(ash_tree)", 30.0)
+        bootstrap = FleetBootstrap((), (), (("crafting", 10, "cheese", 4),
+                                            ("gathering", 50, None, 1)))
+        merged = learned_kind_seconds(store, bootstrap, {"cheese": 2}.__getitem__)
+        assert merged == (("crafting", Fraction(5)), ("gathering", Fraction(30)))
+        with pytest.raises(UntimedActionKindError):
+            replace(NO_PROFILE_CONTEXT, kind_seconds=merged).seconds_of(LogType.SELL_NPC)
+    finally:
+        store.close()
+
+
+def test_the_store_sums_are_read_incrementally(tmp_path: Path) -> None:
+    """Re-review: the cycles table is append-only, so the held per-kind sums
+    take only the rows past the last id read, and equal a full scan after
+    every append; a store whose newest id dropped (replaced) reads afresh."""
+    store = _store(tmp_path)
+    classes = frozenset(STORE_KINDS)
+    try:
+        _priced(store, 1, "CraftAction", "Craft(cheese×3)", 15.0)
+        _priced(store, 2, "GatherAction", "Gather(ash_tree)", 30.0)
+        boot = FleetBootstrap((), (), ())
+
+        def full() -> tuple[tuple[str, Fraction], ...]:
+            return store_kind_seconds(store.fleet_action_cooldowns(classes, 0,
+                                                                   store.last_cycle_id()))
+
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+        _priced(store, 3, "CraftAction", "Craft(cheese×1)", 7.0)
+        _priced(store, 4, "GatherAction", "Gather(ash_tree)", 34.0)
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full() == (
+            ("crafting", Fraction(22, 4)), ("gathering", Fraction(32)))
+        mod._KIND_SUMS[:] = [(store, store.last_cycle_id() + 5, {})]
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+    finally:
+        store.close()
+
+
+def test_a_recorded_craft_or_recycle_repr_parses_to_its_runs() -> None:
+    """Re-review I3: the store's only quantity is the action's repr, so the
+    parse is tied to `CraftAction.__repr__` and `RecycleAction.__repr__`."""
+    craft = CraftAction(code="cheese", workshop_location=(1, 1), quantity=3)
+    recycle = RecycleAction(code="iron_dagger", workshop_location=(1, 1), quantity=2)
+    assert mod._store_runs(LogType.CRAFTING, repr(craft)) == 3
+    assert mod._store_runs(LogType.RECYCLING, repr(recycle)) == 2
+    assert mod._store_runs(LogType.GATHERING, repr(craft)) == 1

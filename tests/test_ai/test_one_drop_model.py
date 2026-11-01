@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -30,6 +31,7 @@ from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, LEGACY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -270,3 +272,22 @@ def test_every_pricing_context_carries_the_cycle_clock(state, game_data, monkeyp
                         lambda code, qty, at, gd, ctx, **kw: seen.append(ctx.now) or 1)
     player._consumable_price("small_health_potion")
     assert seen and set(seen) == {stamp}
+
+
+def test_an_unpriced_walk_serves_the_learned_cheapest_gather(tmp_path, state, game_data) -> None:
+    """Re-review: a walk with no priced route order (`prefer` left at its
+    default, as `potion_supply.prep_supplies`', `gear_objective`'s and the
+    joint-walk census' are) serves gathers in `ObtainModel._ranked_gathers`'
+    order, the learned attempts: the fleet's 1,000 dry salmon gathers move the
+    pearl's first gather from `salmon_spot` (the prior's 1 in 100) to
+    `trout_spot`. The ranking is not dead code behind the priced walk."""
+    def first_gather(evidence: LearnedDrops) -> str:
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
+        answer = ObtainModel(state, game_data, ctx, ctx.now).walk(
+            "small_pearls", 1, DECOMPOSE_POLICY)
+        leg = next(leg for leg in answer.plan if isinstance(leg, Act))
+        return answer.graph.sources[leg.item][leg.route].via
+
+    assert first_gather(LearnedDrops.empty()) == "salmon_spot"
+    evidence = _evidence(tmp_path / "learn.db", game_data, _PEARLS_383_FOR_2 + _SALMON_1000_DRY)
+    assert first_gather(evidence) == "trout_spot"

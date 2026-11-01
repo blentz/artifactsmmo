@@ -223,33 +223,70 @@ def _store_runs(kind: LogType, action_repr: str) -> int:
     return int(match.group(1))
 
 
+KindSums = dict[str, tuple[float, int]]
+"""Per priced kind, the recorded cooldown seconds and the action runs they
+timed (`store_kind_seconds`'s running sums)."""
+
+
+def _add_store_rows(sums: KindSums, rows: Iterable[StoreCooldowns]) -> KindSums:
+    """`sums` with `rows` added: each row's seconds to its kind (`STORE_KINDS`)
+    and its cycles times the runs its repr records (`_store_runs`)."""
+    out = dict(sums)
+    for action_class, action_repr, seconds, cycles in rows:
+        kind = STORE_KINDS[action_class]
+        total, runs = out.get(kind.value, (0.0, 0))
+        out[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))
+    return out
+
+
+def _sums_seconds(sums: KindSums) -> tuple[tuple[str, Fraction], ...]:
+    """The seconds of one action of each kind in `sums`, sorted by kind."""
+    return tuple(sorted((kind, Fraction(total) / runs) for kind, (total, runs) in sums.items()))
+
+
 def store_kind_seconds(rows: Iterable[StoreCooldowns]) -> tuple[tuple[str, Fraction], ...]:
     """The learned seconds of ONE action of each priced kind, sorted by kind:
     the store's recorded server cooldowns of its action class (`STORE_KINDS`)
     over the actions they ran (`_store_runs`). A kind the store never
     recorded is absent: it was never timed."""
-    seen: dict[str, tuple[float, int]] = {}
-    for action_class, action_repr, seconds, cycles in rows:
-        kind = STORE_KINDS[action_class]
-        total, runs = seen.get(kind.value, (0.0, 0))
-        seen[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))
-    return tuple(sorted((kind, Fraction(total) / runs) for kind, (total, runs) in seen.items()))
+    return _sums_seconds(_add_store_rows({}, rows))
+
+
+_KIND_SUMS: list[tuple[LearningStore, int, KindSums]] = []
+"""The last store sums read: the store (held, so the key cannot outlive its
+object), the newest cycle id folded in, and the per-kind sums through it."""
+
+
+def _store_sums(store: LearningStore) -> KindSums:
+    """The store's per-kind sums over every recorded cycle, read incrementally
+    (review: a full GROUP BY per decision grew with the table): the table is
+    append-only, so the held sums take only the rows past the last id read.
+    A newest id below the one held (the table replaced) reads afresh."""
+    last = store.last_cycle_id()
+    held = _KIND_SUMS[0] if _KIND_SUMS and _KIND_SUMS[0][0] is store and _KIND_SUMS[0][1] <= last else None
+    if held is not None and held[1] == last:
+        return held[2]
+    seen, sums = (held[1], held[2]) if held is not None else (0, {})
+    sums = _add_store_rows(sums, store.fleet_action_cooldowns(frozenset(STORE_KINDS), seen, last))
+    _KIND_SUMS[:] = [(store, last, sums)]
+    return sums
 
 
 def learned_kind_seconds(store: LearningStore | None, bootstrap: FleetBootstrap,
                          craft_yield: Callable[[str], int]) -> tuple[tuple[str, Fraction], ...]:
-    """The seconds of one action of each priced kind: the learning store's
-    recorded server cooldowns (`store_kind_seconds`), read once per recorded
-    cycle; the `/my/logs` bootstrap's (`kind_seconds`) only while there is no
-    store or it has recorded no priced action (a fresh install). A kind
-    neither timed raises where it is priced (`SelectionContext.seconds_of`)."""
+    """The seconds of one action of each priced kind, merged per kind from real
+    data only (the user's ruling, fix round 3): a kind the learning store has
+    timed is its recorded server cooldowns (`_store_sums`); a kind it has not
+    is the `/my/logs` bootstrap's (`kind_seconds`); a kind neither timed is
+    absent and raises where it is priced (`SelectionContext.seconds_of`). A
+    whole-store cutover bricked a fresh install: its first recorded gather
+    dropped the bootstrap's craft timing, and the craft it then could never
+    price was never recorded (re-review N1)."""
+    timed = dict(kind_seconds(bootstrap.kinds, craft_yield))
     if store is not None:
-        rows = store.per_recorded_cycle(
-            "fleet_action_cooldowns",
-            lambda: store.fleet_action_cooldowns(frozenset(STORE_KINDS)))
-        if rows:
-            return store_kind_seconds(rows)
-    return kind_seconds(bootstrap.kinds, craft_yield)
+        stored = dict(_sums_seconds(_store_sums(store)))
+        timed.update(stored)
+    return tuple(sorted(timed.items()))
 
 
 def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],

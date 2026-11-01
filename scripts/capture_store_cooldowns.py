@@ -27,7 +27,8 @@ OUT = (Path(__file__).resolve().parent.parent / "tests" / "test_ai" / "fixtures"
 def main(db_path: str) -> None:
     store = LearningStore(db_path=db_path, character="capture")
     try:
-        rows = sorted(store.fleet_action_cooldowns(frozenset(STORE_KINDS)))
+        rows = sorted(store.fleet_action_cooldowns(frozenset(STORE_KINDS), 0,
+                                                   store.last_cycle_id()))
     finally:
         store.close()
     OUT.write_text(json.dumps({
