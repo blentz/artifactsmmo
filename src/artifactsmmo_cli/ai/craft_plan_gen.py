@@ -77,6 +77,7 @@ from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges, crossings, door_legs
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
+from artifactsmmo_cli.ai.unservable_drop_route_error import UnservableDropRouteError
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
@@ -741,11 +742,20 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         # vets it (the oracle's approval, the grey drop_farm variant).
         # The goal's own actions come last so their fight (possibly the
         # synthesized drop_farm variant the static pool lacks) wins per monster.
+        # A pool with no fight for the dropper serves nothing yet, as every
+        # other arm's missing action. The walk admitted the route on the
+        # oracle's own gates, so the oracle refusing a fight the pool holds
+        # is a broken agreement, raised by name (review I4), never a plan
+        # that silently dies.
         droppers: list[Action] = [a for a in (*pool, *relevant)
                                   if isinstance(a, FightAction) and a.monster_code == route.via]
+        if not droppers:
+            return None
         fight = select_drop_fight(step.item, droppers, state, game_data,
                                   allow_grey=grey_ok(step.item))
-        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))
+        if fight is None:
+            raise UnservableDropRouteError(step.item, route.via)
+        return dataclasses.replace(fight, drop_target=(step.item, step.amount))
     return None
 
 

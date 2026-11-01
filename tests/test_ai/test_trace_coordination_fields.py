@@ -14,6 +14,7 @@ chosen and nothing about WHY, and diagnosing "the best miner on the account is
 serving alchemy" needed a live API query instead of the trace.
 """
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
@@ -98,7 +99,12 @@ def test_turn_in_is_present_on_the_trace_record_for_a_holder():
         "fleet_total": 10,
         "buyer": "Robby",
         "role": "holder",
+        "ready": True,
     }
+    # Review M6: a farmer's claim the fleet cannot yet pay says so.
+    player._turn_in = replace(player._turn_in, fleet_total=3)
+    player._emit_trace("Act()", "Goal()", "ok", PLANNER_STATS)
+    assert player.tracer.write_cycle.call_args[0][0]["turn_in"]["ready"] is False
 
 
 def test_turn_in_is_present_but_null_on_the_trace_record_when_uninvolved():

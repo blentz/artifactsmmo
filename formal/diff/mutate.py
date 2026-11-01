@@ -4714,9 +4714,8 @@ CAPACITY_FILL_MUTATIONS = [
      "        if take <= 0:\n            continue\n",
      "        if take < 0:\n            continue\n"),
     ("capacity fill: the routes fill in catalogue order, not unit cost",
-     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,\n"
-     "                                                  charge),\n",
-     "                   key=lambda index: (0,\n"),
+     "    return sorted(units, key=lambda pair: (pair[1], pair[0]))\n",
+     "    return sorted(units, key=lambda pair: (0, pair[0]))\n"),
     ("capacity fill: a remainder no route serves is free",
      "            return\n    actions[0] += UNOBTAINABLE_PER_UNIT * remaining\n",
      "            return\n    actions[0] += 0 * remaining\n"),
@@ -4785,9 +4784,9 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
 PIECE_GE_ROUTING_MUTATIONS = [
     ("piece GE: a piece's currency step is walked without the piece's routes",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=piece)",
+     "                                           fight_gold=piece, farmed_for=code)",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=False)"),
+     "                                           fight_gold=False, farmed_for=code)"),
 ]
 PIECE_GE_DECOMPOSE_MUTATIONS = [
     ("piece GE: a piece's walk has no GE fill (D-E kept)",
@@ -5347,8 +5346,15 @@ COMMITTED_PLAN_MUTATIONS = [
      "            if action.is_applicable(sim, game_data):\n"
      "                sim = action.apply(sim, game_data)\n        if legs:"),
     ("craft_plan_gen: a drop fight carries no drop target",
-     "        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))",
-     "        return fight"),
+     "        return dataclasses.replace(fight, drop_target=(step.item, step.amount))\n",
+     "        return fight\n"),
+    # Review I4: a walked dropper the oracle refuses is a named defect.
+    ("craft_plan_gen: a pool without the dropper's fight raises",
+     "        if not droppers:\n            return None\n        fight = select_drop_fight(",
+     "        fight = select_drop_fight("),
+    ("craft_plan_gen: an unservable drop route plans nothing",
+     "        if fight is None:\n            raise UnservableDropRouteError(step.item, route.via)\n",
+     "        if fight is None:\n            return None\n"),
 ]
 # A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
 PLAN_CACHE_TARGET_MUTATIONS = [
@@ -5506,11 +5512,11 @@ PRICED_ROUTE_KEY_MUTATIONS = [
 ]
 PRICED_ROUTE_CORE_MUTATIONS = [
     ("priced walk: the ranking carries no unit cost",
-     "    return tuple((routes[index], _route_unit(routes[index], options, memo, inner, free, charges))\n",
+     "    return tuple((routes[index], unit)\n",
      "    return tuple((routes[index], 0)\n"),
     ("priced walk: the ranking is the options order",
-     "                 for index in _fill_order(item, options, memo, free, charges))\n",
-     "                 for index in range(len(routes)))\n"),
+     "                 for index, unit in _ranked(item, options, memo, free, charges))\n",
+     "                 for index, unit in sorted(_ranked(item, options, memo, free, charges)))\n"),
 ]
 # The ticket farm (live 2026-10-31): a leg whose planned drop did not land is
 # no progress, so a dry drop farm reaches the stall exit. Killed by
@@ -5618,14 +5624,47 @@ FLEET_FARM_PLAYER_MUTATIONS = [
      "                if False:\n"
      "                    # A claim the fleet cannot pay yet"),
     ("fleet farm: a running farm takes no election",
-     "            if not turn_in_ready_pure(fleet_total, price):\n"
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n"
      "                self._coordination.claim_turn_in(item_code, now)\n",
      "            if False:\n"
      "                self._coordination.claim_turn_in(item_code, now)\n"),
+    # Review M3: only the farmed piece's sink is claimed.
+    ("fleet farm: a farm claims every unpaid sink of its currency",
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n",
+     "            if not turn_in_ready_pure(fleet_total, price):\n"),
+    # Review M4: a farmer that cannot buy releases the election once ready.
+    ("fleet farm: a farmer that cannot buy keeps the election",
+     "                    if self._coordination.turn_in_holder(item_code, now) == self.character:\n"
+     "                        self._coordination.release_turn_in(item_code)\n",
+     "                    if False:\n"
+     "                        self._coordination.release_turn_in(item_code)\n"),
+    # Review M2: equal prices go to the sink the fleet is nearest paying.
+    ("fleet farm: equal-price farms tie on the vendor order alone",
+     "        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None\n",
+     "        return max(farmed, key=lambda t: t.price) if farmed else None\n"),
     ("fleet farm: any goal's run takes the election",
      "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)\n"
      "                or not is_dual_role(goal.target_item, game_data)):\n",
      "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)):\n"),
+]
+# Review M6: the trace says whether the claim can buy now. Killed by
+# tests/test_ai/test_trace_coordination_fields.py.
+FLEET_FARM_TRACE_MUTATIONS = [
+    ("fleet farm: the trace drops the claim's readiness",
+     "            \"ready\": self._turn_in.ready,\n",
+     "            \"ready\": True,\n"),
+]
+# Review M3: a currency farm names the sink it buys, through `for_piece`.
+# Killed by tests/test_ai/test_dual_role_currency.py.
+FARMED_FOR_ROUTING_MUTATIONS = [
+    ("fleet farm: a piece's currency farm names no sink",
+     "                                           fight_gold=piece, farmed_for=code)",
+     "                                           fight_gold=piece)"),
+]
+FARMED_FOR_GOAL_MUTATIONS = [
+    ("fleet farm: for_piece forgets the sink the farm buys",
+     "                                   farmed_for=self.farmed_for)\n",
+     "                                   farmed_for=None)\n"),
 ]
 FLEET_FARM_RESERVE_MUTATIONS = [
     ("fleet farm: a claim short of the price reserves the medal",
@@ -9019,8 +9058,8 @@ PIECE_GREY_GOAL_MUTATIONS = [
      "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
      "                            or self.piece_material\n"),
     ("piece grey: for_piece leaves the goal unmarked",
-     "                                   fight_gold=self.fight_gold, piece_material=True)",
-     "                                   fight_gold=self.fight_gold, piece_material=False)"),
+     "                                   fight_gold=self.fight_gold, piece_material=True,\n",
+     "                                   fight_gold=self.fight_gold, piece_material=False,\n"),
 ]
 PIECE_GREY_SEAM_MUTATIONS = [
     ("piece grey: a piece's gather is never marked",
@@ -14865,6 +14904,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(PLAYER_SRC, FLEET_FARM_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_TRACE_MUTATIONS,
+              "tests/test_ai/test_trace_coordination_fields.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, FARMED_FOR_ROUTING_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(GATHERING_GOAL_SRC, FARMED_FOR_GOAL_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FLEET_FARM_RESERVE_MUTATIONS,
               "tests/test_ai/test_turn_in_no_livelock.py", survivors)
     run_group(FLEET_WORK_SRC, FLEET_FARM_TURNIN_MUTATIONS,

@@ -48,6 +48,7 @@ from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.unservable_drop_route_error import UnservableDropRouteError
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -1000,6 +1001,28 @@ class TestDropLeafFightLeg:
         assert result is not None, "grey-farm-allowed dropper must generate"
         assert isinstance(result[0], FightAction)
         assert result[0].drop_farm is True
+
+    @staticmethod
+    def _drop_leg(state, gd, pool):  # type: ignore[no-untyped-def]
+        graph = SimpleNamespace(sources={"feather": [SimpleNamespace(kind=SourceKind.DROP,
+                                                                       via="chicken")]})
+        return cpg._action_for(Act("feather", 0, 8, 8), graph, [], pool, state, gd, True,
+                               lambda _item: False)
+
+    def test_a_walked_dropper_the_oracle_vetoes_is_a_named_defect(self):
+        """Review I4: the DROP leg fights the route's own dropper. When the
+        proved selection refuses it (the oracle: chicken unbeatable) or the
+        pool holds no fight for it, the walk's admission and the oracle
+        disagree, and the step raises by name instead of planning nothing. A
+        pool with no fight for it serves nothing yet (None), as every other
+        arm's missing action."""
+        state = _fighter_state()
+        fought = self._drop_leg(state, _gd_drop_leaf(), _drop_leaf_actions())
+        assert isinstance(fought, FightAction) and fought.drop_target == ("feather", 8)
+        with pytest.raises(UnservableDropRouteError) as vetoed:
+            self._drop_leg(state, _gd_drop_leaf(char_beats_chicken=False), _drop_leaf_actions())
+        assert (vetoed.value.item, vetoed.value.monster) == ("feather", "chicken")
+        assert self._drop_leg(state, _gd_drop_leaf(), _drop_leaf_actions()[:1]) is None
 
     def test_unwinnable_dropper_returns_none(self):
         """A dropper exists but is_winnable rejects it → relevant_actions

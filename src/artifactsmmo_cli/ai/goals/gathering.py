@@ -71,8 +71,15 @@ class GatherMaterialsGoal(Goal):
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
                  carry: bool = False, fight_gold: bool = False,
-                 piece_material: bool = False) -> None:
+                 piece_material: bool = False, farmed_for: str | None = None) -> None:
         self._target_item = target_item
+        # farmed_for: the item a fleet currency is farmed to buy (the ticket
+        # farm, live 2026-10-31: medals farmed for the trophy). The farmer
+        # holds the turn-in election for THAT sink only
+        # (`GamePlayer._claim_currency_farm`, review M3), so siblings are not
+        # locked out of the currency's other sinks. Not part of goal
+        # identity, like `fight_gold`: the target and `needed` name the walk.
+        self.farmed_for = farmed_for
         # piece_material: the goal walks a material of a missing `L*` piece
         # (ruling T14a-D; `for_piece`), so a grey dropper of a material that
         # serves a demand may be farmed: the grey-farm directive's next-tier
@@ -115,7 +122,8 @@ class GatherMaterialsGoal(Goal):
         return GatherMaterialsGoal(self._target_item, dict(self._needed),
                                    skill_grind=self.skill_grind,
                                    exclude_recycle=self._exclude_recycle, carry=self.carry,
-                                   fight_gold=self.fight_gold, piece_material=True)
+                                   fight_gold=self.fight_gold, piece_material=True,
+                                   farmed_for=self.farmed_for)
 
     @property
     def needed(self) -> dict[str, int]:

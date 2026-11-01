@@ -166,6 +166,10 @@ def test_an_l_star_trophy_farms_the_tickets_its_medals_cost(monkeypatch):
     goal = _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd, ctx)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.needed == {"lich_race_medal": currency_grind_target_pure(3, 10)}
+    # Review M3: the farm names the sink it buys, and only that sink's
+    # election is the farmer's (`GamePlayer._claim_currency_farm`).
+    assert goal.farmed_for == "lich_race_trophy"
+    assert goal.for_piece().farmed_for == "lich_race_trophy"
     # Not an `L*` piece: the passive rule stands (a medal step's tickets held).
     assert _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd,
                             NO_PROFILE_CONTEXT) is None

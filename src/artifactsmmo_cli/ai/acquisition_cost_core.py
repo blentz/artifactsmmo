@@ -293,21 +293,28 @@ def _cheapest_route(item: str, options: Mapping[str, list[RouteOption]],
     return best
 
 
+def _ranked(item: str, options: Mapping[str, list[RouteOption]],
+            memo: dict[str, tuple[int | Fraction, RouteOption | None]],
+            free: Mapping[str, int],
+            charge: Mapping[str, Fraction]) -> list[tuple[int, int | Fraction]]:
+    """`(index, unit cost)` of each of `item`'s routes in the order the walk
+    fills a demand: unit cost (`_route_unit`, computed once per route), first
+    of equal in `options` order, the order `_cheapest_route` takes its argmin
+    in. The ONE ranking of an item's routes: `_accumulate` fills by it
+    (`_fill_order`) and `route_ranks` hands it to the executor's walk, so the
+    route served is the route priced."""
+    routes = options.get(item, [])
+    inner = frozenset({item})
+    units = [(index, _route_unit(route, options, memo, inner, free, charge))
+             for index, route in enumerate(routes)]
+    return sorted(units, key=lambda pair: (pair[1], pair[0]))
+
+
 def _fill_order(item: str, options: Mapping[str, list[RouteOption]],
                 memo: dict[str, tuple[int | Fraction, RouteOption | None]],
                 free: Mapping[str, int], charge: Mapping[str, Fraction]) -> list[int]:
-    """The indices of `item`'s routes in the order the walk fills a demand:
-    unit cost (`_route_unit`), first of equal in `options` order, the order
-    `_cheapest_route` takes its argmin in. The ONE ranking of an item's
-    routes: `_accumulate` fills by it and `route_ranks` hands it to the
-    executor's walk, so the route served is the route priced."""
-    routes = options.get(item, [])
-    inner = frozenset({item})
-    order = sorted(range(len(routes)),
-                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,
-                                                  charge),
-                                      index))
-    return order
+    """The indices of `item`'s routes in fill order (`_ranked`)."""
+    return [index for index, _unit in _ranked(item, options, memo, free, charge)]
 
 
 def route_ranks(
@@ -328,9 +335,8 @@ def route_ranks(
     free = {code: owned.get(code, 0) for code in free_codes}
     charges = charge or {}
     routes = options.get(item, [])
-    inner = frozenset({item})
-    return tuple((routes[index], _route_unit(routes[index], options, memo, inner, free, charges))
-                 for index in _fill_order(item, options, memo, free, charges))
+    return tuple((routes[index], unit)
+                 for index, unit in _ranked(item, options, memo, free, charges))
 
 
 def _accumulate(item: str, qty: int, options: Mapping[str, list[RouteOption]],

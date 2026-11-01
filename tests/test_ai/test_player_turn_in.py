@@ -377,20 +377,24 @@ def test_a_shortfall_the_fleet_cannot_pay_names_its_elected_farmer(tmp_path):
 
 def test_the_running_farm_takes_the_election_for_the_shortfall(tmp_path):
     """`_claim_currency_farm`: the character whose cycle runs a dual-role
-    currency's farm holds the election for every sink the fleet cannot yet
-    pay; a farm for any other item, or a fleet that can pay, claims nothing."""
+    currency's farm holds the election for the sink it farms for, while the
+    fleet cannot yet pay; a farm for any other item, or a fleet that can pay,
+    claims nothing."""
     player, store = _player_with(tmp_path, "Robby")
     now = coordination_now()
     short = make_state(level=30, inventory={"lich_race_medal": 4})
-    player._claim_currency_farm(GatherMaterialsGoal("event_ticket", {"event_ticket": 1}),
+    player._claim_currency_farm(GatherMaterialsGoal("event_ticket", {"event_ticket": 1},
+                                                    farmed_for="lich_race_medal"),
                                 short, player.game_data)
     assert store.turn_in_holder("lich_race_trophy", now) is None
     assert store.turn_in_holder("lich_race_medal", now) is None
     paid = make_state(level=30, inventory={"lich_race_medal": 10})
-    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 11}),
+    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 11},
+                                                    farmed_for="lich_race_trophy"),
                                 paid, player.game_data)
     assert store.turn_in_holder("lich_race_trophy", now) is None
-    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 10}),
+    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 10},
+                                                    farmed_for="lich_race_trophy"),
                                 short, player.game_data)
     assert store.turn_in_holder("lich_race_trophy", now) == "Robby"
     # A sibling now stands down on it.
@@ -425,3 +429,64 @@ def test_neither_this_character_s_own_claim_nor_a_payable_one_is_a_farm(tmp_path
                                                         coordination_now())
     low._resolve_turn_in(make_state(level=5), low.game_data)
     assert low._turn_in is None
+
+
+def _medal_with_a_second_sink():
+    """`medal_game_data` with a SECOND sink of the medal: the curator's
+    banner, also 10 medals."""
+    gd = medal_game_data()
+    gd._item_stats["medal_banner"] = ItemStats(code="medal_banner", level=20, type_="artifact",
+                                               hp_bonus=1)
+    gd.world.npc_buy_currency["curator"] = {"medal_banner": "lich_race_medal"}
+    gd.world.npc_stock["curator"] = {"medal_banner": 10}
+    return gd
+
+
+def test_a_farm_claims_only_the_sink_it_farms_for(tmp_path):
+    """Review M3: a medal farm for the trophy holds the trophy's election
+    only. The medal's other sink (the banner) stays open to a sibling."""
+    player, store = _player_with_gd(tmp_path, "Robby", _medal_with_a_second_sink())
+    now = coordination_now()
+    player._claim_currency_farm(GatherMaterialsGoal("lich_race_medal", {"lich_race_medal": 10},
+                                                    farmed_for="lich_race_trophy"),
+                                make_state(level=30, inventory={"lich_race_medal": 4}),
+                                player.game_data)
+    assert store.turn_in_holder("lich_race_trophy", now) == "Robby"
+    assert store.turn_in_holder("medal_banner", now) is None
+
+
+def test_a_farmer_that_cannot_buy_lets_the_election_go_once_the_fleet_can_pay(tmp_path):
+    """Review M4: HAL (level 15) farmed the shortfall and holds the trophy's
+    election. Once the fleet holds the price, HAL fails the buyer's level
+    gate (the trophy is level 20) and releases the claim the same cycle, so
+    Robby, who can wear it, is elected at once instead of after `DEMAND_TTL`."""
+    hal, store = _player_with(tmp_path, "HAL")
+    now = coordination_now()
+    assert store.claim_turn_in("lich_race_trophy", now)
+    CoordinationStore(db_path=str(tmp_path / "coord.db"),
+                      character="Robby").publish_holdings({"lich_race_medal": 9}, now)
+    hal._resolve_turn_in(make_state(level=15, inventory={"lich_race_medal": 1}), hal.game_data)
+    assert store.turn_in_holder("lich_race_trophy", now) is None
+    robby, _ = _player_with(tmp_path, "Robby")
+    robby._resolve_turn_in(make_state(level=27, inventory={"lich_race_medal": 9},
+                                      equipment={"artifact1_slot": "lich_race_medal"}),
+                           robby.game_data)
+    assert robby._turn_in is not None and robby._turn_in.buyer == "Robby"
+
+
+def test_equal_price_farms_go_to_the_shortfall_the_fleet_is_nearest_paying(tmp_path):
+    """Review M2: two siblings farm two 10-unit sinks of two currencies. The
+    one the fleet is nearer paying (6 of 10 over 2 of 10) is reported,
+    whichever currency's name sorts first."""
+    gd = _two_dual_role_currency_game_data()
+    gd.world.npc_stock["curator"] = {"second_trophy": 10}
+    player, _ = _player_with_gd(tmp_path, "C3P0", gd)
+    now = coordination_now()
+    hal = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="HAL")
+    hal.publish_holdings({"lich_race_medal": 2, "second_medal": 6}, now)
+    assert hal.claim_turn_in("lich_race_trophy", now)
+    robby = CoordinationStore(db_path=str(tmp_path / "coord.db"), character="Robby")
+    assert robby.claim_turn_in("second_trophy", now)
+    player._resolve_turn_in(make_state(level=30), player.game_data)
+    assert player._turn_in is not None
+    assert (player._turn_in.item_code, player._turn_in.buyer) == ("second_trophy", "Robby")

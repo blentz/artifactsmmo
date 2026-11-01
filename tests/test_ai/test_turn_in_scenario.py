@@ -198,6 +198,7 @@ def test_the_buyer_snapshot_carries_the_turn_in_block_with_role_buyer(tmp_path):
         "fleet_total": 10,
         "buyer": "Robby",
         "role": "buyer",
+        "ready": True,
     }
 
 

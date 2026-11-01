@@ -328,7 +328,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 # and fight for its gold, as `PIECE_POLICY` priced it.
                 return GatherMaterialsGoal(target_item=currency,
                                            needed={currency: held + want},
-                                           fight_gold=piece)
+                                           fight_gold=piece, farmed_for=code)
         if _passively_funded(code, state, game_data) == 0 and not farmed:
             # The ITEM itself is bought with a passive currency (a medal worn
             # as an artifact): the "plain buy attempt" above is not

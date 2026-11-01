@@ -2435,6 +2435,9 @@ class GamePlayer:
             "fleet_total": self._turn_in.fleet_total,
             "buyer": self._turn_in.buyer,
             "role": "buyer" if self._turn_in.buyer == self.character else "holder",
+            # A not-ready claim names the shortfall's farmer, who buys only
+            # once the fleet can pay (`TurnIn.ready`, review M6).
+            "ready": self._turn_in.ready,
         }
 
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
@@ -4259,6 +4262,12 @@ class GamePlayer:
                 if not turn_in_ready_pure(fleet_total, price):  # rule 2
                     continue
                 if not self._may_be_buyer(item_code, state, game_data):  # rules 3-4
+                    # A farmer that held the shortfall's election
+                    # (`_claim_currency_farm`) but cannot wear the item lets
+                    # it go the moment the fleet can pay, so the real buyer
+                    # takes it this cycle, not after `DEMAND_TTL` (review M4).
+                    if self._coordination.turn_in_holder(item_code, now) == self.character:
+                        self._coordination.release_turn_in(item_code)
                     continue
                 candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                          price=price, currency=code,
@@ -4318,12 +4327,16 @@ class GamePlayer:
         step stands down on it (`obtain_item_routing._equippable_goal`); being
         not ready, it asks no buy and no surrender (`TurnIn.ready`). This
         character's own claim is no stand-down, and is not reported. Highest
-        price first, as rule 5 elects. Every dual-role currency a vendor takes
-        is asked, held or not: a character holding none still stands down."""
+        price first, as rule 5 elects; of equal price the one the fleet is
+        nearest paying (the larger fleet total), and of those the first in
+        the catalogue's vendor order (review M2: never the currency's name).
+        Every dual-role currency a vendor takes is asked, held or not: a
+        character holding none still stands down."""
         farmed: list[TurnIn] = []
-        pooled = {currency for per_item in game_data.world.npc_buy_currency.values()
-                  for currency in per_item.values() if is_dual_role(currency, game_data)}
-        for code in sorted(pooled):
+        pooled = dict.fromkeys(currency for per_item in game_data.world.npc_buy_currency.values()
+                               for currency in per_item.values()
+                               if is_dual_role(currency, game_data))
+        for code in pooled:
             fleet_total = fleet_total_pure(own, siblings, bank, code)
             for item_code, npc_code, price in game_data.currency_sinks(code):
                 if turn_in_ready_pure(fleet_total, price):
@@ -4333,18 +4346,20 @@ class GamePlayer:
                     continue
                 farmed.append(TurnIn(item_code=item_code, npc_code=npc_code, price=price,
                                      currency=code, buyer=holder, fleet_total=fleet_total))
-        return max(farmed, key=lambda t: t.price) if farmed else None
+        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None
 
     def _claim_currency_farm(self, goal: Goal | None, state: WorldState,
                              game_data: GameData) -> None:
-        """Take (or renew) the turn-in election for every sink the fleet
-        cannot yet pay for of the dual-role currency `goal` farms: the goal
+        """Take (or renew) the turn-in election for the sink the fleet cannot
+        yet pay for that `goal` farms its dual-role currency for: the goal
         this cycle runs is a `GatherMaterialsGoal` for a currency pooled across
-        the fleet (`is_dual_role`). The one character farming the fleet's
-        shortfall holds the claim, and every sibling's piece step stands down
-        on it (`_shortfall_farmer`). Renewed only while the farm runs, so a
-        farmer that stops lets the claim lapse to a sibling. No-op without a
-        coordination store."""
+        the fleet (`is_dual_role`), farmed for the item `goal.farmed_for`. The
+        one character farming the fleet's shortfall holds the claim, and every
+        sibling's piece step stands down on it (`_shortfall_farmer`). Only that
+        piece's sink is claimed (review M3): the currency's other sinks stay
+        open to siblings. Renewed only while the farm runs, so a farmer that
+        stops lets the claim lapse to a sibling. No-op without a coordination
+        store, and for a farm for no sink of the currency."""
         if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)
                 or not is_dual_role(goal.target_item, game_data)):
             return
@@ -4354,7 +4369,7 @@ class GamePlayer:
                                        self._coordination.sibling_holdings(now),
                                        state.bank_items or {}, code)
         for item_code, _npc_code, price in game_data.currency_sinks(code):
-            if not turn_in_ready_pure(fleet_total, price):
+            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):
                 self._coordination.claim_turn_in(item_code, now)
 
     def _may_be_buyer(self, item_code: str, state: "WorldState",
