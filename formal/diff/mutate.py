@@ -9238,9 +9238,6 @@ GREY_CURRENCY_MUTATIONS = [
      "        return bool(bought)\n",
      "        return False\n"),
 ]
-# The reachability-claims census indexes module constants (plan C Task 6,
-# ruling C6-2‴): the register's one claim is about one. Killed by
-# tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
 # The census loadout's own mechanics (plan C Task 6 fix round 1, I-1/I-2).
 # Killed by tests/test_audit/test_census_gear.py.
 CENSUS_GEAR_MUTATIONS = [
@@ -9269,6 +9266,9 @@ CENSUS_GEAR_MUTATIONS = [
      "    key = (char_level, events, geared)\n    if key not in memo:\n",
      "    key = (char_level, frozenset(), geared)\n    if key not in memo:\n"),
 ]
+# The reachability-claims census indexes module constants (plan C Task 6,
+# ruling C6-2‴): the register's one claim is about one. Killed by
+# tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
 REACHABILITY_CONSTANT_MUTATIONS = [
     ("reachability claims: module constants are not indexed",
      "    found: list[Definition] = _constants(tree, module)\n",
