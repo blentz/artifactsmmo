@@ -331,8 +331,11 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     exactly, rounded once a route instead of once a unit; and 213 -> 180 with
     ruling "seconds inside" (2026-10-31): every action is priced at its kind's
     measured seconds over a planner action's (a craft 13 s, a gather 34 s, a
-    cowhide fight its own seconds), against one planner action each before.
-    The climbs, priced in grind cycles, are unchanged."""
+    cowhide fight its own seconds), against one planner action each before;
+    and 180 -> 176 with the user's I2 ruling and review I3: a kind is timed by
+    the learning store's recorded cooldowns per action run (a craft run 5.5 s,
+    not the logs' batched 13.2 s mean; a gather 34.06 s, not 34.5 s). The
+    climbs, priced in grind cycles, are unchanged."""
     world = _world(CLIMB_CELL)
     ctx = TIMED_NO_PROFILE_CONTEXT
     state = replace(derived_scenario_state(SCENARIOS[CLIMB_CELL], world),
@@ -343,10 +346,10 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     assert rates == {"gearcrafting": 30.0, "woodcutting": 30.0}
     climbs = sum(skill_grind_cycles(1, 0, MAX_XP, 10, 30.0) for _ in rates)
 
-    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 180
+    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 176
     assert climbs == 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 180 + 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 180 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 176 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 176 + 90
 
 
 def test_an_unpriceable_climb_leaves_the_piece_unpriced() -> None:

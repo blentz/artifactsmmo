@@ -439,6 +439,7 @@ WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_thresho
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 EXPECTED_DAMAGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "expected_damage.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
+SELECTION_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "selection_context.py"
 FIGHT_SECONDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_seconds_core.py"
 FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                            / "fight_seconds_model.py")
@@ -4544,14 +4545,14 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = True or drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = True or rested.winnable("),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True, doors=doors)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = live and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = live and rested.winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n            continue",
      "        if top < 0 or game_data.monster_level(monster) > ceiling:\n            continue"),
@@ -4564,16 +4565,16 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
 # tests/test_ai/test_obtain_model_fighter.py.
 OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
     ("drop_routes: the fighter is ignored",
-     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter)",
-     "    shared = _Rested(state)"),
+     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter, memo)",
+     "    shared = _Rested(state, memo)"),
     ("drop_routes: a per-monster fighter is ignored for the real state",
-     "        return _Rested(fighter(monster)) if callable(fighter) else shared",
+     "        return _Rested(fighter(monster), memo) if callable(fighter) else shared",
      "        return shared"),
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
-     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)",
-     "        return drop_routes(item, self._state, self._gd, self._crossing)"),
+     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter,\n",
+     "        return drop_routes(item, self._state, self._gd, self._crossing, None,\n"),
     ("obtain_model: the fighter's inventory is stock",
      "        bag: dict[str, int] = dict(self._state.inventory)",
      "        bag: dict[str, int] = dict(self._state.inventory) | "
@@ -5469,32 +5470,89 @@ SECONDS_INSIDE_PRICE_MUTATIONS = [
      "                       * fight, ctx)\n",
      "    return (per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"),
     ("seconds inside: a craft is priced as a gather",
-     "                           actions_per_application=_kind_actions(\"crafting\", ctx),\n"
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"
      "                           yield_per=source.yield_per, capacity=source.capacity,\n"
      "                           inputs=dict(recipe))\n",
-     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
      "                           yield_per=source.yield_per, capacity=source.capacity,\n"
      "                           inputs=dict(recipe))\n"),
     ("seconds inside: a recycle is priced as a craft",
-     "                           actions_per_application=_kind_actions(\"recycling\", ctx),\n",
-     "                           actions_per_application=_kind_actions(\"crafting\", ctx),\n"),
+     "                           actions_per_application=_kind_actions(LogType.RECYCLING, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"),
     ("seconds inside: an item withdraw is priced as a gather",
-     "                           actions_per_application=_kind_actions(\"withdraw_item\", ctx),\n"
+     "                           actions_per_application=_kind_actions(LogType.WITHDRAW_ITEM, ctx),\n"
      "                           yield_per=source.yield_per, capacity=source.capacity)\n",
-     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
      "                           yield_per=source.yield_per, capacity=source.capacity)\n"),
     ("seconds inside: a GE fill is priced as a gather",
-     "                           actions_per_application=_kind_actions(\"buy_ge\", ctx),\n",
-     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"),
+     "                           actions_per_application=_kind_actions(LogType.BUY_GE, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"),
     ("seconds inside: a gather is one action whatever its seconds",
      "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(\n"
-     "        \"gathering\", ctx)\n",
+     "        LogType.GATHERING, ctx)\n",
      "    return _gather_actions(item, resource, state, game_data, ctx.drops())\n"),
 ]
 SECONDS_INSIDE_KIND_MUTATIONS = [
     ("seconds inside: a zero cooldown is timed",
-     "        if cooldown > 0:\n            seen.setdefault(kind, []).append(cooldown)\n",
-     "        if cooldown >= 0:\n            seen.setdefault(kind, []).append(cooldown)\n"),
+     "        if cooldown > 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n",
+     "        if cooldown >= 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n"),
+]
+# The user's I2 ruling (2026-10-31, "learning DB, then raise") and review I3:
+# each priced kind is timed by the store's recorded cooldowns per action run.
+# Killed by tests/test_ai/test_fight_seconds_model.py.
+STORE_KIND_SECONDS_MUTATIONS = [
+    ("store kinds: a craft is filed as a recycle",
+     "    \"CraftAction\": LogType.CRAFTING,\n",
+     "    \"CraftAction\": LogType.RECYCLING,\n"),
+    ("store kinds: a craft's repr quantity is ignored",
+     "    if kind not in (LogType.CRAFTING, LogType.RECYCLING):\n        return 1\n",
+     "    if True:\n        return 1\n"),
+    ("store kinds: a recorded cycle is one run whatever its quantity",
+     "        seen[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))\n",
+     "        seen[kind.value] = (total + seconds, runs + cycles)\n"),
+    ("store kinds: the store is never read",
+     "        if rows:\n            return store_kind_seconds(rows)\n",
+     "        if False:\n            return store_kind_seconds(rows)\n"),
+    ("log kinds: a logged craft is one run per unit made",
+     "        return Fraction(quantity, craft_yield(item))\n",
+     "        return Fraction(quantity)\n"),
+    ("log kinds: a logged recycle is one run",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(quantity)\n",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(1)\n"),
+    ("log kinds: a batched entry's quantity is not read",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), int(entry.content[\"quantity\"])\n",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), 1\n"),
+]
+STORE_COOLDOWNS_QUERY_MUTATIONS = [
+    ("store kinds: a failed cycle times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0)\n",
+     "                       col(Cycle.actual_cooldown_seconds) > 0)\n"),
+    ("store kinds: a zero cooldown times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0)\n",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) >= 0)\n"),
+]
+UNTIMED_KIND_MUTATIONS = [
+    ("untimed kind: an untimed kind is the mean action",
+     "        if measured is None:\n            raise UntimedActionKindError(kind.value)\n        return measured\n",
+     "        if measured is None:\n            return self.action_seconds_of()\n        return measured\n"),
+]
+# Review I5: the WINNABLE verdict is memoised across one decision. Killed by
+# tests/test_ai/test_obtain_model_fighter.py.
+WINNABLE_MEMO_MUTATIONS = [
+    ("winnable memo: a store never memoises",
+     "        store = self._store\n        if store is None:\n            return None\n",
+     "        store = self._store\n        if True:\n            return None\n"),
+    ("winnable memo: every fighter shares one verdict",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster, id(fighter)),\n",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster),\n"),
+]
+WINNABLE_MEMO_ROUTES_MUTATIONS = [
+    ("winnable memo: the memo is never asked",
+     "        return compute() if self.memo is None else self.memo(self.state, monster, compute)\n",
+     "        return compute()\n"),
 ]
 PRICED_ROUTE_KEY_MUTATIONS = [
     ("priced walk: a sibling's craft is keyed as this character's craft",
@@ -9148,8 +9206,9 @@ FEE_SHORTFALL_MUTATIONS = [
 KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: the walk's crossings are asked of its spendable pocket",
      "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,\n"
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "        model = ObtainModel(walked, game_data, ctx, ctx.now)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n"
+     "                            store=store)\n",
+     "        model = ObtainModel(walked, game_data, ctx, ctx.now, store=store)\n"),
     ("door: the model's reach is its pocket's",
      "        self._crossing = state if crossing is None else crossing\n",
      "        self._crossing = state\n"),
@@ -9158,8 +9217,8 @@ KEY_DOOR_CROSSING_MUTATIONS = [
      "    bag = (state.gold if code == GOLD_CODE\n"),
     # Round 5 (b): the walk's pocket is the spendable pocket of its account.
     ("door: the walk's pocket is the whole account",
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "                            spend=None)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n",
+     "                            spend=None,\n"),
 ]
 KEY_DOOR_FEE_GUARD_MUTATIONS = [
     ("door: a fee is paid past the reserve",
@@ -9264,9 +9323,9 @@ KEY_DOOR_STORE_PLAYER_MUTATIONS = [
 # window). `ctx.now.now(...)` is the wall clock, reached without an import.
 CYCLE_CLOCK_SOURCES_MUTATIONS = [
     ("cycle clock: the sources read the wall clock",
-     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),",
+     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing,\n",
      "    return _sources(ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo),"
-     " crossing=crossing),"),
+     " crossing=crossing,\n"),
 ]
 CYCLE_CLOCK_WALK_MUTATIONS = [
     ("cycle clock: the walk reads the wall clock",
@@ -9312,12 +9371,13 @@ KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
      "                                crossing=cross)\n            for code, units in leg)\n",
      "                                crossing=at)\n            for code, units in leg)\n"),
     ("chain: a priced route's model crosses from its pocket",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)\n",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now)\n"),
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross, store=store)\n",
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, store=store)\n"),
     ("chain: a priced route's sources cross from its pocket",
      "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
-     "                                      crossing=cross)\n",
-     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy)\n"),
+     "                                      crossing=cross, store=store)\n",
+     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
+     "                                      store=store)\n"),
 ]
 KEY_DOOR_CHAIN_WALK_MUTATIONS = [
     ("chain: every leg is walked by the origin's model",
@@ -9329,8 +9389,8 @@ KEY_DOOR_CHAIN_WALK_MUTATIONS = [
      "                        for at, cross in leg_states(self._account, self._crossing, door,\n",
      "                        for at, cross in leg_states(self._state, self._crossing, door,\n"),
     ("chain: a later leg's pocket is its whole account",
-     "                                    crossing=cross, spend=self._spend)\n",
-     "                                    crossing=cross, spend=None)\n"),
+     "                                    crossing=cross, spend=self._spend, store=self._store)\n",
+     "                                    crossing=cross, spend=None, store=self._store)\n"),
 ]
 KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
     ("chain: the executor opens the merged door's first code",
@@ -9372,8 +9432,8 @@ KEY_DOOR_GATE_MUTATIONS = [
      "    doors = () if known else monster_doors(monster, crossing, game_data)\n",
      "    doors = ()\n"),
     ("door: winnability is not asked past a door",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = (live or known) and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = (live or known) and rested.winnable("),
 ]
 KEY_DOOR_WALK_MUTATIONS = [
     ("door: a gather past a door names no door",
@@ -14065,8 +14125,8 @@ POCKET_GOLD_ROUTE_MUTATIONS = [
 
 POCKET_GOLD_PRICE_MUTATIONS = [
     ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
-     "                               actions_per_application=_kind_actions(\"withdraw_gold\", ctx),\n",
-     "                               actions_per_application=ceil(_kind_actions(\"withdraw_gold\", ctx)),\n"),
+     "                               actions_per_application=_kind_actions(LogType.WITHDRAW_GOLD, ctx),\n",
+     "                               actions_per_application=ceil(_kind_actions(LogType.WITHDRAW_GOLD, ctx)),\n"),
     # S-046: spent gold costs the time to earn it again.
     ("acquisition_cost: banked gold is free to spend (S-046)",
      "    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route\n",
@@ -14934,6 +14994,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
     run_group(FIGHT_SECONDS_MODEL_SRC, SECONDS_INSIDE_KIND_MUTATIONS,
               "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, STORE_KIND_SECONDS_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(LEARNING_STORE_SRC, STORE_COOLDOWNS_QUERY_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(SELECTION_CONTEXT_SRC, UNTIMED_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WINNABLE_MEMO_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, WINNABLE_MEMO_ROUTES_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(ACQUISITION_COST_CORE_SRC, PRICED_ROUTE_CORE_MUTATIONS,

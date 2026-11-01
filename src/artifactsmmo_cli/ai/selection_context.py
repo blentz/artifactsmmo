@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from fractions import Fraction
 
+from artifactsmmo_api_client.models.log_type import LogType
+
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
@@ -29,6 +31,7 @@ from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
+from artifactsmmo_cli.ai.untimed_action_kind_error import UntimedActionKindError
 
 
 @dataclass(frozen=True)
@@ -375,15 +378,17 @@ class SelectionContext:
             raise ValueError("this context carries no learned fight seconds")
         return self.fight_seconds
 
-    def seconds_of(self, kind: str) -> Fraction:
-        """The measured seconds of one action of `/my/logs` kind `kind`; a
-        kind the log never timed is one planner action, the measured mean
-        (`action_seconds_of`). Raises when this context carries no kind
-        seconds."""
+    def seconds_of(self, kind: LogType) -> Fraction:
+        """The measured seconds of one action of `/my/logs` kind `kind`.
+        Raises when this context carries no kind seconds, and
+        `UntimedActionKindError` for a kind the log never timed (the user's
+        I2 ruling, 2026-10-31: no default stands in for it)."""
         if self.kind_seconds is None:
             raise ValueError("this context carries no learned action-kind seconds")
-        measured = dict(self.kind_seconds).get(kind)
-        return measured if measured is not None else self.action_seconds_of()
+        measured = dict(self.kind_seconds).get(kind.value)
+        if measured is None:
+            raise UntimedActionKindError(kind.value)
+        return measured
 
     def action_seconds_of(self) -> Fraction:
         """The learned seconds of one planner action; raises when this context

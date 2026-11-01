@@ -15,6 +15,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 import artifactsmmo_cli.ai.player as player_mod
 from artifactsmmo_cli.ai.acquisition_cost import _kind_actions, acquisition_options
@@ -84,7 +85,7 @@ def _walk_gathers(state, game_data, evidence, policy=DECOMPOSE_POLICY):  # type:
     2026-10-31), so the gathers are its price over one gather's."""
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
     options = acquisition_options("small_pearls", state, game_data, ctx, policy=policy)
-    gather = _kind_actions("gathering", ctx)
+    gather = _kind_actions(LogType.GATHERING, ctx)
     return {o.venue: o.actions_per_application / gather for o in options["small_pearls"]
             if o.kind == "gather"}
 

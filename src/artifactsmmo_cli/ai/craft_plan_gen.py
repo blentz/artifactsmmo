@@ -527,7 +527,8 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,
-                            spend=frozenset(goal.needed) if policy.fight_gold else None)
+                            spend=frozenset(goal.needed) if policy.fight_gold else None,
+                            store=store)
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
                             frozenset(goal.needed), grey_ok, prefer, rank)
         trip = _one_trip(item, qty, answer, state, game_data)

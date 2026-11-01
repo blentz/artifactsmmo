@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from fractions import Fraction
 from math import ceil
 
+from artifactsmmo_api_client.models.log_type import LogType
+
 from artifactsmmo_cli.ai.acquisition_cost import (
     _kind_actions,
     acquisition_actions,
@@ -216,7 +218,7 @@ def _learned(k: Fraction = Fraction(1, 100)):
 def _gather() -> Fraction:
     """One gather in planner actions: its measured seconds over a planner
     action's (ruling "seconds inside", 2026-10-31)."""
-    return _kind_actions("gathering", _learned())
+    return _kind_actions(LogType.GATHERING, _learned())
 
 
 def _counting(monkeypatch, target: str) -> list[object]:
@@ -313,11 +315,13 @@ def test_the_scan_walks_only_the_items_that_would_be_worn(monkeypatch) -> None:
 
 def test_the_strongest_item_that_pays_for_itself_is_named() -> None:
     """A stronger charm too dear to pay for itself is passed over for a weaker,
-    cheap one; when both pay, the stronger wins."""
+    cheap one; when both pay, the stronger wins. (5,000 planks: a craft run
+    is its recorded 5.5 s, review I3, not the logs' batched 13.2 s mean, and
+    2,500 planks now pay for the charm.)"""
     gd = _with(_pearl_world(), great_charm=ItemStats(
         code="great_charm", level=1, type_="artifact", prospecting=100,
         crafting_skill="weaponcrafting", crafting_level=1))
-    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 2500}}
+    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 5000}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == CHARM
     gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 1}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == "great_charm"

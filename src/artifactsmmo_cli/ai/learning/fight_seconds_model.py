@@ -28,12 +28,14 @@ capture of the live `/my/logs` (`FIGHT_LOGS`, written once by
 """
 
 import json
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import cache
 from pathlib import Path
 
+from artifactsmmo_api_client.models.log_schema import LogSchema
 from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.fight_seconds_core import (
@@ -52,6 +54,54 @@ FIGHT_LOGS = (Path(__file__).resolve().parents[4] / "tests" / "test_ai" / "fixtu
               / "fight_logs.json")
 """Every `/my/logs` entry of every fleet character, captured once from the live
 API (2026-10-19), with each character's sheet haste at capture time."""
+
+ACTION_LOGS = (Path(__file__).resolve().parents[4] / "tests" / "test_ai" / "fixtures"
+               / "action_logs.json")
+"""Every entry of the account's `/my/logs` as a `KindEntry`, with the API craft
+yield of every item crafted in it, captured once from the live API
+(`scripts/capture_action_logs.py`): the bootstrap's kinds a player driven
+against a mocked client is handed (`tests/test_ai/fixtures.BOOTSTRAP`)."""
+
+STORE_COOLDOWNS = (Path(__file__).resolve().parents[4] / "tests" / "test_ai" / "fixtures"
+                   / "store_cooldowns.json")
+"""`LearningStore.fleet_action_cooldowns` of a read-only backup of the live
+learning DB, captured once (`scripts/capture_store_cooldowns.py`): what an
+offline world times each priced action kind by (`offline_kind_seconds`)."""
+
+KindEntry = tuple[str, int, str | None, int]
+"""`(log type, cooldown seconds, item, quantity)` of one `/my/logs` entry: a
+craft's item and units made, a recycle's item and units recycled; None and 1
+for every other entry (`log_kind`)."""
+
+PRICED_KINDS: frozenset[LogType] = frozenset({
+    LogType.GATHERING, LogType.CRAFTING, LogType.RECYCLING, LogType.WITHDRAW_ITEM,
+    LogType.WITHDRAW_GOLD, LogType.SELL_NPC, LogType.BUY_NPC, LogType.BUY_GE})
+"""Every `/my/logs` kind the pricer charges a route's action at
+(`acquisition_cost._kind_actions`)."""
+
+STORE_KINDS: Mapping[str, LogType] = {
+    "GatherAction": LogType.GATHERING,
+    "CraftAction": LogType.CRAFTING,
+    "RecycleAction": LogType.RECYCLING,
+    "WithdrawItemAction": LogType.WITHDRAW_ITEM,
+    "WithdrawGoldAction": LogType.WITHDRAW_GOLD,
+    "NpcSellAction": LogType.SELL_NPC,
+    "NpcBuyAction": LogType.BUY_NPC,
+    "GeFillSellOrderAction": LogType.BUY_GE,
+}
+"""The executed action class the learning store records each priced kind
+under (the user's I2 ruling, 2026-10-31: "learning DB, then raise")."""
+
+_REPR_QUANTITY = re.compile(r"×(\d+)\)$")
+"""A craft's or recycle's repr ends in its quantity: `Craft(cheese×3)` is three
+craft runs, `Recycle(iron_dagger×2)` two units (`CraftAction.__repr__`,
+`RecycleAction.__repr__`)."""
+
+_BATCHED = frozenset({LogType.CRAFTING.value, LogType.RECYCLING.value})
+"""The kinds whose one request runs `quantity` actions, its cooldown their sum
+(review I3, measured over the account's 5,000 newest entries 2026-10-31: a
+craft is 5 s per craft run, a recycle 3 s per unit; a gather, a withdraw, a buy
+or a sale is one action of one cooldown whatever its quantity)."""
 
 LogEntry = tuple[str, int, int | None]
 """`(type, cooldown seconds, fight turns or None)` of one `/my/logs` entry."""
@@ -100,9 +150,9 @@ class FleetBootstrap:
 
     fights: tuple[Sample, ...]
     cooldowns: tuple[int, ...]
-    kinds: tuple[tuple[str, int], ...]
-    """Every entry's `(log type, cooldown)`: the per-kind seconds the pricer
-    charges a route's action at (`kind_seconds`)."""
+    kinds: tuple[KindEntry, ...]
+    """Every entry's `KindEntry`: the per-kind seconds the pricer charges a
+    route's action at (`kind_seconds`)."""
 
     def to_json(self) -> str:
         return json.dumps({"fights": [list(f) for f in self.fights],
@@ -114,20 +164,92 @@ class FleetBootstrap:
         data = json.loads(text)
         return cls(tuple((int(t), int(a), float(c)) for t, a, c in data["fights"]),
                    tuple(int(c) for c in data["cooldowns"]),
-                   tuple((str(k), int(c)) for k, c in data["kinds"]))
+                   tuple((str(k), int(c), None if i is None else str(i), int(q))
+                         for k, c, i, q in data["kinds"]))
 
 
-def kind_seconds(kinds: Iterable[tuple[str, int]]) -> tuple[tuple[str, Fraction], ...]:
-    """The mean positive cooldown of each `/my/logs` entry type in `kinds`
-    (`gathering`, `crafting`, `withdraw_item`, ...), sorted by type: the
-    measured seconds of one action of that kind (the committed capture: a
-    gather 34.5 s, a craft 13.2 s). A type with no positive cooldown is
-    absent: it was never timed."""
-    seen: dict[str, list[int]] = {}
-    for kind, cooldown in kinds:
+def log_kind(entry: LogSchema) -> KindEntry:
+    """`entry` as a `KindEntry`: a craft's or a recycle's own item and
+    quantity (`content.item`, `content.quantity`), None and 1 otherwise."""
+    kind = entry.type_.value
+    if kind in _BATCHED:
+        return kind, entry.cooldown, str(entry.content["item"]), int(entry.content["quantity"])
+    return kind, entry.cooldown, None, 1
+
+
+def _applications(kind: str, item: str | None, quantity: int,
+                  craft_yield: Callable[[str], int]) -> Fraction:
+    """The actions one entry ran: a craft's `quantity` units made over its
+    item's yield per run (cheese, 2 a run, logs 2 at 5 s: one run), a
+    recycle's `quantity` units, one for any other kind."""
+    if kind == LogType.CRAFTING.value:
+        assert item is not None
+        return Fraction(quantity, craft_yield(item))
+    if kind == LogType.RECYCLING.value:
+        return Fraction(quantity)
+    return Fraction(1)
+
+
+def kind_seconds(kinds: Iterable[KindEntry],
+                 craft_yield: Callable[[str], int]) -> tuple[tuple[str, Fraction], ...]:
+    """The measured seconds of ONE action of each `/my/logs` entry type in
+    `kinds`, sorted by type: its entries' positive cooldowns over the actions
+    they ran (`_applications`, review I3: a craft or recycle request batches
+    its quantity, its cooldown their sum). A type with no positive cooldown
+    is absent: it was never timed."""
+    seen: dict[str, tuple[Fraction, Fraction]] = {}
+    for kind, cooldown, item, quantity in kinds:
         if cooldown > 0:
-            seen.setdefault(kind, []).append(cooldown)
-    return tuple(sorted((kind, Fraction(sum(c), len(c))) for kind, c in seen.items()))
+            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))
+            seen[kind] = (seconds + cooldown,
+                          runs + _applications(kind, item, quantity, craft_yield))
+    return tuple(sorted((kind, seconds / runs) for kind, (seconds, runs) in seen.items()))
+
+
+StoreCooldowns = tuple[str, str, float, int]
+"""`(action class, action repr, total cooldown seconds, cycles)` of one group of
+the learning store's successful cycles (`LearningStore.fleet_action_cooldowns`)."""
+
+
+def _store_runs(kind: LogType, action_repr: str) -> int:
+    """The actions one recorded cycle of `action_repr` ran: a craft's runs or a
+    recycle's units (its repr's quantity, review I3: the server's cooldown is
+    5 s a craft run, 3 s a unit recycled), one for any other kind."""
+    if kind not in (LogType.CRAFTING, LogType.RECYCLING):
+        return 1
+    match = _REPR_QUANTITY.search(action_repr)
+    if match is None:
+        raise ValueError(f"a recorded {kind.value} with no quantity: {action_repr}")
+    return int(match.group(1))
+
+
+def store_kind_seconds(rows: Iterable[StoreCooldowns]) -> tuple[tuple[str, Fraction], ...]:
+    """The learned seconds of ONE action of each priced kind, sorted by kind:
+    the store's recorded server cooldowns of its action class (`STORE_KINDS`)
+    over the actions they ran (`_store_runs`). A kind the store never
+    recorded is absent: it was never timed."""
+    seen: dict[str, tuple[float, int]] = {}
+    for action_class, action_repr, seconds, cycles in rows:
+        kind = STORE_KINDS[action_class]
+        total, runs = seen.get(kind.value, (0.0, 0))
+        seen[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))
+    return tuple(sorted((kind, Fraction(total) / runs) for kind, (total, runs) in seen.items()))
+
+
+def learned_kind_seconds(store: LearningStore | None, bootstrap: FleetBootstrap,
+                         craft_yield: Callable[[str], int]) -> tuple[tuple[str, Fraction], ...]:
+    """The seconds of one action of each priced kind: the learning store's
+    recorded server cooldowns (`store_kind_seconds`), read once per recorded
+    cycle; the `/my/logs` bootstrap's (`kind_seconds`) only while there is no
+    store or it has recorded no priced action (a fresh install). A kind
+    neither timed raises where it is priced (`SelectionContext.seconds_of`)."""
+    if store is not None:
+        rows = store.per_recorded_cycle(
+            "fleet_action_cooldowns",
+            lambda: store.fleet_action_cooldowns(frozenset(STORE_KINDS)))
+        if rows:
+            return store_kind_seconds(rows)
+    return kind_seconds(bootstrap.kinds, craft_yield)
 
 
 def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
@@ -142,7 +264,7 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
     spread = min(_HASTE_SPREAD, len(set(hastes.values())))
     fights: list[Sample] = []
     cooldowns: list[int] = []
-    kinds: list[tuple[str, int]] = []
+    kinds: list[KindEntry] = []
     page = 1
     while True:
         acquire()
@@ -153,7 +275,7 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
                 # so no haste to put its fights at, and not this fleet's.
                 continue
             cooldowns.append(entry.cooldown)
-            kinds.append((entry.type_.value, entry.cooldown))
+            kinds.append(log_kind(entry))
             if entry.type_ == LogType.FIGHT and entry.cooldown > 0:
                 fights.append((entry.content["fight"]["turns"], hastes[entry.character],
                                float(entry.cooldown)))
@@ -249,11 +371,11 @@ def offline_timing(path: Path = FIGHT_LOGS) -> tuple[FightSecondsModel, Fraction
     return fit_model(samples), seconds
 
 
-def offline_kind_seconds(path: Path = FIGHT_LOGS) -> tuple[tuple[str, Fraction], ...]:
-    """`kind_seconds` of a `/my/logs` capture's entries (see `FIGHT_LOGS`)."""
+def offline_kind_seconds(path: Path = STORE_COOLDOWNS) -> tuple[tuple[str, Fraction], ...]:
+    """`store_kind_seconds` of a learning-store capture (see `STORE_COOLDOWNS`)."""
     capture = json.loads(path.read_text())
-    return kind_seconds((kind, cooldown) for character in capture["characters"].values()
-                        for kind, cooldown, _turns in character["entries"])
+    return store_kind_seconds((str(action_class), str(action_repr), float(seconds), int(cycles))
+                              for action_class, action_repr, seconds, cycles in capture["rows"])
 
 
 @cache

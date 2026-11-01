@@ -14,6 +14,7 @@ cost (`acquisition_cost.route_order`).
 from fractions import Fraction
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai import acquisition_cost, craft_plan_gen
 from artifactsmmo_cli.ai.acquisition_cost import route_key, route_order
@@ -200,15 +201,17 @@ def test_the_fight_served_is_the_dropper_the_price_took(monkeypatch: pytest.Monk
 
 
 def test_a_fight_that_wins_in_seconds_beats_a_gather_that_wins_in_actions() -> None:
-    """Ruling "seconds inside" (2026-10-31). At L40, with a ticket 1 in 370
-    off every resource and 1 in 100 off every monster: the gather is 370
+    """Ruling "seconds inside" (2026-10-31). At L40, with a ticket 1 in 372
+    off every resource and 1 in 100 off every monster: the gather is 372
     gathers (one action each, the old unit) and the cheapest fight, the
     owlbear's, 373 fight-equivalents (each kill forces a rest), so counted in
-    actions the gather won. In the measured seconds they take (a gather 34.5 s;
-    a kill its learned seconds and its rest), the cultist acolyte's farm takes
-    12.6k s against the gather's 12.75k s: the fight wins, and the walk serves
-    it."""
-    state, world, player = _seeded("l40_band_entry", gather_rate=370)
+    actions the gather won. In the measured seconds they take (a gather its
+    recorded 34.06 s, the user's I2 ruling; a kill its learned seconds and its
+    rest), the cultist acolyte's farm takes 12.62k s against the gather's
+    12.67k s: the fight wins, and the walk serves it. (At 1 in 370, the rate
+    this was pinned at against the logs' 34.5 s gather, the store's 34.06 s
+    makes the gather 12.60k s, and it wins by 24 s.)"""
+    state, world, player = _seeded("l40_band_entry", gather_rate=372)
     ctx = player._selection_context()
     ranked = route_order(TICKET, state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
                          store=None)
@@ -218,10 +221,10 @@ def test_a_fight_that_wins_in_seconds_beats_a_gather_that_wins_in_actions() -> N
     assert ranked[(kind, monster)] < gather
     # In the old unit, a gather an action and a fight a fight-equivalent, the
     # gather won.
-    gathers = gather * ctx.action_seconds_of() / ctx.seconds_of("gathering")
+    gathers = gather * ctx.action_seconds_of() / ctx.seconds_of(LogType.GATHERING)
     fight_equivalents = ranked[(kind, monster)] * ctx.action_seconds_of() / walk_seconds(
         state, world, monster, (), ctx.timing())
-    assert gathers == 370 < fight_equivalents
+    assert gathers == 372 < fight_equivalents
     plan = decompose(GatherMaterialsGoal(TICKET, {TICKET: 1}), state, world,
                      player._build_actions(), ctx)
     assert plan is not None

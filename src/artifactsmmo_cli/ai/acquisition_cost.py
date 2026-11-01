@@ -28,6 +28,8 @@ from datetime import datetime
 from fractions import Fraction
 from math import ceil
 
+from artifactsmmo_api_client.models.log_type import LogType
+
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     BANK_VENUE,
     UNOBTAINABLE_PER_UNIT,
@@ -51,6 +53,7 @@ from artifactsmmo_cli.ai.gold_rate import gold_spend_actions
 from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill, loss_cost
+from artifactsmmo_cli.ai.learning.fight_seconds_model import PRICED_KINDS
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate_core import drops_per_fight, trip_share
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
@@ -98,9 +101,11 @@ def _in_actions(seconds: Fraction, ctx: SelectionContext) -> Fraction:
     return seconds / ctx.action_seconds_of()
 
 
-def _kind_actions(kind: str, ctx: SelectionContext) -> Fraction:
+def _kind_actions(kind: LogType, ctx: SelectionContext) -> Fraction:
     """One action of `/my/logs` kind `kind` at its measured seconds
-    (`SelectionContext.seconds_of`), in planner actions (`_in_actions`)."""
+    (`SelectionContext.seconds_of`), in planner actions (`_in_actions`). Every
+    kind priced here is one the bootstrap pages for (`PRICED_KINDS`)."""
+    assert kind in PRICED_KINDS, kind
     return _in_actions(ctx.seconds_of(kind), ctx)
 
 
@@ -109,7 +114,7 @@ def _gather_cost(item: str, resource: str, state: WorldState, game_data: GameDat
     """Planner actions ONE `item` off `resource` takes: its gathers
     (`_gather_actions`) at a measured gather's seconds."""
     return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(
-        "gathering", ctx)
+        LogType.GATHERING, ctx)
 
 
 def _loss_surcharge(monster_code: str, max_hp: int,
@@ -230,10 +235,10 @@ def _priced(item: str, source: Source, state: WorldState,
             # piece costs (S-046): pocket and bank gold are one rule, the
             # bank's dearer by the withdraw and its hop.
             return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                               actions_per_application=_kind_actions("withdraw_gold", ctx),
+                               actions_per_application=_kind_actions(LogType.WITHDRAW_GOLD, ctx),
                                yield_per=source.yield_per, capacity=source.capacity)
         return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                           actions_per_application=_kind_actions("withdraw_item", ctx),
+                           actions_per_application=_kind_actions(LogType.WITHDRAW_ITEM, ctx),
                            yield_per=source.yield_per, capacity=source.capacity)
     if source.kind is SourceKind.RECYCLE:
         stats = game_data.item_stats(source.code)
@@ -241,7 +246,7 @@ def _priced(item: str, source: Source, state: WorldState,
         # crafting_skill, so the skill is present by that gate, not by luck.
         skill = stats.crafting_skill if stats is not None else ""
         return RouteOption(kind=source.kind.value, venue=_workshop_venue(skill or ""),
-                           actions_per_application=_kind_actions("recycling", ctx),
+                           actions_per_application=_kind_actions(LogType.RECYCLING, ctx),
                            yield_per=source.yield_per, capacity=source.capacity,
                            inputs={source.code: 1})
     if source.kind is SourceKind.CRAFT:
@@ -249,7 +254,7 @@ def _priced(item: str, source: Source, state: WorldState,
         skill = stats.crafting_skill if stats is not None else ""
         recipe = game_data.crafting_recipe(item) or {}
         return RouteOption(kind=source.kind.value, venue=_workshop_venue(skill or ""),
-                           actions_per_application=_kind_actions("crafting", ctx),
+                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),
                            yield_per=source.yield_per, capacity=source.capacity,
                            inputs=dict(recipe))
     if source.kind is SourceKind.GATHER:
@@ -265,12 +270,12 @@ def _priced(item: str, source: Source, state: WorldState,
         # whatever the copy cost, and a licensed surplus copy already in the bag
         # costs nothing because `owned` credits it.
         return RouteOption(kind=source.kind.value, venue=npc_code,
-                           actions_per_application=_kind_actions("sell_npc", ctx),
+                           actions_per_application=_kind_actions(LogType.SELL_NPC, ctx),
                            yield_per=price, capacity=source.capacity, inputs={source.code: 1})
     if source.kind is SourceKind.BUY:
         price, currency = npc_price_of(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=_kind_actions("buy_npc", ctx),
+                           actions_per_application=_kind_actions(LogType.BUY_NPC, ctx),
                            yield_per=source.yield_per, capacity=source.capacity,
                            inputs={currency: price})
     if source.kind is SourceKind.GE_FILL:
@@ -280,7 +285,7 @@ def _priced(item: str, source: Source, state: WorldState,
         # at the order's own price, which is what makes it REALIZABLE: we never
         # price a route at an order we would have to post and hope fills.
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=_kind_actions("buy_ge", ctx),
+                           actions_per_application=_kind_actions(LogType.BUY_GE, ctx),
                            yield_per=source.yield_per, capacity=source.capacity,
                            inputs={"gold": price})
     if source.kind is SourceKind.DROP:
@@ -468,7 +473,7 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
             unlock=f"skill:{skill}:{level}", unlock_actions=grind)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
-        actions_per_application=_kind_actions("crafting", ctx), yield_per=route.yield_per,
+        actions_per_application=_kind_actions(LogType.CRAFTING, ctx), yield_per=route.yield_per,
         capacity=UNBOUNDED_CAPACITY, inputs=dict(route.inputs),
         unlock=f"skill:{skill}:{level}",
         unlock_actions=grind,
@@ -602,7 +607,7 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
         climb = amortized
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=BANK_VENUE,
-        actions_per_application=_kind_actions("withdraw_item", ctx), yield_per=route.yield_per,
+        actions_per_application=_kind_actions(LogType.WITHDRAW_ITEM, ctx), yield_per=route.yield_per,
         capacity=UNBOUNDED_CAPACITY, inputs=dict(route.inputs),
         unlock=f"sibling:{item}",
         unlock_actions=climb + int(cost),
@@ -1101,14 +1106,14 @@ def route_options(item: str, state: WorldState, game_data: GameData,
     pocket's own when None): a chain leg's closure is priced with its reach
     holding the legs before it and its pocket past them (`door_price`)."""
     cross = state if crossing is None else crossing
-    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)
+    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross, store=store)
     # A route its own skill requirement keeps closed is priced only with its
     # climb (`_gated_skill_option`, ruling T2c), never as the ready route a
     # policy without the skill gate names it.
     climbs = _climbs(item, model, policy)
     routes = [_priced(item, s, state, game_data, ctx)
               for s in obtain_sources(item, state, game_data, ctx, policy=policy,
-                                      crossing=cross)
+                                      crossing=cross, store=store)
               if (s.kind, s.code) not in climbs]
     if store is not None:
         for kind in (SourceKind.CRAFT, SourceKind.GATHER):

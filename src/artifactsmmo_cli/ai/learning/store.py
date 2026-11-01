@@ -969,6 +969,25 @@ class LearningStore:
                 .where(col(Cycle.actual_cooldown_seconds) > 0)).one()
         return None if mean is None else float(mean)
 
+    def fleet_action_cooldowns(self, classes: frozenset[str]) -> list[tuple[str, str, float, int]]:
+        """`(action_class, action_repr, total cooldown seconds, cycles)` of every
+        character's successful cycles of an action class in `classes` with a
+        positive cooldown, one row per repr: the recorded server cooldowns the
+        pricer times each priced action kind by
+        (`fight_seconds_model.store_kind_seconds`, the user's I2 ruling
+        2026-10-31). Empty on a store that has recorded none."""
+        with SqlSession(self._engine) as s:
+            rows = s.exec(
+                select(Cycle.action_class, Cycle.action_repr,
+                       func.sum(Cycle.actual_cooldown_seconds), func.count())
+                .where(col(Cycle.action_class).in_(sorted(classes)),
+                       Cycle.outcome == "ok",
+                       col(Cycle.actual_cooldown_seconds) > 0)
+                .group_by(col(Cycle.action_class), col(Cycle.action_repr))).all()
+        # The positive-cooldown filter makes every group's sum a number.
+        return [(str(action_class), str(action_repr), float(cast(float, seconds)), int(cycles))
+                for action_class, action_repr, seconds, cycles in rows]
+
     def last_cycle_id(self) -> int:
         """The id of the newest cycle any character recorded, 0 on an empty
         table: the mark a per-cycle reader refreshes on."""

@@ -24,6 +24,7 @@ from math import ceil
 from pathlib import Path
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.acquisition_cost import (
     BANK_VENUE,
@@ -72,10 +73,10 @@ from artifactsmmo_cli.ai.tiers.skill_grind_target import GRIND_PRICING
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 
-GATHER = _kind_actions("gathering", TIMED_NO_PROFILE_CONTEXT)
+GATHER = _kind_actions(LogType.GATHERING, TIMED_NO_PROFILE_CONTEXT)
 """One gather in planner actions: a measured gather's seconds over a planner
 action's (ruling "seconds inside", 2026-10-31)."""
-WITHDRAW = _kind_actions("withdraw_item", TIMED_NO_PROFILE_CONTEXT)
+WITHDRAW = _kind_actions(LogType.WITHDRAW_ITEM, TIMED_NO_PROFILE_CONTEXT)
 """One item withdraw in planner actions."""
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
@@ -116,7 +117,7 @@ def test_craft_carries_its_recipe_as_inputs_and_a_workshop_venue(
     assert opt.venue == _workshop_venue("weaponcrafting")
     assert opt.inputs == game_data.crafting_recipe("iron_sword")
     # One craft, at a measured craft's seconds (ruling "seconds inside").
-    assert opt.actions_per_application == _kind_actions("crafting", TIMED_NO_PROFILE_CONTEXT)
+    assert opt.actions_per_application == _kind_actions(LogType.CRAFTING, TIMED_NO_PROFILE_CONTEXT)
 
 
 def test_recycle_consumes_the_source_item_not_the_target(state, game_data) -> None:
@@ -127,7 +128,7 @@ def test_recycle_consumes_the_source_item_not_the_target(state, game_data) -> No
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.inputs == {"iron_sword": 1}
     assert opt.yield_per == 3
-    assert opt.actions_per_application == _kind_actions("recycling", TIMED_NO_PROFILE_CONTEXT)
+    assert opt.actions_per_application == _kind_actions(LogType.RECYCLING, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == _workshop_venue("weaponcrafting")
 
 
@@ -188,6 +189,10 @@ class _SupplyStore:
 
     def fleet_skill_grind_rate(self, skill):  # type: ignore[no-untyped-def]
         return None
+
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
 
 
 def test_sibling_route_opens_a_skill_gate_the_character_cannot_meet(
@@ -385,7 +390,7 @@ def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> No
                   Source(SourceKind.GE_FILL, "ord-x", 1, 4),
                   state, gd, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "ord-x"
-    assert opt.actions_per_application == _kind_actions("buy_ge", TIMED_NO_PROFILE_CONTEXT)
+    assert opt.actions_per_application == _kind_actions(LogType.BUY_GE, TIMED_NO_PROFILE_CONTEXT)
     assert opt.capacity == 4, "a standing order is FINITE, unlike a vendor"
     assert opt.inputs == {"gold": 137}, "the realizable cost is the order's price"
 
@@ -818,7 +823,10 @@ def test_banked_gold_is_a_priced_withdraw_not_a_holding(state, game_data) -> Non
     is a priced route. Banked gold is not credited to the pocket; it is the gold
     WITHDRAW route, priced at the one withdraw and the bank hop on top of the
     buy the pocket would have paid (2): what the walk serves, WithdrawGold then
-    the buy, since a vendor is paid from the pocket (the HTTP 492 hotfix)."""
+    the buy, since a vendor is paid from the pocket (the HTTP 492 hotfix). The
+    withdraw is its recorded 2.9 s, under one planner action, so the bank adds
+    one action with the hop (it was the mean action, 1, while the logs never
+    timed a gold withdraw: the user's I2 ruling)."""
     banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
     in_pocket = replace(state, inventory={}, gold=50_000, bank_gold=0)
     earning, per_gold = _earning(in_pocket)
@@ -828,7 +836,7 @@ def test_banked_gold_is_a_priced_withdraw_not_a_holding(state, game_data) -> Non
     assert acquisition_actions("healing_rune", 1, in_pocket, game_data,
                                earning, equip=False) == 2 + spent
     assert acquisition_actions("healing_rune", 1, banked_only, game_data,
-                               earning, equip=False) == 2 + 2 + spent
+                               earning, equip=False) == 2 + 1 + spent
     # An unread bank is UNKNOWN, not rich: it withdraws nothing.
     unread = replace(banked_only, bank_gold=None)
     assert acquisition_actions("healing_rune", 1, unread, game_data,
@@ -1795,13 +1803,16 @@ def test_a_farm_is_priced_at_the_prospecting_its_fight_loadout_wears(
 
 
 def test_every_action_is_priced_at_its_kinds_measured_seconds(state, game_data) -> None:
-    """Ruling "seconds inside" (2026-10-31): a withdraw is its measured 3
-    seconds and a gather its 34, each over a planner action's measured
-    seconds, not one planner action each; a win is its fight and the rest it
-    forces at the fight's own learned seconds, not one fight-equivalent."""
+    """Ruling "seconds inside" (2026-10-31): a withdraw is its recorded 2.5
+    seconds and a gather its 34 (the committed store capture, the user's I2
+    ruling), each over a planner action's measured seconds, not one planner
+    action each; a win is its fight and the rest it forces at the fight's own
+    learned seconds, not one fight-equivalent."""
     ctx = TIMED_NO_PROFILE_CONTEXT
-    assert Fraction(3) / ctx.action_seconds_of() == WITHDRAW
-    assert ctx.seconds_of("gathering") / ctx.action_seconds_of() == GATHER
+    assert round(float(ctx.seconds_of(LogType.WITHDRAW_ITEM)), 1) == 2.5
+    assert round(float(ctx.seconds_of(LogType.GATHERING))) == 34
+    assert ctx.seconds_of(LogType.WITHDRAW_ITEM) / ctx.action_seconds_of() == WITHDRAW
+    assert ctx.seconds_of(LogType.GATHERING) / ctx.action_seconds_of() == GATHER
     assert WITHDRAW < GATHER
     fight = walk_seconds(state, game_data, "chicken", (), ctx.timing())
     per_kill = cycles_per_kill(expected_damage_per_fight(state, game_data, "chicken"),

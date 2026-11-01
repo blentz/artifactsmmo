@@ -60,6 +60,12 @@ Fighter = WorldState | Callable[[str], WorldState]
 """Who a drop fight is judged against: one character for every monster, or a
 function of the monster's code."""
 
+WinnableMemo = Callable[[WorldState, str, Callable[[], bool]], bool]
+"""`(fighter, monster, compute)` -> the WINNABLE verdict, memoised across one
+decision (`ObtainModel`'s, through its store's episode): `compute` asks
+`drop_fight_winnable` of `fighter` rested. Review I5: HAL's decision asked it
+15,637 times of 255 distinct fighters and monsters."""
+
 
 @dataclass
 class _Rested:
@@ -67,12 +73,20 @@ class _Rested:
     shared by every later one in the same call."""
 
     state: WorldState
+    memo: WinnableMemo | None = None
     copy: WorldState | None = None
 
     def get(self) -> WorldState:
         if self.copy is None:
             self.copy = replace(self.state, hp=self.state.max_hp)
         return self.copy
+
+    def winnable(self, game_data: GameData, monster: str) -> bool:
+        """`drop_fight_winnable` of this character rested, through `memo`
+        when there is one."""
+        def compute() -> bool:
+            return drop_fight_winnable(self.get(), game_data, monster)
+        return compute() if self.memo is None else self.memo(self.state, monster, compute)
 
 
 def drop_fight_winnable(rested: WorldState, game_data: GameData, monster: str) -> bool:
@@ -102,7 +116,7 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
     live = bool(game_data.all_monster_locations.get(monster))
     known = monster_reached(monster, game_data, reach)
     doors = () if known else monster_doors(monster, crossing, game_data)
-    winnable = (live or known or bool(doors)) and drop_fight_winnable(rested.get(), game_data, monster)
+    winnable = (live or known or bool(doors)) and rested.winnable(game_data, monster)
     return (
         Gate(GateKind.SPAWN_LIVE, monster, live),
         Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors),
@@ -112,7 +126,7 @@ def _fight_gates(monster: str, state: WorldState, game_data: GameData,
 
 
 def drop_routes(item: str, state: WorldState, game_data: GameData, crossing: WorldState,
-                fighter: Fighter | None = None) -> list[Route]:
+                fighter: Fighter | None = None, memo: WinnableMemo | None = None) -> list[Route]:
     """One DROP route per monster that drops `item`, in drop-table order.
 
     `fighter`, when given, is who WINNABLE asks (rested), in place of `state`:
@@ -126,11 +140,11 @@ def drop_routes(item: str, state: WorldState, game_data: GameData, crossing: Wor
     `region_edges.reachable_regions_now`, and its doors): `state` itself, or
     the real state when `state`'s pocket is only the gold a buy may spend
     (ruling T14e-2: the reserve a fee keeps is applied by the crossing, once)."""
-    shared = _Rested(state if fighter is None or callable(fighter) else fighter)
+    shared = _Rested(state if fighter is None or callable(fighter) else fighter, memo)
     reach = reachable_regions_now(crossing, game_data)
 
     def rested(monster: str) -> _Rested:
-        return _Rested(fighter(monster)) if callable(fighter) else shared
+        return _Rested(fighter(monster), memo) if callable(fighter) else shared
 
     return [Route(item, SourceKind.DROP, monster, 1, UNBOUNDED_CAPACITY,
                   _fight_gates(monster, state, game_data, rested(monster), reach, crossing))
@@ -138,7 +152,7 @@ def drop_routes(item: str, state: WorldState, game_data: GameData, crossing: Wor
 
 
 def gold_drop_routes(state: WorldState, game_data: GameData,
-                     crossing: WorldState) -> list[Route]:
+                     crossing: WorldState, memo: WinnableMemo | None = None) -> list[Route]:
     """One GOLD_DROP route per monster whose win pays gold, in catalogue order.
 
     Gold is minted by fighting: every win pays between the monster's
@@ -154,7 +168,7 @@ def gold_drop_routes(state: WorldState, game_data: GameData,
     character could never fight it.
 
     `crossing` is the state the crossings are asked of, as `drop_routes`'."""
-    rested = _Rested(state)
+    rested = _Rested(state, memo)
     reach = reachable_regions_now(crossing, game_data)
     ceiling = state.level + FIGHT_LEVEL_GAP_CEILING
     out: list[Route] = []

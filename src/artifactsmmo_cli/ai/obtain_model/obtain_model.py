@@ -41,7 +41,13 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
-from artifactsmmo_cli.ai.obtain_model.drop_routes import Fighter, drop_routes, gold_drop_routes
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import (
+    Fighter,
+    WinnableMemo,
+    drop_routes,
+    gold_drop_routes,
+)
 from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
@@ -113,8 +119,10 @@ class ObtainModel:
     def __init__(self, state: WorldState, game_data: GameData,
                  ctx: SelectionContext, now: datetime,
                  fighter: Fighter | None = None, crossing: WorldState | None = None,
-                 spend: frozenset[str] | None = None) -> None:
+                 spend: frozenset[str] | None = None,
+                 store: LearningStore | None = None) -> None:
         self._account = state
+        self._store = store
         self._spend = spend
         self._state = (state if spend is None else
                        replace(state, gold=spendable_pocket(state, game_data, spend)))
@@ -133,6 +141,28 @@ class ObtainModel:
         if self._regions is None:
             self._regions = reachable_regions_now(self._crossing, self._gd)
         return self._regions
+
+    def _winnable_memo(self) -> WinnableMemo | None:
+        """The WINNABLE verdict memoised through the store's decision episode
+        (`LearningStore.cached`, review I5), or None without a store: asked
+        afresh. Keyed on the fighter's identity, PINNED by the entry (the
+        cached value holds it), so no other object can take its id while the
+        verdict is held; a `WorldState` is frozen, so the fighter cannot
+        change under it. One episode prices against one catalogue; the entry
+        holds it, and a different one is a defect, not a cache miss
+        (`door_price`'s rule)."""
+        store = self._store
+        if store is None:
+            return None
+        game_data = self._gd
+
+        def memo(fighter: WorldState, monster: str, compute: Callable[[], bool]) -> bool:
+            pinned = store.cached(("drop_fight_winnable", monster, id(fighter)),
+                                  lambda: (fighter, game_data, compute()))
+            assert pinned[0] is fighter, "a pinned key's object"
+            assert pinned[1] is game_data, "one search_cache episode prices one catalogue"
+            return pinned[2]
+        return memo
 
     def routes(self, item: str) -> tuple[Route, ...]:
         """Every route to `item` in priority order, usable or not."""
@@ -382,7 +412,7 @@ class ObtainModel:
         an earlier leg's fee gold is spent, not credited), and its pocket
         derived from that account as this one's is (`spend`, round 5)."""
         return [self, *(ObtainModel(at, self._gd, self._ctx, self._now, self._fighter,
-                                    crossing=cross, spend=self._spend)
+                                    crossing=cross, spend=self._spend, store=self._store)
                         for at, cross in leg_states(self._account, self._crossing, door,
                                                     self._gd)[1:])]
 
@@ -618,7 +648,8 @@ class ObtainModel:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
         are evaluated (shared with `drop_obtainability`), judged against the
         projected `fighter` when one is given."""
-        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)
+        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter,
+                           self._winnable_memo())
 
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop
@@ -637,7 +668,7 @@ class ObtainModel:
         (see `drop_routes.gold_drop_routes`, which shares the fight gates)."""
         if item != GOLD_CODE:
             return []
-        return gold_drop_routes(self._state, self._gd, self._crossing)
+        return gold_drop_routes(self._state, self._gd, self._crossing, self._winnable_memo())
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

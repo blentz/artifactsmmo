@@ -15,6 +15,7 @@ from artifactsmmo_api_client.models.status_schema import StatusSchema
 from artifactsmmo_cli.ai.best_loadout import BestLoadout
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
+    ACTION_LOGS,
     FIGHT_LOGS,
     FleetBootstrap,
     log_fights,
@@ -30,9 +31,11 @@ BOOTSTRAP = FleetBootstrap(
     fights=tuple(log_fights(_ROBBY["haste"], [(kind, cooldown, turns) for kind, cooldown, turns
                                               in _ROBBY["entries"][:100]])),
     cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]),
-    kinds=tuple((kind, cooldown) for kind, cooldown, _ in _ROBBY["entries"][:100]))
-"""Robby's newest 100 `/my/logs` entries in the committed live capture, at his
-captured haste: the account-log bootstrap a player driven through
+    kinds=tuple((kind, cooldown, item, quantity) for kind, cooldown, item, quantity
+                in json.loads(ACTION_LOGS.read_text())["entries"]))
+"""Robby's newest 100 `/my/logs` fights in the committed live capture, at his
+captured haste, and the account's action-log capture's entries for the
+per-kind seconds: the account-log bootstrap a player driven through
 `_initialize` against a mocked client is handed (ruling ZD)."""
 
 def patched_logs() -> Any:

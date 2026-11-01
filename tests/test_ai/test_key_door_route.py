@@ -529,6 +529,10 @@ class _RatedStore:
     def fleet_skill_grind_rate(self, skill: str) -> float | None:
         return self.fleet
 
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
+
 
 def test_a_gather_past_a_door_pays_its_climb_as_the_skill_gate_does() -> None:
     """A GATHER_SKILL gate beside a door is paid with the climb

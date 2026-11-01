@@ -112,7 +112,8 @@ def test_a_gathering_character_fits_on_the_accounts_fights(tmp_path: Path) -> No
         player._acquire_account = lambda: acquired.append("account")  # type: ignore[method-assign]
         player._bootstrap = player._fetch_bootstrap(Api())  # type: ignore[arg-type]
         assert player._bootstrap == FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(25, 10),
-                                                    kinds=(("gathering", 25), ("fight", 10)))
+                                                    kinds=(("gathering", 25, None, 1),
+                                                           ("fight", 10, None, 1)))
         assert acquired == ["account", "account"]
         model, seconds = player._timing()
         assert (model.s_turn, model.samples, seconds) == (2, 1, Fraction(35, 2))

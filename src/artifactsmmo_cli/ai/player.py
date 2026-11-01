@@ -149,7 +149,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     committed_kind_seconds,
     committed_timing,
     fetch_fleet_bootstrap,
-    kind_seconds,
+    learned_kind_seconds,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -4481,13 +4481,15 @@ class GamePlayer:
         return timing_of(self.history, self._bootstrap)
 
     def _kind_seconds(self) -> tuple[tuple[str, Fraction], ...]:
-        """The measured seconds of one action of each `/my/logs` kind: the
-        account-log bootstrap's (ruling ZD), or the committed capture's
-        offline, as `_timing` reads its fights."""
+        """The measured seconds of one action of each priced kind: the learning
+        store's recorded server cooldowns, the account-log bootstrap's on a
+        fresh install (`learned_kind_seconds`), or the committed store
+        capture's offline, as `_timing` reads its fights."""
         if self._offline_timing is not None:
             return committed_kind_seconds()
         assert self._bootstrap is not None
-        return kind_seconds(self._bootstrap.kinds)
+        assert self.game_data is not None
+        return learned_kind_seconds(self.history, self._bootstrap, self.game_data.craft_yield)
 
     def _fetch_bootstrap(self, api: APIWrapper) -> FleetBootstrap:
         """The account-log bootstrap (ruling ZD), each fight at its
