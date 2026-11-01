@@ -72,6 +72,15 @@ def test_the_2026_10_31_live_anchors_match_their_rows() -> None:
     for anchor in anchors:
         for stat in ("initiative", "max_hp", "critical_strike"):
             assert anchor["sheet"][stat] - anchor["gear"][stat] == anchor[stat], anchor["character"]
+        # Attack and resistance are recorded per element on both sides (Task 7
+        # re-review N2), so the zero base is a subtraction, not a template.
+        for stat in ("attack", "resistance"):
+            assert set(anchor["sheet"][stat]) == {"fire", "earth", "water", "air"}
+            for element, value in anchor[stat].items():
+                assert anchor["sheet"][stat][element] - anchor["gear"][stat][element] == value, (
+                    anchor["character"], stat, element)
+        assert any(anchor["sheet"]["attack"].values()), anchor["character"]
+        assert anchor["worn"], anchor["character"]
         row = doc["base_stats"][str(anchor["level"])]
         assert (row["max_hp"], row["initiative"], row["critical_strike"]) == (
             anchor["max_hp"], anchor["initiative"], anchor["critical_strike"])
