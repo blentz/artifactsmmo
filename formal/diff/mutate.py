@@ -5519,10 +5519,32 @@ STEP_DELIVERED_MUTATIONS = [
      "    return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)\n",
      "    return cache_holdings(after).get(item, 0) >= cache_holdings(before).get(item, 0)\n"),
 ]
+# The E ruling (2026-10-31): a dry drop leg is no progress only past its
+# drop's 99th-percentile dry streak. Killed by
+# tests/test_ai/test_intention_progress.py.
+DRY_STREAK_MUTATIONS = [
+    ("dry streak: a sure drop forgives any dry attempt",
+     "    if chance >= 1:\n        return streak <= 0\n",
+     "    if chance >= 1:\n        return True\n"),
+    ("dry streak: an action planned for no drop is always dry",
+     "    if chance is None:\n        return True\n",
+     "    if chance is None:\n        return False\n"),
+    ("dry streak: a rare drop is forgiven forever",
+     "    return streak <= ceil(log(DRY_STREAK_TAIL) / log(1 - float(chance)))\n",
+     "    return True\n"),
+    ("dry streak: the gather's chance is the fight's",
+     "    if isinstance(action, GatherAction):\n        rate, _low, _high = game_data.gather_drop_row(",
+     "    if False:\n        rate, _low, _high = game_data.gather_drop_row("),
+]
+DRY_STREAK_PLAYER_MUTATIONS = [
+    ("dry streak: the run loop never counts a dry leg",
+     "                self._dry_streak = 0 if delivered else self._dry_streak + 1\n",
+     "                self._dry_streak = 0\n"),
+]
 STEP_DELIVERED_PLAYER_MUTATIONS = [
     ("stall: the run loop counts any successful leg as progress",
-     "                                      new_state, outcome == \"ok\" and step_delivered(\n",
-     "                                      new_state, outcome == \"ok\" or 0 * step_delivered(\n"),
+     "                                      new_state, outcome == \"ok\" and (delivered or dry_within_luck(\n",
+     "                                      new_state, outcome == \"ok\" or 0 * (delivered or dry_within_luck(\n"),
 ]
 # The ticket farm (live 2026-10-31): the fleet's pooled medals are credited in
 # the price, one character farms a shortfall the fleet cannot pay, and its
@@ -15197,6 +15219,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(PLAYER_SRC, DRY_STREAK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, STEP_DELIVERED_MUTATIONS,
               "tests/test_ai/test_intention_progress.py", survivors)
     run_group(PLAYER_SRC, STEP_DELIVERED_PLAYER_MUTATIONS,

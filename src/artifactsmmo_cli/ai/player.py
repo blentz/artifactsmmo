@@ -134,9 +134,11 @@ from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
     STALL_CYCLES,
+    dry_within_luck,
     progress_measure,
     progressed,
     record_turn,
+    step_chance,
     step_delivered,
     turn_key,
 )
@@ -487,6 +489,9 @@ class GamePlayer:
         # and the offline worlds' fit from the committed live capture, set by
         # `seed_offline`, which replaces the live fit entirely.
         self._bootstrap: FleetBootstrap | None = fight_bootstrap
+        # Consecutive executed legs whose planned drop did not land
+        # (`intention_progress.dry_within_luck`).
+        self._dry_streak = 0
         self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
         # The cycle's drop evidence (ruling T16a), refreshed once per cycle by
         # `_refresh_learned_drops` before the actions and the context are
@@ -1451,12 +1456,17 @@ class GamePlayer:
                     or outcome == self.RATE_LIMITED_OUTCOME
                 )
                 # A successful leg planned for a drop that did not land moved
-                # nothing (`intention_progress.step_delivered`: the ticket
-                # farm, live 2026-10-31).
+                # nothing once its dry streak is past luck
+                # (`intention_progress.dry_within_luck`: the ticket farm, live
+                # 2026-10-31).
+                delivered = step_delivered(executed_action, prev_state_for_learning,
+                                           new_state, game_data)
+                self._dry_streak = 0 if delivered else self._dry_streak + 1
                 self._track_intention(selected_goal, prev_state_for_learning,
-                                      new_state, outcome == "ok" and step_delivered(
-                                          executed_action, prev_state_for_learning,
-                                          new_state, game_data))
+                                      new_state, outcome == "ok" and (delivered or dry_within_luck(
+                                          self._dry_streak, step_chance(
+                                              executed_action, prev_state_for_learning,
+                                              game_data))))
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action=action,

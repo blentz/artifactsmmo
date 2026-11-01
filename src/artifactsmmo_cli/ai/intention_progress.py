@@ -18,7 +18,11 @@ A gather or a fight planned for a drop (`plan_cache.step_output`) succeeds
 whether or not the drop lands: Robby's `Gather(shrimp_spot->event_ticket)`
 succeeded 266 times for one ticket (1 in 200), each counted as progress, so
 the stall exit never fired and every `BUDGET_CYCLES` turn handed the farm a
-full budget again. Such a cycle progresses only when the drop's count rose.
+full budget again. Such a cycle progresses only when the drop's count rose,
+OR while its dry streak is still within luck (`dry_within_luck`): a legitimate
+rare drop is not stalled by chance, only a streak past the drop's 99th
+percentile (`ceil(ln 0.01 / ln(1 - p))` at the learned chance `p`) is no
+progress. Cause C stops the bad farm being chosen; this is the backstop.
 
 WITNESSED 2026-10-04 (restart 12:19Z): the first rule counted only XP for a
 skill grind, and a crafting climb gathers for more than 20 cycles before its
@@ -36,15 +40,20 @@ suppressed the grind for 5 cycles (93 suppressions in 7 days to 2026-10-04,
 import re
 from collections.abc import Mapping
 from dataclasses import replace
+from fractions import Fraction
+from math import ceil, log
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.arbiter_select import BAND_FALLBACK_STEP, BAND_STEP, Candidate
+from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_prospecting
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.plan_cache import cache_holdings, step_output
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 STALL_CYCLES = 20
 """Committed cycles without progress before the intention is abandoned as
@@ -71,6 +80,11 @@ goal still on offer is never forgotten while it waits."""
 
 Measure = tuple[int, int]
 
+DRY_STREAK_TAIL = 0.01
+"""The chance a legitimate drop's dry streak is longer than the streak a dry
+leg is forgiven (`dry_within_luck`): the 99th percentile of the geometric
+streak at the learned chance."""
+
 
 def progress_measure(goal: Goal, state: WorldState) -> Measure | None:
     """(level, xp) of what `goal` raises, or None for a goal with no XP
@@ -93,6 +107,40 @@ def step_delivered(action: Action, before: WorldState, after: WorldState,
         return True
     item = output[0]
     return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)
+
+
+def step_chance(action: Action, state: WorldState, game_data: GameData) -> Fraction | None:
+    """The learned chance one attempt of `action` drops what it was planned
+    for (`LearnedDrops.chance` at the attempt's prospecting): a gather's drop
+    off its resource, a planned fight's drop off its monster. None for an
+    action planned for no drop (`plan_cache.step_output`), and for a gold
+    fight, whose every win pays."""
+    output = step_output(action, game_data)
+    if output is None or output[0] == GOLD_CODE:
+        return None
+    item = output[0]
+    if isinstance(action, GatherAction):
+        rate, _low, _high = game_data.gather_drop_row(action.resource_code, item)
+        return action.learned_drops.chance(action.resource_code, item, rate,
+                                           gather_prospecting(action.resource_code, state,
+                                                              game_data))
+    assert isinstance(action, FightAction)
+    row = next(row for row in game_data.monster_drops(action.monster_code) if row[0] == item)
+    return action.learned_drops.chance(action.monster_code, item, row[1],
+                                       fight_prospecting(action.monster_code, state, game_data))
+
+
+def dry_within_luck(streak: int, chance: Fraction | None) -> bool:
+    """A dry streak of `streak` consecutive attempts at a drop of `chance` is
+    still luck: no longer than the drop's 99th-percentile streak,
+    `ceil(ln 0.01 / ln(1 - chance))` (p = 1/50: 228). A sure drop (chance 1)
+    forgives no dry attempt, and an action planned for no drop (None) has
+    nothing to be dry of."""
+    if chance is None:
+        return True
+    if chance >= 1:
+        return streak <= 0
+    return streak <= ceil(log(DRY_STREAK_TAIL) / log(1 - float(chance)))
 
 
 def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:

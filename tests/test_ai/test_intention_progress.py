@@ -1,6 +1,8 @@
 """The intention's progress measure (Phase 4-2a): what "moved" means for each
 goal family, and when an intention has stalled."""
 
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
@@ -10,9 +12,12 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.intention_progress import (
+    BUDGET_CYCLES,
     STALL_CYCLES,
+    dry_within_luck,
     progress_measure,
     progressed,
+    step_chance,
     step_delivered,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -171,3 +176,50 @@ def test_a_dry_drop_farm_ends_on_the_stall_exit():
             ended = cycle
             break
     assert ended == STALL_CYCLES
+
+
+def test_a_dry_streak_is_luck_until_its_99th_percentile():
+    """A legitimate rare drop is not stalled by chance: at p = 1/50 the 99th
+    percentile dry streak is ceil(ln 0.01 / ln 0.98) = 228, so 100 dry
+    attempts are still luck and 300 are not. A sure drop forgives none; an
+    action planned for no drop is never dry."""
+    assert dry_within_luck(100, Fraction(1, 50))
+    assert dry_within_luck(228, Fraction(1, 50))
+    assert not dry_within_luck(229, Fraction(1, 50))
+    assert not dry_within_luck(300, Fraction(1, 50))
+    assert dry_within_luck(0, Fraction(1))
+    assert not dry_within_luck(1, Fraction(1))
+    assert dry_within_luck(10_000, None)
+
+
+def test_the_chance_of_a_planned_drop_is_the_learned_one():
+    """`step_chance`: a gather's planned drop at its resource's row (the prior
+    1/rate, nothing observed), a gather for the primary drop a sure one, and
+    an action planned for no drop none."""
+    gd = _shrimp_world()
+    gd.recipes_catalog.resource_drops_full = {
+        "shrimp_spot": [("shrimp", 1, 1, 1), ("event_ticket", 200, 1, 1)]}
+    gd._resource_skill = {"shrimp_spot": ("fishing", 1)}
+    assert step_chance(_ticket_gather(), make_state(), gd) == Fraction(1, 200)
+    primary = GatherAction(resource_code="shrimp_spot", learned_drops=LearnedDrops.empty())
+    assert step_chance(primary, make_state(), gd) == 1
+    assert step_chance(RestAction(), make_state(), gd) is None
+
+
+def test_a_rare_drop_farm_is_not_stalled_by_chance():
+    """The run loop's rule (`GamePlayer` sums the dry streak): a 1-in-50 farm
+    99 cycles dry is luck, so the intention holds; past its 228-attempt
+    percentile, 20 more dry cycles stall it."""
+    goal = GatherMaterialsGoal("event_ticket", {"event_ticket": 100})
+    player = _player_committed_to(goal)
+    flat = make_state()
+    for streak in range(1, BUDGET_CYCLES):
+        player._track_intention(goal, flat, flat, ok=dry_within_luck(streak, Fraction(1, 50)))
+    assert player._arbiter._committed_repr == repr(goal)
+    assert player._intention_stall == 0
+    dry = _player_committed_to(goal)
+    for streak in range(229, 229 + STALL_CYCLES - 1):
+        dry._track_intention(goal, flat, flat, ok=dry_within_luck(streak, Fraction(1, 50)))
+    assert dry._arbiter._committed_repr == repr(goal)
+    dry._track_intention(goal, flat, flat, ok=dry_within_luck(300, Fraction(1, 50)))
+    assert dry._arbiter._committed_repr is None
