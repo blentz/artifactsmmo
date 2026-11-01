@@ -37,7 +37,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
+from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.progression.skill_grind_selection import (
     GrindCandidate,
+    _beats,
     skill_grind_selection_pure,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -350,9 +351,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     # One model for the whole sweep: its routes are memoised per item, and the
     # rungs of one skill share most of their materials.
     model = grind_model(state, game_data, ctx.now)
-    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,
-                          fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
-                          learned_drops=ctx.drops())
+    pricing_ctx = _pricing_context(ctx)
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)
     for code, stats in game_data.all_item_stats.items():
@@ -446,6 +445,68 @@ def has_grind_target(skill: str, state: WorldState,
     return False
 
 
+def _pricing_context(ctx: SelectionContext) -> SelectionContext:
+    """The context a rung is priced under: context-free but for the clock and
+    the learned fight records, fight and action seconds and drops (USER
+    2026-10-08, "Price the loss risk")."""
+    return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,
+                   fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
+                   learned_drops=ctx.drops())
+
+
+def objective_gain(code: str, ctx: SelectionContext) -> Fraction:
+    """What crafting `code` adds to the gear objective: the `gain` (advancement
+    rate on `m*`) of its missing `L*` piece, 0 for any other product."""
+    if ctx.gear_objective is None:
+        return Fraction(0)
+    return next((piece.gain for piece in ctx.gear_objective.missing if piece.code == code),
+                Fraction(0))
+
+
+def chain_fight_actions(code: str, state: WorldState, game_data: GameData,
+                        ctx: SelectionContext) -> Fraction:
+    """The fight actions in the chain that makes one `code` for a grind: the
+    DROP legs of the route `acquire_steps` prices (`drop_work`, same probe
+    state, policy and `produce`), at the actions the walk prices each at
+    (`drop_work_actions`). Gathers are not fights; a fight for gold is no drop
+    work and is not counted."""
+    probe = grind_probe_state(state, code)
+    pricing_ctx = _pricing_context(ctx)
+    work = drop_work(code, 1, probe, game_data, pricing_ctx, None, policy=GRIND_PRICING,
+                     produce=frozenset({code}))
+    fights = tuple(leg for leg in work if leg.kind is SourceKind.DROP)
+    return drop_work_actions(fights, probe, game_data, pricing_ctx)
+
+
+def semantic_order(candidates: list[GrindCandidate], state: WorldState, game_data: GameData,
+                   ctx: SelectionContext) -> list[GrindCandidate]:
+    """`candidates` in the order `skill_grind_selection_pure` should meet them:
+    higher gear-objective gain first (`objective_gain`), then fewer fight
+    actions in the chain (`chain_fight_actions`).
+
+    WHY AN ORDER AT ALL. `_beats` keeps the incumbent on a full tie, so the
+    first of two equal rungs in candidate order wins, and candidate order was
+    `game_data.all_item_stats`' — the API catalogue's. Live witness (plan C
+    Task 7 review M1): at gearcrafting 5-9 `copper_legs_armor` and
+    `feather_coat` both price 83 actions on the l10 scenarios, and the pinned
+    plan was "the legs, listed first". A catalogue order is no reason, the
+    same defect as an alphabetical tiebreak. Sorting here, in the wrapper,
+    leaves the Lean-extracted `_beats` and its proofs untouched.
+
+    THE ORDER ONLY BREAKS TIES. `_beats` strictly orders any two rungs it does
+    not tie, so the argmax depends on input order only among rungs it ties.
+    Fight actions cost a `drop_work` walk per rung, so they are computed only
+    for rungs some other rung ties (`_beats` false both ways); every other rung
+    takes 0, which moves nothing. Two rungs equal on all of `_beats`' keys and
+    on both of these still fall to catalogue order: no further semantic key
+    is named for them."""
+    tied = {c.code for c in candidates for other in candidates
+            if other is not c and not _beats(c, other) and not _beats(other, c)}
+    fights = {code: chain_fight_actions(code, state, game_data, ctx) for code in tied}
+    return sorted(candidates, key=lambda c: (-objective_gain(c.code, ctx),
+                                             fights.get(c.code, Fraction(0))))
+
+
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
                        reserved: frozenset[str] = frozenset(),
                        ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:
@@ -453,5 +514,6 @@ def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
         c for c in build_selectable_grind_candidates(skill, state, game_data, ctx)
         if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))
     ]
-    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0), candidates)
+    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0),
+                                        semantic_order(candidates, state, game_data, ctx))
     return chosen or None

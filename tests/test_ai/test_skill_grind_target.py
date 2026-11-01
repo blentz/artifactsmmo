@@ -18,11 +18,14 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import (
     GRIND_POLICY,
     _cache_key,
     build_selectable_grind_candidates,
+    chain_fight_actions,
     grind_model,
     has_grind_target,
     is_obtainable,
+    objective_gain,
     skill_grind_target,
 )
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
@@ -789,3 +792,83 @@ def test_a_renewable_material_needs_no_stock():
     gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     assert is_obtainable("ring", grind_model(_jeweller(), gd, datetime.now(UTC)))
+
+
+def _twin_rungs() -> GameData:
+    """`_gd()` plus `copper_knife`, the dagger's exact twin (level 1,
+    `{copper_bar: 6}`): every `_beats` key ties the two."""
+    gd = _gd()
+    gd._item_stats["copper_knife"] = ItemStats(code="copper_knife", level=1, type_="weapon",
+                                               crafting_skill="weaponcrafting", crafting_level=1)
+    gd._crafting_recipes["copper_knife"] = {"copper_bar": 6}
+    return gd
+
+
+def _reversed_catalogue(gd: GameData) -> GameData:
+    gd._item_stats = dict(reversed(list(gd._item_stats.items())))
+    return gd
+
+
+def _two_pieces(dagger_gain: Fraction, knife_gain: Fraction):
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"),
+                       ("shield_slot", "copper_knife"))
+    objective = ctx.gear_objective
+    assert objective is not None
+    gains = {"copper_dagger": dagger_gain, "copper_knife": knife_gain}
+    missing = tuple(dataclasses.replace(p, gain=gains[p.code]) for p in objective.missing)
+    return dataclasses.replace(ctx, gear_objective=dataclasses.replace(objective, missing=missing))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_full_tie_goes_to_the_higher_objective_gain_in_either_catalogue_order(
+        reverse: bool) -> None:
+    """Plan C Task 7 review M1: `_beats` keeps the first of two tied rungs, so
+    the catalogue's order picked the grind. Two wanted twins tie on every
+    `_beats` key; the one whose `L*` piece gains more is crafted, whichever the
+    API lists first."""
+    state = make_state(skills={"weaponcrafting": 1})
+    gd = _twin_rungs()
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    assert skill_grind_target("weaponcrafting", state, gd,
+                              ctx=_two_pieces(Fraction(1), Fraction(3))) == "copper_knife"
+    gd = _twin_rungs()
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    assert skill_grind_target("weaponcrafting", state, gd,
+                              ctx=_two_pieces(Fraction(3), Fraction(1))) == "copper_dagger"
+
+
+def test_objective_gain_reads_the_missing_piece() -> None:
+    ctx = _two_pieces(Fraction(1), Fraction(3))
+    assert objective_gain("copper_knife", ctx) == 3
+    assert objective_gain("wooden_staff", ctx) == 0
+    assert objective_gain("copper_knife", TIMED_NO_PROFILE_CONTEXT) == 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order(reverse: bool) -> None:
+    """The live tie (plan C Task 7 review M1): at gearcrafting 5,
+    `copper_legs_armor` and `feather_coat` both price 82 actions, unwanted, at
+    one craft level, so `_beats` ties them and the API's catalogue order used
+    to pick. The legs need two chicken feathers, the coat five: fewer fight
+    actions in the chain wins, in the catalogue's order and reversed."""
+    gd = load_bundle_game_data(BUNDLE)
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+    by_code = {c.code: c for c in build_selectable_grind_candidates(
+        "gearcrafting", state, gd, TIMED_NO_PROFILE_CONTEXT)}
+    legs, coat = by_code["copper_legs_armor"], by_code["feather_coat"]
+    assert (legs.acquire_steps, legs.craft_level, legs.wanted) == (
+        coat.acquire_steps, coat.craft_level, coat.wanted), "vacuous: the rungs do not tie"
+    legs_fights = chain_fight_actions("copper_legs_armor", state, gd, TIMED_NO_PROFILE_CONTEXT)
+    coat_fights = chain_fight_actions("feather_coat", state, gd, TIMED_NO_PROFILE_CONTEXT)
+    assert 0 < legs_fights < coat_fights
+    assert skill_grind_target("gearcrafting", state, gd,
+                              ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_legs_armor"
+
+
+def test_a_gather_only_chain_has_no_fight_actions() -> None:
+    assert chain_fight_actions("copper_dagger", make_state(skills={"weaponcrafting": 1}),
+                               _gd(), TIMED_NO_PROFILE_CONTEXT) == 0

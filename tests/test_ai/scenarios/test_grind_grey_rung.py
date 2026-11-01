@@ -164,7 +164,8 @@ def test_reservation_reaches_the_grind_through_the_context(
     assert repr(reserved) != repr(plain), (
         "the grind ignored ctx.step_profile — the reserved guard is dead again")
     # ...and what it moved to must genuinely avoid the reserved materials.
-    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats), ctx=NO_DROPS_CONTEXT)
+    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats),
+                             ctx=TIMED_NO_PROFILE_CONTEXT)
     assert alt is not None and not (set(game_data.crafting_recipe(alt)) & set(mats))
 
 

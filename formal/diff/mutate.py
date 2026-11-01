@@ -1589,8 +1589,8 @@ ONE_DROP_MODEL_GRIND_MUTATIONS = [
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n",
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n"),
     ("grind: the rungs price the prior",
-     "                          learned_drops=ctx.drops())",
-     "                          learned_drops=LearnedDrops.empty())"),
+     "                   learned_drops=ctx.drops())",
+     "                   learned_drops=LearnedDrops.empty())"),
 ]
 ONE_DROP_MODEL_FACTORY_MUTATIONS = [
     ("factory: a targeted gather carries no evidence",
@@ -7978,11 +7978,36 @@ LOSS_RISK_ACQUISITION_MUTATIONS = [
 ]
 LOSS_RISK_GRIND_MUTATIONS = [
     ("loss risk: the grind rungs are priced without the records",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,\n",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=(),\n"),
+     "    return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,\n",
+     "    return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=(),\n"),
     ("loss risk: the grind memo ignores the records",
      "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n",
      "        (),\n        tuple(sorted(state.win_thresholds.items())),\n"),
+]
+# A full `_beats` tie is broken by a semantic order, not the API catalogue's
+# (plan C Task 8, Task 7 review M1). Killed by tests/test_ai/test_skill_grind_target.py
+# (test_a_full_tie_goes_to_the_higher_objective_gain_in_either_catalogue_order,
+# test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order).
+GRIND_TIEBREAK_MUTATIONS = [
+    ("grind tiebreak: candidates meet the core in catalogue order",
+     "    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0),\n"
+     "                                        semantic_order(candidates, state, game_data, ctx))\n",
+     "    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0), candidates)\n"),
+    ("grind tiebreak: the objective gain is ignored",
+     "    return sorted(candidates, key=lambda c: (-objective_gain(c.code, ctx),\n",
+     "    return sorted(candidates, key=lambda c: (Fraction(0),\n"),
+    ("grind tiebreak: more fights first",
+     "                                             fights.get(c.code, Fraction(0))))\n",
+     "                                             -fights.get(c.code, Fraction(0))))\n"),
+    ("grind tiebreak: a tied rung's fights are never counted",
+     "            if other is not c and not _beats(c, other) and not _beats(other, c)}\n",
+     "            if False}\n"),
+    ("grind tiebreak: gathers count as fights",
+     "    fights = tuple(leg for leg in work if leg.kind is SourceKind.DROP)\n",
+     "    fights = tuple(work)\n"),
+    ("grind tiebreak: the fight count ignores the rung's produce rule",
+     "                     produce=frozenset({code}))\n    fights = tuple(",
+     "                     produce=frozenset())\n    fights = tuple("),
 ]
 WIN_THRESHOLD_GRIND_MUTATIONS = [
     ("win threshold: the grind memo ignores the thresholds",
@@ -13614,6 +13639,8 @@ def _collect_all_groups() -> None:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_TIEBREAK_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
               "tests/test_ai/test_skill_grindable.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,

@@ -1199,15 +1199,18 @@ a fight for gold pays its range, not a chance, so it is no drop work."""
 
 def drop_work(item: str, qty: int, state: WorldState, game_data: GameData,
               ctx: SelectionContext, store: LearningStore | None, *,
-              policy: Policy) -> tuple[DropLeg, ...]:
+              policy: Policy, produce: frozenset[str] = frozenset()) -> tuple[DropLeg, ...]:
     """The remaining drop work of the route that prices `qty` of `item`: a
     `DropLeg` for every gather and drop-farm leg the walk takes
     (`acquisition_cost_core.route_legs`), carrying the route's own kind and
     whether its wins carry the loss surcharge (a farm behind gear, keyed
     `gear:<monster>`, does not: `_gated_drop_option`). The walk is
     `cheapest_route`'s own, over the same options and holdings (the bag, plus
-    the pocket's gold), so the work is the work the price is made of."""
-    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)
+    the pocket's gold), so the work is the work the price is made of.
+    `produce` is `acquisition_actions`' own: items only MADE, as a skill grind
+    prices its rung."""
+    options = acquisition_options(item, state, game_data, ctx, store, policy=policy,
+                                  produce=produce)
     legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),
                       frozenset({GOLD_CODE}))
     return tuple(DropLeg(SourceKind(route.kind), route.venue, code, units,
