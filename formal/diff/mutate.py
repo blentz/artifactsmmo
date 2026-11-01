@@ -9279,6 +9279,12 @@ REACHABILITY_CONSTANT_MUTATIONS = [
     ("reachability claims: a stored name reads it",
      "        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):\n",
      "        if isinstance(node, ast.Name):\n"),
+    # Plan C Task 8 (Task 6 re-review m2): killed by
+    # test_a_constant_read_through_its_dotted_module_is_a_false_claim.
+    ("reachability claims: a dotted module read has no origin",
+     "        base = _dotted_origin(node.value, aliases)\n"
+     "        return None if base is None else f\"{base}.{node.attr}\"\n",
+     "        return None\n"),
 ]
 # The vocabulary gate (plan C Task 8, spec 2026-10-18 §5 item 4). Killed by
 # tests/test_audit/test_vocabulary_gate.py.

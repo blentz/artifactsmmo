@@ -232,6 +232,32 @@ def test_a_constant_read_through_its_module_alias_is_a_false_claim() -> None:
     assert _verdicts(sources)["pkg.a:1"].is_false
 
 
+def test_a_constant_read_through_its_dotted_module_is_a_false_claim() -> None:
+    """`import pkg.a` binds `pkg`, so the read is the attribute chain
+    `pkg.a.RATE`, whose base is itself an attribute. It reads `RATE` all the
+    same, and the claim that nothing does is false (plan C Task 6 re-review)."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "import pkg.a\n\nX = pkg.a.RATE * 2\n",
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert verdict.reached_by == ("pkg.b:3",)
+
+
+def test_a_dotted_read_of_another_modules_constant_is_not_a_reader() -> None:
+    """The dotted origin is the module the chain names: `pkg.b.RATE` reads
+    `pkg.b`'s constant, not `pkg.a`'s, and an attribute on a local object
+    names no module at all."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "RATE = 1\n",
+        "src/pkg/c.py": ("import pkg.b\n\n\ndef f(obj: object) -> object:\n"
+                         "    return pkg.b.RATE, obj.cfg.RATE, f().RATE\n"),
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
+
+
 def test_a_named_subject_that_no_longer_exists_is_skipped() -> None:
     """A note about a deletion names something with nothing left to verify."""
     sources = {"src/pkg/a.py": '"""Nothing calls `objective_roots`."""\n'}

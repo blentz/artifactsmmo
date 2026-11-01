@@ -250,6 +250,21 @@ def _imported_modules(tree: ast.Module, module: str) -> tuple[set[str], dict[str
     return modules, aliases
 
 
+def _dotted_origin(node: ast.expr, aliases: Mapping[str, str]) -> str | None:
+    """The dotted module or member an attribute's base names, through an import
+    alias: `a` (`from pkg import a`) is `pkg.a`, and `pkg.a` (`import pkg.a`,
+    which binds `pkg`) is `pkg.a` too. None for a base no import binds (a local
+    object), so `obj.RATE` stays a plain attribute. Without the dotted arm a
+    constant read as `pkg.a.RATE` had no origin, so a false "nothing reads
+    `RATE`" passed (plan C Task 6 re-review)."""
+    if isinstance(node, ast.Name):
+        return aliases.get(node.id)
+    if isinstance(node, ast.Attribute):
+        base = _dotted_origin(node.value, aliases)
+        return None if base is None else f"{base}.{node.attr}"
+    return None
+
+
 def _references(tree: ast.Module, module: str, aliases: Mapping[str, str]) -> list[Reference]:
     """Every name use in the file, classified so collisions can be excluded."""
     refs: list[Reference] = []
@@ -258,7 +273,7 @@ def _references(tree: ast.Module, module: str, aliases: Mapping[str, str]) -> li
             # A store binds the name; only a load (or del) reads it.
             refs.append(Reference(node.id, module, node.lineno, "name"))
         elif isinstance(node, ast.Attribute):
-            bound = aliases.get(node.value.id) if isinstance(node.value, ast.Name) else None
+            bound = _dotted_origin(node.value, aliases)
             kind = "module_attr" if bound is not None else "attr"
             refs.append(Reference(node.attr, module, node.lineno, kind, bound or ""))
         elif isinstance(node, ast.ImportFrom):
