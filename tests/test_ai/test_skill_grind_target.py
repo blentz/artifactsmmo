@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import (
     objective_gain,
     skill_grind_target,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -283,8 +284,8 @@ def test_the_memo_key_notices_a_changed_threshold():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
-            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW))
+    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None))
+            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW, (None, None)))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
@@ -294,13 +295,13 @@ def test_the_memo_key_notices_a_changed_worn_stock():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
+    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility1_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW)
+                             LearnedDrops.empty(), _NOW, (None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility2_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW)
+                             LearnedDrops.empty(), _NOW, (None, None))
 
 def test_the_memo_misses_across_the_sandwhisper_crossing():
     """Final review I-1. `GRIND_POLICY` asks `SPAWN_KNOWN`, which reads the
@@ -340,7 +341,7 @@ def test_the_memo_key_notices_an_event_window_closing():
                                 active_events={"fair": opens + timedelta(hours=1)})
 
     def key(at: datetime) -> object:
-        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at)
+        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at, (None, None))
 
     assert key(opens) == key(opens + timedelta(minutes=5))
     assert key(opens) != key(opens + timedelta(hours=2))
@@ -895,3 +896,33 @@ def test_only_the_tied_top_class_pays_a_fight_walk(
     monkeypatch.setattr(sgt, "drop_work", counting)
     assert skill_grind_target("gearcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert len(calls) == walks, calls
+
+
+def test_the_memo_key_notices_changed_fight_and_action_seconds() -> None:
+    """Review M3: `_pricing_context` prices every rung with the context's fight
+    and action seconds, so two contexts differing ONLY in those must not share
+    a candidate list. The legs' chain fights chickens, so its price moves with
+    a fight's seconds; before the key held them the second call was served
+    the first call's list."""
+    gd = shared_world(BUNDLE)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+    timed = TIMED_NO_PROFILE_CONTEXT
+    assert timed.fight_seconds is not None and timed.action_seconds is not None
+    slower = dataclasses.replace(timed, fight_seconds=dataclasses.replace(
+        timed.fight_seconds, floor=timed.fight_seconds.floor * 10))
+    quicker = dataclasses.replace(timed, action_seconds=timed.action_seconds / 10)
+
+    def steps(ctx: SelectionContext) -> int:
+        by_code = {c.code: c for c in build_selectable_grind_candidates(
+            "gearcrafting", state, gd, ctx)}
+        return by_code["copper_legs_armor"].acquire_steps
+
+    base = steps(timed)
+    assert steps(slower) != base
+    assert steps(timed) == base
+    # An action's seconds price a bought consumable (`consumable_price`), which
+    # no rung here reaches, so it is held to the key itself.
+    keys = {_cache_key("gearcrafting", state, gd, (), LearnedDrops.empty(), _NOW,
+                       (ctx.fight_seconds, ctx.action_seconds))
+            for ctx in (timed, slower, quicker)}
+    assert len(keys) == 3

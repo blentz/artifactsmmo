@@ -114,8 +114,9 @@ class TestTheDropPrice:
 
 class TestTheGrindRungs:
     def test_the_records_are_part_of_the_memo_key(self, state, game_data) -> None:
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
-            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty(), _NOW)
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW, (None, None)) \
+            != _cache_key(
+            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty(), _NOW, (None, None))
 
     def test_the_rung_prices_see_the_records(self, state, game_data, monkeypatch) -> None:
         seen = []
@@ -135,8 +136,9 @@ class TestTheGrindRungs:
         """Ruling T16a: a new observation reprices the rungs' drops, so the
         memo cannot serve a list priced at another cycle's evidence."""
         seen = LearnedDrops((("chicken", 9),), ((("chicken", "feather"), 4),), Fraction(0))
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
-            "cooking", state, game_data, (), seen, _NOW)
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW, (None, None)) \
+            != _cache_key(
+            "cooking", state, game_data, (), seen, _NOW, (None, None))
 
     def test_the_rung_prices_see_the_drop_evidence(self, state, game_data, monkeypatch) -> None:
         """The rungs are priced at the cycle's evidence, and a second evidence

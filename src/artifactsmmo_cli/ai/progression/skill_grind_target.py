@@ -40,6 +40,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
 from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
+from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.grind_probe_state import grind_probe_state
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -165,6 +166,7 @@ _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
                   tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops,
+                  tuple[FightSecondsModel | None, Fraction | None],
                   tuple[object, ...], frozenset[str]]
 
 CACHE_MAX_ENTRIES = 4096
@@ -188,7 +190,8 @@ def _open_event_vendors(state: WorldState, game_data: GameData, now: datetime) -
 
 def _cache_key(skill: str, state: WorldState, game_data: GameData,
                fight_records: tuple[tuple[str, int, int], ...],
-               learned_drops: LearnedDrops, now: datetime) -> "_CacheKey":
+               learned_drops: LearnedDrops, now: datetime,
+               seconds: tuple[FightSecondsModel | None, Fraction | None]) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
 
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
@@ -224,6 +227,13 @@ def _cache_key(skill: str, state: WorldState, game_data: GameData,
     and dropped materials at the learned chance, so a new observation reprices
     them; the value itself is the key (it is hashable), never its `id()`.
 
+    `seconds` is `(ctx.fight_seconds, ctx.action_seconds)`, the two timing
+    inputs `_pricing_context` hands every rung's price: a fight's seconds and
+    an action's seconds turn a fight leg and its forced Rest into actions
+    (`cycles_per_kill`). They change without any new fight resolving (a refit,
+    a learned action time), so `fight_records` does not stand in for them
+    (Task 8 review M3: a context with no timing was served the timed list).
+
     The reach (`region_edges._reach_key`: region, layer, gold, bank gold, the
     reserve floor as it binds, bag and worn set) drives the `SPAWN_KNOWN`
     gate `GRIND_POLICY` asks, which reads `reachable_regions_now` (rulings
@@ -247,6 +257,7 @@ def _cache_key(skill: str, state: WorldState, game_data: GameData,
         tuple(sorted(state.win_thresholds.items())),
         (state.utility1_slot_quantity, state.utility2_slot_quantity),
         learned_drops,
+        seconds,
         _reach_key(state, game_data),
         _open_event_vendors(state, game_data, now),
     )
@@ -342,7 +353,8 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     `recipe_closure` is built ONCE per call and shared across candidates, so the
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
-    key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops(), ctx.now)
+    key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops(), ctx.now,
+                     (ctx.fight_seconds, ctx.action_seconds))
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)

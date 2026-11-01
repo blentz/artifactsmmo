@@ -7988,6 +7988,17 @@ LOSS_RISK_GRIND_MUTATIONS = [
 # (plan C Task 8, Task 7 review M1). Killed by tests/test_ai/test_skill_grind_target.py
 # (test_a_full_tie_goes_to_the_higher_objective_gain_in_either_catalogue_order,
 # test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order).
+# Task 8 review M3: the candidate memo keys the seconds the rungs are priced
+# with. Killed by tests/test_ai/test_skill_grind_target.py
+# (test_the_memo_key_notices_changed_fight_and_action_seconds).
+GRIND_MEMO_SECONDS_MUTATIONS = [
+    ("grind memo: the seconds are not keyed",
+     "        learned_drops,\n        seconds,\n",
+     "        learned_drops,\n        (None, None),\n"),
+    ("grind memo: the builder keys no seconds",
+     "                     (ctx.fight_seconds, ctx.action_seconds))\n",
+     "                     (None, None))\n"),
+]
 GRIND_TIEBREAK_MUTATIONS = [
     ("grind tiebreak: candidates meet the core in catalogue order",
      "        skill, level, semantic_order(skill, level, candidates, state, game_data, ctx))\n",
@@ -13652,6 +13663,8 @@ def _collect_all_groups() -> None:
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_TIEBREAK_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_MEMO_SECONDS_MUTATIONS,
               "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
               "tests/test_ai/test_skill_grindable.py", survivors)
