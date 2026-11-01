@@ -279,7 +279,14 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
             # this cycle, and `_step_servable` demotes the root on exactly
             # that signal. Temporary by construction -- `ctx.turn_in` clears
             # with the claim and the medal is ordinary gear again.
-            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:
+            #
+            # Only a READY turn-in reserves it (review I1): a not-ready one
+            # names the shortfall's farmer (`TurnIn.ready`), asks no buy and
+            # no surrender, and may be renewed for as long as the farm runs,
+            # so reserving on it would keep every sibling from wearing a
+            # medal in an empty artifact slot indefinitely.
+            if (ctx.turn_in is not None and ctx.turn_in.ready
+                    and ctx.turn_in.currency == self.step.code):
                 return None
             dest_slot = self.step.slot if self.step.slot is not None else slots[0]
             return _equippable_goal(self.step.code, dest_slot, state, game_data, ctx)

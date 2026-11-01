@@ -599,3 +599,11 @@ def test_a_currency_under_a_live_turn_in_is_not_routed_to_an_equip(
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd, live, None)
     assert goal is None or "UpgradeEquipment" not in repr(goal), goal
+
+    # Review I1: a NOT-ready claim (the fleet holds 3 of 10) only names the
+    # shortfall's farmer; it reserves nothing, and the step equips as before.
+    farming = dataclasses.replace(live, turn_in=dataclasses.replace(live.turn_in,
+                                                                     fleet_total=3))
+    assert farming.turn_in is not None and not farming.turn_in.ready
+    farmed = resolve_node(obtain_item_decision(step, step), state, gd, farming, None)
+    assert repr(farmed) == repr(unreserved)

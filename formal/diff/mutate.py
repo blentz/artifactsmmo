@@ -2844,10 +2844,15 @@ TREE_OCCUPANCY_MUTATIONS = [
 # the live 2026-09-21 livelock actually ran through.
 OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS = [
     ("obtain_item: re-equip a currency under a live turn-in claim",
-     "            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:\n"
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n"
+     "                    and ctx.turn_in.currency == self.step.code):\n"
      "                return None",
      "            if False:\n"
      "                return None"),
+    # Review I1: a not-ready claim (the shortfall's farmer) reserves nothing.
+    ("obtain_item: a farmer's not-ready claim reserves the currency",
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            if (ctx.turn_in is not None\n"),
 ]
 
 PLANNER_STATE_KEY_MUTATIONS = [
