@@ -3,9 +3,9 @@
 Source root: src/artifactsmmo_cli/ai/
 Diff tests: formal/diff/test_*_diff.py + mutate.py path refs
 Modules with functions: 342
-Total functions: 3519
+Total functions: 3526
 Diff test files: 118
-mutate.py SRC references: 236
+mutate.py SRC references: 237
 
 ## Covered modules (265)
 
@@ -217,6 +217,19 @@ mutate.py SRC references: 236
   - potion_provision_qty.py [name-match, mutate.py]  ←  test_potion_provision_qty_diff.py
   - potion_supply.py [mutate.py]  ←  test_ladder_fires_diff.py
   - priority_band.py [name-match, mutate.py]  ←  test_priority_band_diff.py
+  - progression/decide_key.py [name-match, mutate.py]  ←  test_decide_key_diff.py
+  - progression/guards.py [mutate.py]  ←  test_cycle_step_diff.py, test_decide_key_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py
+  - progression/leaf_attainable_core.py [mutate.py]  ←  test_leaf_attainable_diff.py
+  - progression/means.py [mutate.py]  ←  test_decide_key_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
+  - progression/meta_goal.py  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py, test_prerequisite_graph_diff.py, test_reachability_diff.py, test_strategy_traversal_diff.py
+  - progression/objective.py [name-match, mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_objective_diff.py
+  - progression/owned_count.py [name-match, mutate.py]  ←  test_owned_count_diff.py
+  - progression/prerequisite_graph.py [name-match, mutate.py]  ←  test_prerequisite_graph_diff.py
+  - progression/skill_grind_selection.py [name-match, mutate.py]  ←  test_skill_grind_selection_diff.py
+  - progression/skill_grind_target.py [mutate.py]
+  - progression/strategy.py [mutate.py]
+  - progression/synergy_core.py [mutate.py]
+  - progression/taskmaster_choice.py [mutate.py]
   - progression_reserve.py [name-match, mutate.py]  ←  test_ladder_fires_diff.py
   - progression_reserve_core.py [mutate.py]  ←  test_progression_reserve_diff.py, test_progression_reserve_multi_diff.py
   - recipe_catalog.py [mutate.py]
@@ -233,7 +246,7 @@ mutate.py SRC references: 236
   - rest_first_core.py [mutate.py]
   - role_selection.py [mutate.py]
   - scalar_priority.py [mutate.py]
-  - scenario.py  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py
+  - scenario.py [mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_gear_objective_link_diff.py
   - selection_context.py  ←  test_bank_selection_diff.py, test_gear_objective_arming_diff.py, test_goal_system_value_diff.py, test_phase10_goal_lattices_diff.py, test_plan_exists_diff.py
   - shed_actions.py [mutate.py]
   - shed_urgency.py [mutate.py]
@@ -255,19 +268,6 @@ mutate.py SRC references: 236
   - task_reservation.py [name-match, mutate.py]  ←  test_task_reservation_diff.py
   - task_worth.py [name-match, mutate.py]
   - task_worth_core.py [mutate.py]  ←  test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py, test_task_worth_diff.py
-  - tiers/decide_key.py [name-match, mutate.py]  ←  test_decide_key_diff.py
-  - tiers/guards.py [mutate.py]  ←  test_cycle_step_diff.py, test_decide_key_diff.py, test_inventory_keep_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py
-  - tiers/leaf_attainable_core.py [mutate.py]  ←  test_leaf_attainable_diff.py
-  - tiers/means.py [mutate.py]  ←  test_decide_key_diff.py, test_no_deadlock_v2_diff.py, test_plan_exists_diff.py
-  - tiers/meta_goal.py  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_ladder_fires_diff.py, test_no_deadlock_v2_diff.py, test_objectivestep_arming_diff.py, test_plan_exists_diff.py, test_prerequisite_graph_diff.py, test_reachability_diff.py, test_strategy_traversal_diff.py
-  - tiers/objective.py [name-match, mutate.py]  ←  test_gear_objective_arming_diff.py, test_gear_objective_e_binding_diff.py, test_objective_diff.py
-  - tiers/owned_count.py [name-match, mutate.py]  ←  test_owned_count_diff.py
-  - tiers/prerequisite_graph.py [name-match, mutate.py]  ←  test_prerequisite_graph_diff.py
-  - tiers/skill_grind_selection.py [name-match, mutate.py]  ←  test_skill_grind_selection_diff.py
-  - tiers/skill_grind_target.py [mutate.py]
-  - tiers/strategy.py [mutate.py]
-  - tiers/synergy_core.py [mutate.py]
-  - tiers/taskmaster_choice.py [mutate.py]
   - tool_objective.py [mutate.py]
   - utility_slot.py [mutate.py]
   - win_threshold_core.py [mutate.py]
@@ -339,6 +339,9 @@ mutate.py SRC references: 236
   - per_state_memo.py (2 functions)
   - plan_tree.py (5 functions)
   - player_helpers.py (2 functions)
+  - progression/objective_needs.py (7 functions)
+  - progression/progression_tree.py (2 functions)
+  - progression/root_group.py (1 functions)
   - raid_info.py (2 functions)
   - raid_participation.py (2 functions)
   - reconcile_open_orders.py (1 functions)
@@ -349,9 +352,6 @@ mutate.py SRC references: 236
   - skill_grind_cost_core.py (2 functions)
   - task_alignment.py (1 functions)
   - task_coins.py (1 functions)
-  - tiers/objective_needs.py (7 functions)
-  - tiers/progression_tree.py (2 functions)
-  - tiers/root_group.py (1 functions)
   - trace_stats.py (8 functions)
   - tracer.py (4 functions)
 
