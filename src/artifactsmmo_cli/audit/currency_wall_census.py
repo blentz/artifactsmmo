@@ -60,18 +60,20 @@ the drop tables gain the entry they will reclassify by themselves.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.objective_demand import objective_demand
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -230,8 +232,9 @@ class CurrencyEvidence:
     #: first conjunct `ObtainModel._drop` gates on. An event monster appears here
     #: only while its event is running.
     on_live_tiles: tuple[str, ...]
-    #: Of the live-tiled ones, those `is_winnable` at RESTORABLE hp — the
-    #: second conjunct, asked exactly as `ObtainModel._drop` asks it.
+    #: Of the live-tiled ones, those the per-monster achievable fighter beats
+    #: (`gear_objective.achievable_fighter`, `drop_fight_winnable`): the
+    #: objective's judgement of a dropper (spec 2026-10-18 §2.3).
     winnable: tuple[str, ...]
     #: Of the droppers, those `game_data.is_event_monster` reports as event
     #: content. Separates a dormant event from a permanent monster with no tile.
@@ -273,21 +276,19 @@ def catalogue_currencies(game_data: GameData) -> tuple[str, ...]:
                         if stats.type_ == "currency"))
 
 
-def currency_evidence(code: str, state: WorldState,
-                      game_data: GameData) -> CurrencyEvidence:
-    """The DROP conjuncts for `code`, asked the way `ObtainModel._drop` asks them.
-
-    `replace(state, hp=state.max_hp)` mirrors that function's RESTORABLE-hp
-    rule: route existence is not an hp question, and being at 20% hp is a reason
-    to Rest rather than a reason to call a monster unbeatable."""
-    rested = dataclasses.replace(state, hp=state.max_hp)
+def currency_evidence(code: str, state: WorldState, game_data: GameData,
+                      fighter: Callable[[str], WorldState]) -> CurrencyEvidence:
+    """The DROP conjuncts for `code`. A live dropper is winnable when
+    `fighter(monster)` beats it (`drop_fight_winnable`); `fighter` is
+    `gear_objective.achievable_fighter`, at max HP: the objective's judgement
+    of a dropper (spec 2026-10-18 §2.3), never the worn gear's."""
     droppers = tuple(monster for monster, _rate, _min_q, _max_q
                      in game_data.monsters_dropping(code))
     on_live_tiles = tuple(
         monster for monster in droppers
         if game_data.all_monster_locations.get(monster))
     winnable = tuple(monster for monster in on_live_tiles
-                     if is_winnable(rested, game_data, monster))
+                     if drop_fight_winnable(fighter(monster), game_data, monster))
     event_gated = tuple(monster for monster in droppers
                         if game_data.is_event_monster(monster))
     return CurrencyEvidence(
@@ -437,8 +438,10 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
 
 def _candidate_cells(name: str, candidate: MetaGoal, is_resolved_root: bool,
                      state: WorldState, game_data: GameData,
-                     currencies: tuple[str, ...]) -> list[CurrencyResult]:
-    """One cell per currency, plus the gold row, for one offered root."""
+                     currencies: tuple[str, ...],
+                     fighter: Callable[[str], WorldState]) -> list[CurrencyResult]:
+    """One cell per currency, plus the gold row, for one offered root;
+    `fighter` judges the droppers (`currency_evidence`)."""
     charges = charged_currencies(candidate, state, game_data, currencies)
     # Only worth asking when NOTHING was attributed: if some currency already
     # crossed on its own, the gap has a name and the combined probe would
@@ -447,7 +450,7 @@ def _candidate_cells(name: str, candidate: MetaGoal, is_resolved_root: bool,
                     and unattributed_wall(candidate, state, game_data, currencies))
     cells: list[CurrencyResult] = []
     for code in currencies:
-        evidence = currency_evidence(code, state, game_data)
+        evidence = currency_evidence(code, state, game_data, fighter)
         base, granted = charges.get(code, (0, 0))
         gap = (CurrencyGap.O7_MULTI_CURRENCY_WALL if unattributed
                else classify_gap(code in charges, evidence))
@@ -506,9 +509,10 @@ def run_census(bundle: Path) -> list[CurrencyResult]:
                     gap=CurrencyGap.ROOT_UNRESOLVED.value)
                 for code in (*currencies, GOLD_ROW))
             continue
+        fighter = achievable_fighter(state, game_data, _OFFLINE_CONTEXT)
         for index, candidate in enumerate((resolution.root, *resolution.alternatives)):
             results.extend(_candidate_cells(name, candidate, index == 0, state,
-                                            game_data, currencies))
+                                            game_data, currencies, fighter))
     return results
 
 

@@ -158,6 +158,9 @@ EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equip_value.py"
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 SCENARIO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scenario.py"
+DROP_WALL_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "drop_wall_census.py"
+CURRENCY_WALL_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
+GEAR_OBJECTIVE_FIGHTER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
 USE_CONSUMABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "consumable.py"
 CRAFT_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "crafting.py"
@@ -4837,6 +4840,29 @@ SCENARIO_BASE_STATS_MUTATIONS = [
     ("scenario: the base sheet's initiative is read off its critical strike",
      "    return int(combat[\"initiative\"]), int(combat[\"critical_strike\"])\n",
      "    return int(combat[\"critical_strike\"]), int(combat[\"critical_strike\"])\n"),
+]
+# The wall censuses judge a dropper by the per-monster achievable fighter
+# (plan C Task 7, spec 2026-10-18 §2.3). Killed by
+# tests/test_audit/test_drop_wall_census.py
+# (test_a_dropper_an_achievable_loadout_beats_is_no_wall) and
+# tests/test_audit/test_currency_wall_census.py
+# (test_a_dropper_is_judged_by_the_fighter_not_the_worn_gear).
+DROP_WALL_FIGHTER_MUTATIONS = [
+    ("drop wall: a dropper is judged by the worn gear, not the achievable fighter",
+     "        if any(drop_fight_winnable(fighter(monster), game_data, monster) for monster in live):\n",
+     "        if any(drop_fight_winnable(replace(state, hp=state.max_hp), game_data, monster)\n"
+     "               for monster in live):\n"),
+]
+CURRENCY_WALL_FIGHTER_MUTATIONS = [
+    ("currency wall: a dropper is judged by the worn gear, not the achievable fighter",
+     "                     if drop_fight_winnable(fighter(monster), game_data, monster))",
+     "                     if drop_fight_winnable(dataclasses.replace(state, hp=state.max_hp),\n"
+     "                                            game_data, monster))"),
+]
+ACHIEVABLE_FIGHTER_MUTATIONS = [
+    ("achievable fighter: owns only what is held, not the achievable set",
+     "    return _fighters(state, frozenset(layer_of(achievable(state, game_data, ctx))), game_data)\n",
+     "    return _fighters(state, frozenset(), game_data)\n"),
 ]
 # Killed by tests/test_ai/test_learning_store.py (TestFleetRecycleTotals).
 FLEET_RECYCLE_TOTALS_MUTATIONS = [
@@ -13998,6 +14024,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SCENARIO_SRC, SCENARIO_BASE_STATS_MUTATIONS,
               "tests/test_ai/scenarios/test_scenario_builder.py", survivors)
+    run_group(DROP_WALL_CENSUS_SRC, DROP_WALL_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
+    run_group(CURRENCY_WALL_CENSUS_SRC, CURRENCY_WALL_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_currency_wall_census.py", survivors)
+    run_group(GEAR_OBJECTIVE_FIGHTER_SRC, ACHIEVABLE_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_RECYCLE_TOTALS_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,

@@ -296,6 +296,17 @@ def _fighters(state: WorldState, owned: frozenset[str],
     return fighter
 
 
+def achievable_fighter(state: WorldState, game_data: GameData,
+                       ctx: SelectionContext) -> Callable[[str], WorldState]:
+    """The per-monster achievable fighter (§2.3) once the fixed point has
+    converged: owning every achievable item (`achievable`, through
+    `fighter_owning`) and, for each monster, wearing that monster's own `L*`
+    over them on bare gear at max HP (`_fighters`). It is who the objective
+    asks whether a drop's monster can be beaten, so "can this dropper be
+    beaten" is asked of it, never of the gear the character happens to wear."""
+    return _fighters(state, frozenset(layer_of(achievable(state, game_data, ctx))), game_data)
+
+
 def _winnable_gate(gate: Gate) -> bool:
     """A WINNABLE gate: the one some fighter's gear could open. Named, so the
     walk's door memo (`ObtainModel._door_open`) shares one entry across the

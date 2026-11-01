@@ -139,9 +139,14 @@ echo "== (c''') census (--check x14, + joint-walk report) =="
 # and this restores the committed copy, so the gate never rewrites it. The
 # gate VERDICT does not depend on which copy is on disk -- the
 # undeclared/orphan arms read the source, not the store.
+# DROP_WALL_MATRIX.md is restored because `gen_drop_wall.py --check` always
+# rewrites it and never compares it: a local run left it dirty and green
+# (stale 7a3a219a..2026-09-20). Its verdicts are pinned by
+# tests/test_audit/test_drop_wall_census.py, which reads the census itself.
 ( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
                                 docs/craft_completeness/CONDITIONS.md \
-                                docs/behavioral_completeness/LIVENESS_MATRIX.md )
+                                docs/behavioral_completeness/LIVENESS_MATRIX.md \
+                                docs/behavioral_completeness/DROP_WALL_MATRIX.md )
 # The recurring 120 s `ladder_fires` oracle timeouts (2026-09-25..27) were NOT
 # memory pressure, as first suspected: the oracle was asleep, blocked writing
 # out-of-bounds PANICs to an unread stderr pipe (the rich ladder harness sent

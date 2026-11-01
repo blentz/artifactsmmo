@@ -35,6 +35,8 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import drop_wall_census as dwc
@@ -170,11 +172,28 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     9 -> 10 OUT_OF_REACH (ruling T14a-B', capacity is priced):
     `l20_relief_full_bank`'s `lifesteal_rune` was priced by selling one banked
     sap for its 18,500 gold; the sell route delivers 135, so its gold is
-    honestly a drop (gold) the worn gear cannot farm."""
-    assert sum(1 for r in results if r.gap == CLOSES) == 7
-    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 10
-    assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == [
-        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
+    honestly a drop (gold) the worn gear cannot farm.
+
+    7 -> 4 CLOSES, 10 -> 1 OUT_OF_REACH (plan C Task 7, spec §2.3): a dropper
+    is judged by the per-monster achievable fighter, as the objective judges
+    it, not by the worn gear. Ten `forest_ring` rows and `l12_taskgated_bag`'s
+    `mushroom` (mushmush) and `l10_weapon_upgrade`'s `blue_slimeball`
+    (blue_slime) are no walls: an achievable loadout beats their dropper, and
+    they read NOT_DROP_WALLED. The four `l32_*` `wooden_club` rows stay CLOSES
+    walls, but on `death_knight_sword`: an achievable loadout beats `ogre`,
+    and the grant that crosses is the sword `death_knight` drops. The one
+    OUT_OF_REACH is `l20_relief_full_bank`'s `cursed_wood`. No wall sits on a
+    resolved root now."""
+    assert sum(1 for r in results if r.gap == CLOSES) == 4
+    assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 1
+    assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == []
+    assert sorted({(r.scenario, r.evidence.item) for r in _walls(results)
+                   if r.evidence is not None}) == [
+        ("l20_relief_full_bank", "cursed_wood"),
+        ("l32_held_task_closable", "death_knight_sword"),
+        ("l32_held_task_open", "death_knight_sword"),
+        ("l32_held_task_workable", "death_knight_sword"),
+        ("l32_items_task", "death_knight_sword")]
 
 
 def test_every_wall_names_an_item_a_dropper_and_a_chain(
@@ -230,19 +249,42 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
 
 
 def test_the_walled_set_negates_the_drop_source_conjuncts() -> None:
-    """`unwinnable_drop_items` must read the same three facts
-    `obtain_sources._drop_sources` gates on — and must not be empty on a
-    fixture set where the wall has two witnesses."""
+    """`unwinnable_drop_items` reads the live droppers of each item and asks
+    the achievable fighter of each, and is not empty on a fixture set where
+    the wall has witnesses. (Until plan C Task 7 the worn copper judged
+    `cowhide`'s `cow` unbeaten; an achievable loadout beats it, and
+    `king_slimeball`'s `king_slime` stays out of reach.)"""
     cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
     scenario = SCENARIOS["l10_copper_adequate"]
     game_data = declared_world(scenario, BUNDLE, cache)
     state = scenario_state(scenario, game_data)
-    walled = unwinnable_drop_items(state, game_data)
-    assert "cowhide" in walled
+    walled = unwinnable_drop_items(state, game_data,
+                                   achievable_fighter(state, game_data, TIMED_NO_PROFILE_CONTEXT))
+    assert "king_slimeball" in walled and "cowhide" not in walled
     for item in walled:
         live = [m for m, _r, _mn, _mx in game_data.monsters_dropping(item)
                 if game_data.all_monster_locations.get(m)]
         assert live, f"{item} has no live dropper — not this wall's subject"
+
+
+def test_a_dropper_an_achievable_loadout_beats_is_no_wall() -> None:
+    """Spec 2026-10-18 §2.3 (plan C Task 7): a dropper is judged by the
+    per-monster achievable fighter, as the objective judges it, not by the
+    scenario's worn gear. `l10_weapon_upgrade`'s worn copper loses to
+    `mushmush`, `forest_ring`'s only dropper, and the fixed point reaches the
+    ring (mushmush's own `L*` beats it), so the ring is no wall; `cowhide` is
+    likewise opened by an achievable loadout against `cow`."""
+    cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
+    scenario = SCENARIOS["l10_weapon_upgrade"]
+    game_data = declared_world(scenario, BUNDLE, cache)
+    state = scenario_state(scenario, game_data)
+    rested = dataclasses.replace(state, hp=state.max_hp)
+    assert not drop_fight_winnable(rested, game_data, "mushmush")
+    assert not drop_fight_winnable(rested, game_data, "cow")
+    fighter = achievable_fighter(state, game_data, TIMED_NO_PROFILE_CONTEXT)
+    walled = unwinnable_drop_items(state, game_data, fighter)
+    assert "forest_ring" not in walled and "cowhide" not in walled
+    assert "forest_ring" in unwinnable_drop_items(state, game_data, lambda _m: rested)
 
 
 def test_an_obtainable_candidate_is_never_walled(results: list[DropResult]) -> None:
@@ -292,7 +334,8 @@ def test_the_unattributed_residual_can_fire(
     scenario = SCENARIOS["l10_copper_adequate"]
     game_data = declared_world(scenario, BUNDLE, cache)
     state = scenario_state(scenario, game_data)
-    walled = unwinnable_drop_items(state, game_data)
+    walled = unwinnable_drop_items(state, game_data,
+                                   achievable_fighter(state, game_data, TIMED_NO_PROFILE_CONTEXT))
     calls: list[int] = []
 
     def fake_price(_candidate, priced_state, *_args, **_kwargs) -> int:
@@ -361,9 +404,9 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 1 of 17 walls (store-less)" in line
-    assert "closes 7" in line
-    assert "out_of_reach 10" in line
+    assert "gate opens 0 of 5 walls (store-less)" in line
+    assert "closes 4" in line
+    assert "out_of_reach 1" in line
     assert "on ALTERNATIVES" in line
 
 
@@ -433,12 +476,19 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
 
     17 walls, 1 opened, since ruling T14a-B': `l20_relief_full_bank`'s
     `lifesteal_rune`, no longer priced by selling one banked sap for 18,500
-    gold, is a wall the gate does not open."""
+    gold, is a wall the gate does not open.
+
+    5 walls, 0 opened, since plan C Task 7 (spec §2.3: a dropper is judged by
+    the per-monster achievable fighter). The "a wall the gate opens is still
+    counted" half is RETIRED, not unwitnessed by accident: `_gated_drop_option`
+    opens a drop by pricing the achievable gear that beats its dropper, and a
+    dropper some achievable loadout beats is no longer walled here at all
+    (`blue_slimeball` was that witness). Store-less, the gate has nothing else
+    to open, so no wall it opens can be in this grid. The half that stays is
+    the guard's subject: every wall is counted with the gate OFF, and its
+    gate-on price is the structural one."""
     walls = _walls(results)
-    assert len(walls) == 17
-    opened = [w for w in walls if w.gate_price < UNOBTAINABLE_PER_UNIT]
-    assert [(w.scenario, w.candidate) for w in opened] == [
-        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
-    for wall in opened:
+    assert len(walls) == 5
+    for wall in walls:
         assert wall.base_price >= UNOBTAINABLE_PER_UNIT
-        assert wall.gate_price < wall.base_price
+        assert wall.gate_price >= UNOBTAINABLE_PER_UNIT

@@ -527,7 +527,11 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
                                       attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT,
                                                             store),
                                       store)
-            walled = set(unwinnable_drop_items(state, gd))
+            # The node fires where `obtain_sources` withholds a drop: on the
+            # WORN gear, at max HP. The drop-wall census asks the achievable
+            # fighter since plan C Task 7; this test asks production's own wall.
+            rested = dataclasses.replace(state, hp=state.max_hp)
+            walled = set(unwinnable_drop_items(state, gd, lambda _monster, worn=rested: worn))
             for root in [c for c in (resolution.root, *resolution.alternatives)
                          if c is not None]:
                 step = actionable_step(root, state, gd, TIMED_NO_PROFILE_CONTEXT) or root

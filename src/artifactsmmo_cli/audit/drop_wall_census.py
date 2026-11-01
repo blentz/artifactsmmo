@@ -28,12 +28,14 @@ price that FALLS was paying an unobtainable charge for one of them. One pricer,
 no rival walk, and the detector is pinned by positive controls in
 `test_drop_wall_census.py` rather than by inspection.
 
-THE GRANT SET IS THE NEGATION OF `ObtainModel._drop`'s OWN CONJUNCTS — some monster
-drops the item, at least one dropper stands on a tile in `all_monster_locations`,
-and none of those is `is_winnable` at restorable hp. Reading the same three facts
-production reads is what keeps the census and the pricer from disagreeing about
-why a route is absent, exactly as the currency census reads them for its own
-walls.
+THE GRANT SET IS WHAT NO ACHIEVABLE LOADOUT CAN FIGHT FOR — some monster drops
+the item, at least one dropper stands on a tile in `all_monster_locations`, and
+none of those is beaten by the per-monster achievable fighter
+(`gear_objective.achievable_fighter`) under the WINNABLE gate's verdict
+(`drop_fight_winnable`). The objective judges a dropper so (spec 2026-10-18
+§2.3: achievability is a fixed point, not current gear), and so does the
+currency census for its own walls. A dropper the worn gear loses to but an
+achievable loadout beats is the objective's next piece, not a wall.
 
 EACH CELL IS PRICED IN THE WORLD ITS SCENARIO DECLARES. `ScenarioCharacter`
 carries `ge_market` and `unlocked_achievements` and `plan.py` forwards both, so a
@@ -60,19 +62,21 @@ handled is not a census, it is a thermometer that melts.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.objective_demand import objective_demand
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -234,19 +238,21 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
     return cache[key]
 
 
-def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, ...]:
-    """Items whose ONLY drop route `ObtainModel._drop` withholds on winnability.
+def unwinnable_drop_items(state: WorldState, game_data: GameData,
+                          fighter: Callable[[str], WorldState]) -> tuple[str, ...]:
+    """Items whose every live dropper the achievable fighter cannot beat.
 
-    The three conjuncts, in the order that source reads them: some monster drops
-    it, at least one of those stands on a tile `factory.py` builds a `FightAction`
-    from, and none of those is winnable at RESTORABLE hp.
+    Three conjuncts: some monster drops it, at least one of those stands on a
+    tile `factory.py` builds a `FightAction` from, and none of those is beaten
+    by `fighter(monster)` under the WINNABLE gate's own verdict
+    (`drop_fight_winnable`).
 
-    Restorable, not current: route EXISTENCE is not an hp question. Being at 20%
-    hp is a reason to Rest — an action the planner has — while a fight the
-    character cannot win when full is a route that does not exist. This is the
-    same reading `ObtainModel._drop` takes, and taking a different one here would
-    make the census disagree with the pricer about its own subject."""
-    rested = replace(state, hp=state.max_hp)
+    `fighter` is `gear_objective.achievable_fighter`: the character owning the
+    whole achievable set and wearing each monster's own `L*`, at max HP. That
+    is how the objective judges a dropper (spec 2026-10-18 §2.3, a fixed
+    point, not current gear), so a dropper some achievable loadout beats is no
+    wall here, whatever the scenario wears. Max HP for the reason it always
+    was: route EXISTENCE is not an hp question."""
     walled: list[str] = []
     for item in game_data.items.stats:
         live = [monster for monster, _rate, _min_q, _max_q
@@ -254,7 +260,7 @@ def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, 
                 if game_data.all_monster_locations.get(monster)]
         if not live:
             continue
-        if any(is_winnable(rested, game_data, monster) for monster in live):
+        if any(drop_fight_winnable(fighter(monster), game_data, monster) for monster in live):
             continue
         walled.append(item)
     return tuple(walled)
@@ -332,7 +338,8 @@ def run_census(bundle: Path) -> list[DropResult]:
                 base_price=0, granted_price=0, gate_price=0,
                 gap=DropGap.ROOT_UNRESOLVED.value, evidence=None))
             continue
-        walled = unwinnable_drop_items(state, game_data)
+        walled = unwinnable_drop_items(
+            state, game_data, achievable_fighter(state, game_data, _OFFLINE_CONTEXT))
         candidates = (resolution.root, *resolution.alternatives)
         for index, candidate in enumerate(candidates):
             gap, base, granted, gate_price, evidence = classify(

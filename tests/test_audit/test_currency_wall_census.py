@@ -41,6 +41,7 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
@@ -286,25 +287,47 @@ def test_a_merely_cheaper_route_is_not_a_charge() -> None:
     assert obtainable > 1, "the claim needs obtainable roots to be about"
 
 
+def test_a_dropper_is_judged_by_the_fighter_not_the_worn_gear(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 2026-10-18 §2.3 (plan C Task 7): `currency_evidence` asks the
+    WINNABLE verdict of `fighter(monster)` (the census passes the per-monster
+    achievable fighter), never of the scenario's own state. Pinned with a
+    verdict that holds only for the fighter it is handed: the committed bundle
+    has no currency whose live dropper an achievable loadout beats and the worn
+    gear does not (`sandwarden` loses to both in every level-40+ scenario), so
+    the matrix did not move with this change."""
+    scenario = SCENARIOS[FUNDED_CELL]
+    game_data = declared_world(scenario, BUNDLE, {})
+    state = scenario_state(scenario, game_data)
+    achieved = dataclasses.replace(state, character="achievable")
+    monkeypatch.setattr(cwc, "drop_fight_winnable",
+                        lambda fighter, _gd, _monster: fighter.character == "achievable")
+    sand = currency_evidence("sandwhisper_coin", state, game_data, lambda _monster: achieved)
+    assert sand.winnable == ("sandwarden",)
+    worn = currency_evidence("sandwhisper_coin", state, game_data, lambda _monster: state)
+    assert worn.winnable == ()
+
+
 def test_the_evidence_decomposes_the_drop_conjuncts() -> None:
     """`currency_evidence` must ask what `_drop_sources` asks. Read on real
     catalogue data so the columns in the matrix are not fiction."""
     scenario = SCENARIOS[FUNDED_CELL]
     game_data = declared_world(scenario, BUNDLE, {})
     state = scenario_state(scenario, game_data)
+    fighter = achievable_fighter(state, game_data, TIMED_NO_PROFILE_CONTEXT)
 
-    gem = currency_evidence("corrupted_gem", state, game_data)
+    gem = currency_evidence("corrupted_gem", state, game_data, fighter)
     assert set(gem.droppers) == {"corrupted_ogre", "corrupted_owlbear",
                                  "grimlet"}
     assert gem.on_live_tiles == ()
     assert set(gem.event_gated) == set(gem.droppers)
     assert not gem.task_earnable
 
-    sand = currency_evidence("sandwhisper_coin", state, game_data)
+    sand = currency_evidence("sandwhisper_coin", state, game_data, fighter)
     assert "sandwarden" in sand.on_live_tiles
     assert sand.winnable == ()
 
-    coin = currency_evidence(FUNDED_CURRENCY, state, game_data)
+    coin = currency_evidence(FUNDED_CURRENCY, state, game_data, fighter)
     assert coin.task_earnable
     assert coin.droppers == ()
 
@@ -470,9 +493,10 @@ def test_forcing_one_world_hides_the_only_funded_arm() -> None:
     forced: list[CurrencyResult] = []
     for name, scenario in SCENARIOS.items():
         state = scenario_state(scenario, default_world)
+        fighter = achievable_fighter(state, default_world, TIMED_NO_PROFILE_CONTEXT)
         for index, candidate in enumerate(_offered(state, default_world)):
             forced.extend(cwc._candidate_cells(name, candidate, index == 0, state,
-                                               default_world, currencies))
+                                               default_world, currencies, fighter))
 
     assert len(forced) >= MIN_CELLS, "the forced grid must be full-sized"
     assert [r for r in forced if r.gap == CurrencyGap.FUNDED.value] == []
