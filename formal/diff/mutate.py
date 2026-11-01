@@ -4853,6 +4853,22 @@ DROP_WALL_FIGHTER_MUTATIONS = [
      "        if any(drop_fight_winnable(replace(state, hp=state.max_hp), game_data, monster)\n"
      "               for monster in live):\n"),
 ]
+# The pricer's worn-gear walls the objective beats (review I1), and a cell that
+# is no wall carries no gate price (M4). Killed by
+# tests/test_audit/test_drop_wall_census.py
+# (test_a_worn_wall_the_objective_beats_is_named_by_its_gate,
+# test_a_candidate_with_no_walled_items_is_not_this_censuss_subject).
+DROP_WALL_WORN_ARM_MUTATIONS = [
+    ("drop wall: the pricer's worn-gear walls are never asked",
+     "    behind = tuple(item for item in worn_walled if item not in walled)\n",
+     "    behind: tuple[str, ...] = ()\n"),
+    ("drop wall: a worn wall the gate opens reads as the pricer behind the objective",
+     "            gap = (DropGap.WALL_PRICER_BEHIND_OBJECTIVE if gate_price >= UNOBTAINABLE_PER_UNIT\n",
+     "            gap = (DropGap.WALL_PRICER_BEHIND_OBJECTIVE if True\n"),
+    ("drop wall: a cell that is no wall carries its base as a gate price",
+     "    return (DropGap.NOT_DROP_WALLED.value, base, base, None, None)\n",
+     "    return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)\n"),
+]
 CURRENCY_WALL_FIGHTER_MUTATIONS = [
     ("currency wall: a dropper is judged by the worn gear, not the achievable fighter",
      "                     if drop_fight_winnable(fighter(monster), game_data, monster))",
@@ -14025,6 +14041,8 @@ def _collect_all_groups() -> None:
     run_group(SCENARIO_SRC, SCENARIO_BASE_STATS_MUTATIONS,
               "tests/test_ai/scenarios/test_scenario_builder.py", survivors)
     run_group(DROP_WALL_CENSUS_SRC, DROP_WALL_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
+    run_group(DROP_WALL_CENSUS_SRC, DROP_WALL_WORN_ARM_MUTATIONS,
               "tests/test_audit/test_drop_wall_census.py", survivors)
     run_group(CURRENCY_WALL_CENSUS_SRC, CURRENCY_WALL_FIGHTER_MUTATIONS,
               "tests/test_audit/test_currency_wall_census.py", survivors)

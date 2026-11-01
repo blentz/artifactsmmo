@@ -177,18 +177,31 @@ def test_only_the_closes_arm_is_exercised_and_the_matrix_says_so(
     7 -> 4 CLOSES, 10 -> 1 OUT_OF_REACH (plan C Task 7, spec §2.3): a dropper
     is judged by the per-monster achievable fighter, as the objective judges
     it, not by the worn gear. Ten `forest_ring` rows and `l12_taskgated_bag`'s
-    `mushroom` (mushmush) and `l10_weapon_upgrade`'s `blue_slimeball`
-    (blue_slime) are no walls: an achievable loadout beats their dropper, and
-    they read NOT_DROP_WALLED. The four `l32_*` `wooden_club` rows stay CLOSES
-    walls, but on `death_knight_sword`: an achievable loadout beats `ogre`,
-    and the grant that crosses is the sword `death_knight` drops. The one
-    OUT_OF_REACH is `l20_relief_full_bank`'s `cursed_wood`. No wall sits on a
-    resolved root now."""
+    `mushroom` (both mushmush) are no objective walls, but the gate-on pricer
+    still cannot price them: WALL_PRICER_BEHIND_OBJECTIVE (11, review I1).
+    `l10_weapon_upgrade`'s `blue_slimeball` (blue_slime) is the one the gate
+    opens: WALL_GATE_OPENS_WORN_WALL, still the walk's resolved root. The four
+    `l32_*` `wooden_club` rows stay CLOSES walls, but on `death_knight_sword`:
+    an achievable loadout beats `ogre`, and the grant that crosses is the sword
+    `death_knight` drops. The one OUT_OF_REACH is `l20_relief_full_bank`'s
+    `cursed_wood`."""
     assert sum(1 for r in results if r.gap == CLOSES) == 4
     assert sum(1 for r in results if r.gap == OUT_OF_REACH) == 1
-    assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == []
+    behind = [(r.scenario, r.candidate) for r in results
+              if r.gap == DropGap.WALL_PRICER_BEHIND_OBJECTIVE.value]
+    rings = [(name, f"ObtainItem(code='forest_ring', quantity=1, slot='{slot}')")
+             for name in ("l10_weapon_upgrade", "l12_taskgated_bag", "l10_gearcrafting_gap",
+                          "l10_gearcrafting_gap_combat_blocked", "l12_deep_chain_grind")
+             for slot in ("ring1_slot", "ring2_slot")]
+    assert sorted(behind) == sorted([*rings, ("l12_taskgated_bag",
+                                              "ObtainItem(code='mushroom', quantity=4)")])
+    assert [(r.scenario, r.candidate) for r in results
+            if r.gap == DropGap.WALL_GATE_OPENS_WORN_WALL.value] == [
+        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
+    assert [(r.scenario, r.candidate) for r in _walls(results) if r.is_resolved_root] == [
+        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)")]
     assert sorted({(r.scenario, r.evidence.item) for r in _walls(results)
-                   if r.evidence is not None}) == [
+                   if r.evidence is not None and r.gap in (CLOSES, OUT_OF_REACH)}) == [
         ("l20_relief_full_bank", "cursed_wood"),
         ("l32_held_task_closable", "death_knight_sword"),
         ("l32_held_task_open", "death_knight_sword"),
@@ -346,7 +359,7 @@ def test_the_unattributed_residual_can_fire(
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
     gap, base, granted, _gate, evidence = classify(
-        object(), state, game_data, walled)  # type: ignore[arg-type]
+        object(), state, game_data, walled, walled)  # type: ignore[arg-type]
     assert gap == DropGap.DROP_WALL_UNATTRIBUTED.value
     assert base == UNOBTAINABLE_PER_UNIT
     assert granted == 1
@@ -371,12 +384,37 @@ def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
 
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
-    gap, base, granted, gate, evidence = classify(object(), state, game_data, ())  # type: ignore[arg-type]
+    gap, base, granted, gate, evidence = classify(object(), state, game_data, (), ())  # type: ignore[arg-type]
     assert gap == DropGap.NOT_DROP_WALLED.value
     assert (base, granted, gate, evidence) == (UNOBTAINABLE_PER_UNIT,
-                                               UNOBTAINABLE_PER_UNIT,
-                                               UNOBTAINABLE_PER_UNIT, None)
+                                               UNOBTAINABLE_PER_UNIT, None, None)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(("gate", "arm"), [
+    (UNOBTAINABLE_PER_UNIT, DropGap.WALL_PRICER_BEHIND_OBJECTIVE),
+    (147, DropGap.WALL_GATE_OPENS_WORN_WALL)])
+def test_a_worn_wall_the_objective_beats_is_named_by_its_gate(
+        monkeypatch: pytest.MonkeyPatch, gate: int, arm: DropGap) -> None:
+    """Plan C Task 7, review I1: an item only the WORN gear is walled from (the
+    achievable fighter beats its dropper) is no objective wall, but the pricer
+    still charges it. Its crossing is named by the gate-on price: unobtainable
+    is the pricer behind the objective, finite is the gate opening it."""
+    cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
+    scenario = SCENARIOS["l10_weapon_upgrade"]
+    game_data = declared_world(scenario, BUNDLE, cache)
+    state = scenario_state(scenario, game_data)
+
+    def fake_price(_candidate, priced_state, *_args, gated_drop: bool, **_kwargs) -> int:
+        if gated_drop:
+            return gate
+        return 5 if priced_state.inventory.get("forest_ring", 0) else UNOBTAINABLE_PER_UNIT
+
+    monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price", fake_price)
+    got = classify(object(), state, game_data, (), ("forest_ring",))  # type: ignore[arg-type]
+    gap, base, granted, gate_price, evidence = got
+    assert (gap, base, granted, gate_price) == (arm.value, UNOBTAINABLE_PER_UNIT, 5, gate)
+    assert evidence is not None and evidence.item == "forest_ring"
 
 
 def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
@@ -404,9 +442,11 @@ def test_a_root_the_walk_cannot_resolve_is_a_visible_row(
 def test_the_summary_reports_the_arm_counts(results: list[DropResult]) -> None:
     line = summary_line(results)
     assert "candidate cells" in line
-    assert "gate opens 0 of 5 walls (store-less)" in line
+    assert "gate opens 1 of 17 walls (store-less)" in line
     assert "closes 4" in line
     assert "out_of_reach 1" in line
+    assert "pricer_behind_objective 11" in line
+    assert "gate_opens_worn_wall 1" in line
     assert "on ALTERNATIVES" in line
 
 
@@ -478,17 +518,19 @@ def test_the_census_keeps_counting_a_wall_the_gate_now_prices(
     `lifesteal_rune`, no longer priced by selling one banked sap for 18,500
     gold, is a wall the gate does not open.
 
-    5 walls, 0 opened, since plan C Task 7 (spec §2.3: a dropper is judged by
-    the per-monster achievable fighter). The "a wall the gate opens is still
-    counted" half is RETIRED, not unwitnessed by accident: `_gated_drop_option`
-    opens a drop by pricing the achievable gear that beats its dropper, and a
-    dropper some achievable loadout beats is no longer walled here at all
-    (`blue_slimeball` was that witness). Store-less, the gate has nothing else
-    to open, so no wall it opens can be in this grid. The half that stays is
-    the guard's subject: every wall is counted with the gate OFF, and its
-    gate-on price is the structural one."""
+    Still 17 walls, 1 opened, since plan C Task 7 (spec §2.3, review I1): the
+    objective judges a dropper by the achievable fighter, the pricer by the
+    worn gear, and the census counts both. `blue_slimeball` is the wall the
+    gate opens (`_gated_drop_option`, through `_gear_unlock`'s `combat_deficit`
+    chain), named WALL_GATE_OPENS_WORN_WALL: an achievable loadout beats
+    blue_slime, the worn copper does not."""
     walls = _walls(results)
-    assert len(walls) == 5
-    for wall in walls:
+    assert len(walls) == 17
+    opened = [w for w in walls if w.gate_price is not None
+              and w.gate_price < UNOBTAINABLE_PER_UNIT]
+    assert [(w.scenario, w.candidate, w.gap) for w in opened] == [
+        ("l10_weapon_upgrade", "ObtainItem(code='blue_slimeball', quantity=2)",
+         DropGap.WALL_GATE_OPENS_WORN_WALL.value)]
+    for wall in opened:
         assert wall.base_price >= UNOBTAINABLE_PER_UNIT
-        assert wall.gate_price >= UNOBTAINABLE_PER_UNIT
+        assert wall.gate_price is not None and wall.gate_price < wall.base_price
