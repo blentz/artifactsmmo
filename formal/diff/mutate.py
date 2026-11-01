@@ -458,6 +458,7 @@ FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py
 FIGHT_TILES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_tiles.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
 REACHABILITY_CLAIMS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "reachability_claims.py"
+VOCABULARY_GATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "vocabulary_gate.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
@@ -9279,6 +9280,26 @@ REACHABILITY_CONSTANT_MUTATIONS = [
      "        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):\n",
      "        if isinstance(node, ast.Name):\n"),
 ]
+# The vocabulary gate (plan C Task 8, spec 2026-10-18 §5 item 4). Killed by
+# tests/test_audit/test_vocabulary_gate.py.
+VOCABULARY_GATE_MUTATIONS = [
+    ("vocabulary gate: comments are read as identifiers",
+     "            if token.type == tokenize.NAME and names_the_concept(token.string)]\n",
+     "            if token.type in (tokenize.NAME, tokenize.COMMENT, tokenize.STRING)\n"
+     "            and names_the_concept(token.string)]\n"),
+    ("vocabulary gate: camelCase humps are not split",
+     "        found.extend(p.lower() for p in re.findall(r\"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\\d+\", segment))\n",
+     "        found.append(segment.lower())\n"),
+    ("vocabulary gate: a plural is not the word",
+     "    return any(p in WORDS or (p.endswith(\"s\") and p[:-1] in WORDS) for p in parts(name))\n",
+     "    return any(p in WORDS for p in parts(name))\n"),
+    ("vocabulary gate: an allowed name passes in any module",
+     "    return tuple(hit for hit in hits if hit.module not in homes.get(hit.name, ()))\n",
+     "    return tuple(hit for hit in hits if hit.name not in homes)\n"),
+    ("vocabulary gate: an orphan allowance passes",
+     "    return not self.violations and not self.orphans\n",
+     "    return not self.violations\n"),
+]
 CENSUS_CURRENCY_GREY_MUTATIONS = [
     ("census: a grey currency dropper is attainable regardless of policy",
      "               and (game_data.xp_per_kill(m, state.level) > 0\n"
@@ -14668,6 +14689,8 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_census_gear.py", survivors)
     run_group(REACHABILITY_CLAIMS_SRC, REACHABILITY_CONSTANT_MUTATIONS,
               "tests/test_audit/test_reachability_claims.py", survivors)
+    run_group(VOCABULARY_GATE_SRC, VOCABULARY_GATE_MUTATIONS,
+              "tests/test_audit/test_vocabulary_gate.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_CENSUS_SRC, FIGHT_NEED_MUTATIONS,

@@ -50,6 +50,7 @@ on:
     paths:
       - "src/**/*.py"
       - "scripts/gen_reachability_claims.py"
+      - "scripts/gen_vocabulary_gate.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
@@ -66,6 +67,7 @@ on:
     paths:
       - "src/**/*.py"
       - "scripts/gen_reachability_claims.py"
+      - "scripts/gen_vocabulary_gate.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
@@ -106,6 +108,13 @@ jobs:
       # census in the set (0.7s, `ast` over src/ only), so it runs first.
       - name: reachability-claim census — every no-caller claim is TRUE
         run: uv run python scripts/gen_reachability_claims.py --check
+
+      # Spec 2026-10-18 §5 item 4: no src/ identifier names tier, rung, band,
+      # ladder or milestone outside an explicit allowance (name and module),
+      # so the deleted tier ladder cannot come back under a new name. NAME
+      # tokens only (`tokenize` over src/), well under a second.
+      - name: vocabulary gate — no tier, rung, band, ladder or milestone in src
+        run: uv run python scripts/gen_vocabulary_gate.py --check
 
       # Obligation O1 of the wave-3 resolution design (spec 2026-08-23 3.5),
       # restored by ruling AK of the global gear objective: every

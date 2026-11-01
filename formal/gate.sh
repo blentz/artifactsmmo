@@ -105,9 +105,14 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # worst on `ai/obtain_sources`, which ELEVEN production modules import and both
 # plan producers run through. Those comments were true when written and were
 # never revisited, which is what makes it a class rather than two incidents.
-echo "== (c''') census (--check x14, + joint-walk report) =="
+# vocabulary gate added 2026-10-31 (plan C Task 8, spec 2026-10-18 §5 item 4),
+# `tokenize` over src/ in well under a second: no identifier names tier, rung,
+# band, ladder or milestone outside its allowance, so the deleted tier ladder
+# cannot return under a new name. Placed beside reachability-claims, its twin.
+echo "== (c''') census (--check x15, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
+  && uv run python scripts/gen_vocabulary_gate.py --check \
   && uv run python scripts/gen_liveness.py --check \
   && uv run python scripts/gen_skill_climb.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
