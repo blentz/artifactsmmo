@@ -388,6 +388,10 @@ def test_the_store_times_each_priced_kind_per_action_run(tmp_path: Path) -> None
         with pytest.raises(UntimedActionKindError) as untimed:
             ctx.seconds_of(LogType.WITHDRAW_GOLD)
         assert untimed.value.kind == "withdraw_gold"
+        # a context carrying no kind seconds at all refuses every kind
+        assert NO_PROFILE_CONTEXT.kind_seconds is None
+        with pytest.raises(ValueError, match="no learned action-kind seconds"):
+            NO_PROFILE_CONTEXT.seconds_of(LogType.CRAFTING)
     finally:
         store.close()
     with pytest.raises(ValueError, match="no quantity"):
@@ -456,6 +460,17 @@ def test_the_store_sums_are_read_incrementally(tmp_path: Path) -> None:
                                                                    store.last_cycle_id()))
 
         assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+        # nothing appended since the last read: the held sums, no query at all
+        reads: list[tuple[int, int]] = []
+        query = store.fleet_action_cooldowns
+
+        def counted(kinds, after, through):  # type: ignore[no-untyped-def]
+            reads.append((after, through))
+            return query(kinds, after, through)
+
+        store.fleet_action_cooldowns = counted  # type: ignore[method-assign]
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+        assert reads == [(0, store.last_cycle_id())]  # `full()`'s own scan, none of the sums'
         _priced(store, 3, "CraftAction", "Craft(cheese×1)", 7.0)
         _priced(store, 4, "GatherAction", "Gather(ash_tree)", 34.0)
         assert learned_kind_seconds(store, boot, lambda _item: 1) == full() == (

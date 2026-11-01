@@ -183,12 +183,8 @@ def _piece_leads(code: str, state: WorldState, ctx: SelectionContext) -> bool:
     passive currency is not farmed in its stead."""
     objective = ctx.gear_objective
     assert objective is not None, "only a missing piece is asked whether it leads"
-    for piece in objective.missing:
-        if piece.code == code:
-            return True
-        if not piece.awaits_delivery(state):
-            return False
-    raise AssertionError(f"{code} is not a missing piece of the objective")
+    at = next(i for i, piece in enumerate(objective.missing) if piece.code == code)
+    return all(piece.awaits_delivery(state) for piece in objective.missing[:at])
 
 
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,

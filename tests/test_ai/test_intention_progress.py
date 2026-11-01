@@ -2,6 +2,7 @@
 goal family, and when an intention has stalled."""
 
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 
@@ -34,6 +35,9 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.shared_world import shared_world
+
+BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
 
 def test_a_character_grind_is_measured_in_character_xp():
@@ -211,6 +215,20 @@ def test_the_chance_of_a_planned_drop_is_the_learned_one():
     primary = GatherAction(resource_code="shrimp_spot", learned_drops=LearnedDrops.empty())
     assert step_chance(primary, make_state(), gd) == 1
     assert step_chance(RestAction(), make_state(), gd) is None
+
+
+def test_the_chance_of_a_planned_fight_drop_is_its_monster_row():
+    """`step_chance` of a fight planned for a drop: the item's row in its
+    monster's table (the chicken's feather, 1 in 8, nothing observed), never
+    another row of that table."""
+    gd = shared_world(BUNDLE)
+    assert ("feather", 8, 1, 1) in gd.monster_drops("chicken")
+    fight = FightAction(monster_code="chicken", drop_target=("feather", 8),
+                        learned_drops=LearnedDrops.empty())
+    assert step_chance(fight, make_state(), gd) == Fraction(1, 8)
+    egg = FightAction(monster_code="chicken", drop_target=("golden_egg", 1),
+                      learned_drops=LearnedDrops.empty())
+    assert step_chance(egg, make_state(), gd) == Fraction(1, 1000)
 
 
 def test_a_rare_drop_farm_is_not_stalled_by_chance():

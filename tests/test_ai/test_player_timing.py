@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.log_type import LogType
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
+    committed_kind_seconds,
     committed_timing,
     fit_model,
 )
@@ -61,6 +62,23 @@ def test_a_player_with_no_observation_anywhere_raises() -> None:
     player = GamePlayer(character="hero", fight_bootstrap=FleetBootstrap((), (), ()))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
         player._timing()
+
+
+def test_a_live_player_times_each_kind_from_its_bootstrap() -> None:
+    """Live (no offline capture, no store): each priced kind's seconds are the
+    account-log bootstrap's, a craft's per run of the recipe (the bundle's
+    cheese yields 2, so a 4-cheese craft of 10 s is two 5 s runs); offline
+    they are the committed capture's instead."""
+    gd = load_bundle_game_data(Path(__file__).parent / "scenarios" / "fixtures"
+                               / "gamedata_bundle.json")
+    assert gd.craft_yield("cheese") == 2
+    player = GamePlayer(character="hero",
+                        fight_bootstrap=FleetBootstrap((), (), (("crafting", 10, "cheese", 4),
+                                                                ("gathering", 50, None, 1))))
+    player.game_data = gd
+    assert player._kind_seconds() == (("crafting", Fraction(5)), ("gathering", Fraction(50)))
+    player._offline_timing = committed_timing()
+    assert player._kind_seconds() == committed_kind_seconds()
 
 
 def test_a_timed_context_carries_the_cycles_seconds() -> None:

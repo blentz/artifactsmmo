@@ -716,6 +716,21 @@ def test_a_consumed_key_is_paid_again_for_every_bank_trip(
                    DECOMPOSE_POLICY, True, frozenset(), state) is None
 
 
+def test_a_door_farm_with_no_room_for_its_trips_is_not_offered(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """A farm past a consumed key whose re-entries cannot be priced (no room
+    in the bag for one win's drops: `_reentry_actions` is None) is no route:
+    `route_options` drops the door leg rather than price it without its
+    trips, and the lich farm is offered again once the bag has room."""
+    state, world, _option, _ready = _lich_farm(monkeypatch)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    full = replace(state, inventory_max=0)
+    assert [o.venue for o in route_options("life_crystal_shard", full, world, ctx,
+                                           policy=DECOMPOSE_POLICY) if o.unlock] == []
+    assert "lich" in [o.venue for o in route_options("life_crystal_shard", state, world, ctx,
+                                                     policy=DECOMPOSE_POLICY) if o.unlock]
+
+
 def test_a_gather_and_a_gold_fight_past_a_fee_pay_its_toll_per_entry() -> None:
     """The 5000-gold door's fee is a toll too: a gather past it carries the
     fee's re-entry share per gather, a gold fight per win."""
