@@ -12,6 +12,7 @@ import pytest
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+import artifactsmmo_cli.ai.progression.skill_grind_target as sgt
 from artifactsmmo_cli.ai.progression.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
@@ -872,3 +873,25 @@ def test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order(reverse: bool
 def test_a_gather_only_chain_has_no_fight_actions() -> None:
     assert chain_fight_actions("copper_dagger", make_state(skills={"weaponcrafting": 1}),
                                _gd(), TIMED_NO_PROFILE_CONTEXT) == 0
+
+
+@pytest.mark.parametrize(("scenario", "walks"), [("l10_gearcrafting_gap", 2),
+                                                 ("l30_band_entry", 0)])
+def test_only_the_tied_top_class_pays_a_fight_walk(
+        monkeypatch: pytest.MonkeyPatch, scenario: str, walks: int) -> None:
+    """Review I1: the fight count is a `drop_work` walk, so it is paid only by
+    the eligible rungs tied at the top. At l10 gearcrafting that is the legs and
+    the coat; at l30 the top class is one rung and nothing is walked, although
+    many lower or ineligible rungs tie each other."""
+    gd = shared_world(BUNDLE)
+    state = scenario_state(SCENARIOS[scenario], gd)
+    calls: list[str] = []
+    real = sgt.drop_work
+
+    def counting(item: str, *args: object, **kwargs: object) -> object:
+        calls.append(item)
+        return real(item, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sgt, "drop_work", counting)
+    assert skill_grind_target("gearcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
+    assert len(calls) == walks, calls

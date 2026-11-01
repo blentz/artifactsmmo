@@ -1,9 +1,9 @@
--- GENERATED from src/artifactsmmo_cli/ai/progression/skill_grind_selection.py (sha256: 1c25e73450467c509c27d1a3c06ad91c84c6366e05231fa451667942e353bc0b) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/progression/skill_grind_selection.py (sha256: 6063d0442d76f0b18087d47fd23adfbea67ae4b6bddd477f4adec7c321167a29) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
 
-/-- Extracted from `@dataclass GrindCandidate` (line 23). -/
+/-- Extracted from `@dataclass GrindCandidate` (line 30). -/
 structure GrindCandidate where
   code : String
   craft_skill : String
@@ -13,7 +13,7 @@ structure GrindCandidate where
   wanted : Bool
   xp_positive : Bool
 
-/-- Extracted from `_beats` (line 49). -/
+/-- Extracted from `_beats` (line 56). -/
 def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
     Bool :=
   (match best with
@@ -46,7 +46,7 @@ def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
              else
               false))))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 242). -/
+/-- Extracted from `skill_grind_selection_pure` (line 249). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none

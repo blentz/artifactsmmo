@@ -8,6 +8,13 @@ formal/Formal/SkillGrindSelection.lean). The impure wrapper `skill_grind_target`
 hoists the `GrindCandidate`s — including the recursive `obtainable` flag and the
 `xp_positive` band verdict — from GameData + holdings and delegates here.
 
+`_beats` keeps its underscore although the wrapper imports it: it is the name
+`scripts/extract_lean.py` extracts (`functions=("_beats", ...)`) and the Lean
+model binds, and the wrapper's tie detection (`skill_grind_target.
+semantic_order`) must ask the core's OWN comparator which rungs tie, never a
+second copy of its keys. Renaming it would move the extraction anchor for no
+behavioural gain.
+
 Why obtainable matters (live weaponcrafting bug, 2026-06-13): the bot, committed
 to weaponcrafting, picked `wooden_staff` (recipe needs `wooden_stick`, which has
 no recipe and is not gatherable). The GatherMaterials goal then GOAP-failed

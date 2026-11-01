@@ -478,33 +478,57 @@ def chain_fight_actions(code: str, state: WorldState, game_data: GameData,
     return drop_work_actions(fights, probe, game_data, pricing_ctx)
 
 
-def semantic_order(candidates: list[GrindCandidate], state: WorldState, game_data: GameData,
+def _eligible(c: GrindCandidate, skill: str, current_level: int) -> bool:
+    """The core's own admission test (`skill_grind_selection_pure`: same skill,
+    in level, obtainable, xp-positive), so the tie is looked for only among the
+    rungs the core can choose."""
+    return (c.craft_skill == skill and c.craft_level <= current_level
+            and c.obtainable and c.xp_positive)
+
+
+def semantic_order(skill: str, current_level: int, candidates: list[GrindCandidate],
+                   state: WorldState, game_data: GameData,
                    ctx: SelectionContext) -> list[GrindCandidate]:
-    """`candidates` in the order `skill_grind_selection_pure` should meet them:
-    higher gear-objective gain first (`objective_gain`), then fewer fight
-    actions in the chain (`chain_fight_actions`).
+    """`candidates` in the order `skill_grind_selection_pure` should meet them,
+    so that a full `_beats` tie at the top goes to the higher gear-objective
+    gain (`objective_gain`), then to fewer fight actions in the chain
+    (`chain_fight_actions`).
 
     WHY AN ORDER AT ALL. `_beats` keeps the incumbent on a full tie, so the
     first of two equal rungs in candidate order wins, and candidate order was
     `game_data.all_item_stats`' — the API catalogue's. Live witness (plan C
-    Task 7 review M1): at gearcrafting 5-9 `copper_legs_armor` and
-    `feather_coat` both price 83 actions on the l10 scenarios, and the pinned
+    Task 7 review M1): at gearcrafting 5 `copper_legs_armor` and
+    `feather_coat` both price 82 actions on the l10 scenarios, and the pinned
     plan was "the legs, listed first". A catalogue order is no reason, the
     same defect as an alphabetical tiebreak. Sorting here, in the wrapper,
-    leaves the Lean-extracted `_beats` and its proofs untouched.
+    leaves the Lean-extracted `_beats` and its proofs untouched; it is
+    `_beats` itself, the core's own comparator, that finds the tie.
 
-    THE ORDER ONLY BREAKS TIES. `_beats` strictly orders any two rungs it does
-    not tie, so the argmax depends on input order only among rungs it ties.
-    Fight actions cost a `drop_work` walk per rung, so they are computed only
-    for rungs some other rung ties (`_beats` false both ways); every other rung
-    takes 0, which moves nothing. Two rungs equal on all of `_beats`' keys and
-    on both of these still fall to catalogue order: no further semantic key
-    is named for them."""
-    tied = {c.code for c in candidates for other in candidates
-            if other is not c and not _beats(c, other) and not _beats(other, c)}
-    fights = {code: chain_fight_actions(code, state, game_data, ctx) for code in tied}
-    return sorted(candidates, key=lambda c: (-objective_gain(c.code, ctx),
-                                             fights.get(c.code, Fraction(0))))
+    ONLY THE TOP CLASS IS ORDERED, AND ONLY WHEN IT TIES. `_beats` is a strict
+    weak order, so the core's argmax is a member of the class of eligible
+    rungs no other eligible rung beats, and input order decides only WHICH
+    member. One fold of `_beats` over the eligible rungs finds a member; the
+    class is it plus every eligible rung tied with it. A class of one needs no
+    order. Otherwise its members go first, by gain, and only the members
+    sharing the top gain pay a `drop_work` walk for their fight count (review
+    I1: walking every tied pair cost ~150 ms a call at L30 against 0.03 ms for
+    the core). Members equal on all of `_beats`' keys, gain and fights still
+    keep catalogue order: no further semantic key is named for them."""
+    best: GrindCandidate | None = None
+    eligible = [c for c in candidates if _eligible(c, skill, current_level)]
+    for c in eligible:
+        if _beats(c, best):
+            best = c
+    top = [c for c in eligible if best is not None and not _beats(best, c)]
+    if len(top) < 2:
+        return candidates
+    gains = {c.code: objective_gain(c.code, ctx) for c in top}
+    top_gain = max(gains.values())
+    contested = [c for c in top if gains[c.code] == top_gain]
+    fights = ({c.code: chain_fight_actions(c.code, state, game_data, ctx) for c in contested}
+              if len(contested) > 1 else {})
+    ordered = sorted(top, key=lambda c: (-gains[c.code], fights.get(c.code, Fraction(0))))
+    return [*ordered, *(c for c in candidates if c not in top)]
 
 
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
@@ -514,6 +538,7 @@ def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
         c for c in build_selectable_grind_candidates(skill, state, game_data, ctx)
         if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))
     ]
-    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0),
-                                        semantic_order(candidates, state, game_data, ctx))
+    level = state.skills.get(skill, 0)
+    chosen = skill_grind_selection_pure(
+        skill, level, semantic_order(skill, level, candidates, state, game_data, ctx))
     return chosen or None
