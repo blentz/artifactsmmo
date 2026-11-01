@@ -4869,6 +4869,15 @@ DROP_WALL_WORN_ARM_MUTATIONS = [
     ("drop wall: a cell that is no wall carries its base as a gate price",
      "    return (DropGap.NOT_DROP_WALLED.value, base, base, None, None)\n",
      "    return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)\n"),
+    # Plan C Task 8 (Task 7 re-review): killed by
+    # test_the_unattributed_residual_can_fire_behind_the_objective.
+    ("drop wall: worn walls that cross only together read as no wall",
+     "            attributed = _attribute(candidate, state, game_data, behind, base)\n"
+     "            if attributed is None:\n"
+     "                return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,\n",
+     "            attributed = _attribute(candidate, state, game_data, behind, base)\n"
+     "            if attributed is None:\n"
+     "                return (DropGap.NOT_DROP_WALLED.value, base, collective, gate_price,\n"),
 ]
 CURRENCY_WALL_FIGHTER_MUTATIONS = [
     ("currency wall: a dropper is judged by the worn gear, not the achievable fighter",

@@ -367,6 +367,35 @@ def test_the_unattributed_residual_can_fire(
     assert len(calls) == 3 + len(walled)
 
 
+def test_the_unattributed_residual_can_fire_behind_the_objective(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same hole on the pricer's worn-gear walls: the objective walls
+    nothing (`walled=()`), the worn walls cross together, and no single one
+    does. Plan C Task 7 re-review: this branch of the `behind` block had no
+    kill test, because the case above passes `walled` for both arguments and so
+    leaves `behind` empty."""
+    cache: dict[tuple[bool, tuple[str, ...]], GameData] = {}
+    scenario = SCENARIOS["l10_weapon_upgrade"]
+    game_data = declared_world(scenario, BUNDLE, cache)
+    state = scenario_state(scenario, game_data)
+    worn_walled = ("forest_ring", "feather")
+    calls: list[int] = []
+
+    def fake_price(_candidate, priced_state, *_args, **_kwargs) -> int:
+        calls.append(len(priced_state.inventory))
+        granted = len(priced_state.inventory) - len(state.inventory)
+        return 1 if granted > 1 else UNOBTAINABLE_PER_UNIT
+
+    monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
+                        fake_price)
+    gap, base, granted, gate, evidence = classify(
+        object(), state, game_data, (), worn_walled)  # type: ignore[arg-type]
+    assert gap == DropGap.DROP_WALL_UNATTRIBUTED.value
+    assert (base, granted, gate) == (UNOBTAINABLE_PER_UNIT, 1, UNOBTAINABLE_PER_UNIT)
+    assert evidence is None
+    assert len(calls) == 3 + len(worn_walled)
+
+
 def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """An unobtainable candidate in a world where every dropper is beatable is
