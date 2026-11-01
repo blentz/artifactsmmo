@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
+from artifactsmmo_cli.ai.impossible_drop_error import ImpossibleDropError
 from artifactsmmo_cli.ai.plan_cache import cache_holdings, step_output
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
@@ -79,6 +80,10 @@ fallback goals (seven at most, live 2026-10-05); the log keeps far more, so a
 goal still on offer is never forgotten while it waits."""
 
 Measure = tuple[int, int]
+
+DropKey = tuple[str, str]
+"""A planned drop's identity, `(source, item)`: the resource a gather or the
+monster a fight draws `item` from. A dry streak is kept per key."""
 
 DRY_STREAK_TAIL = 0.01
 """The chance a legitimate drop's dry streak is longer than the streak a dry
@@ -138,9 +143,48 @@ def dry_within_luck(streak: int, chance: Fraction | None) -> bool:
     nothing to be dry of."""
     if chance is None:
         return True
+    if chance <= 0:
+        raise ImpossibleDropError(f"a leg was planned for a drop of chance {chance}")
     if chance >= 1:
         return streak <= 0
     return streak <= ceil(log(DRY_STREAK_TAIL) / log(1 - float(chance)))
+
+
+def drop_key(action: Action, game_data: GameData) -> DropKey | None:
+    """`(source, item)` of the drop `action` was planned for
+    (`plan_cache.step_output`): the gather's resource or the fight's monster,
+    and the item. None for an action planned for no drop."""
+    output = step_output(action, game_data)
+    if output is None:
+        return None
+    if isinstance(action, GatherAction):
+        return action.resource_code, output[0]
+    assert isinstance(action, FightAction)
+    return action.monster_code, output[0]
+
+
+def leg_progressed(streaks: dict[DropKey, int], action: Action, before: WorldState,
+                   after: WorldState, ok: bool, game_data: GameData) -> bool:
+    """Did one executed leg move its intention: it succeeded (`ok`) and either
+    was planned for no drop, delivered its drop, or is still within luck
+    (`dry_within_luck`) of its `(source, item)` dry streak.
+
+    `streaks` is updated in place. Only a successful leg planned for a drop
+    touches it: the drop landing resets that key, a dry attempt adds one. A
+    leg planned for no drop (a move, a deposit, a rest) neither resets nor
+    adds, so a gather farm's bank trips do not hide its dry gathers (review
+    C1: every deposit reset a single streak, which then never built up). A
+    failed leg (`error:*`) made no attempt and adds nothing."""
+    if not ok:
+        return False
+    key = drop_key(action, game_data)
+    if key is None:
+        return True
+    if step_delivered(action, before, after, game_data):
+        streaks[key] = 0
+        return True
+    streaks[key] = streaks.get(key, 0) + 1
+    return dry_within_luck(streaks[key], step_chance(action, before, game_data))
 
 
 def progressed(before: Measure | None, after: Measure | None, ok: bool) -> bool:

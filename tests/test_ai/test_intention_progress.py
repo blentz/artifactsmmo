@@ -3,7 +3,11 @@ goal family, and when an intention has stalled."""
 
 from fractions import Fraction
 
+import pytest
+
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
 from artifactsmmo_cli.ai.game_data import GameData
@@ -11,10 +15,13 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.impossible_drop_error import ImpossibleDropError
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     STALL_CYCLES,
+    drop_key,
     dry_within_luck,
+    leg_progressed,
     progress_measure,
     progressed,
     step_chance,
@@ -223,3 +230,49 @@ def test_a_rare_drop_farm_is_not_stalled_by_chance():
     assert dry._arbiter._committed_repr == repr(goal)
     dry._track_intention(goal, flat, flat, ok=dry_within_luck(300, Fraction(1, 50)))
     assert dry._arbiter._committed_repr is None
+
+
+def test_a_zero_chance_drop_is_a_named_pricing_bug():
+    """Review M1: a leg planned for a drop of chance 0 has no percentile
+    (ln(1 - 0) = 0); it is a pricing bug, raised by name."""
+    with pytest.raises(ImpossibleDropError):
+        dry_within_luck(1, Fraction(0))
+
+
+def test_a_planned_drop_is_keyed_on_its_source_and_item():
+    """`drop_key`: the gather's resource or the fight's monster, with the item;
+    None for an action planned for no drop."""
+    gd = _shrimp_world()
+    assert drop_key(_ticket_gather(), gd) == ("shrimp_spot", "event_ticket")
+    fight = FightAction(monster_code="chicken", drop_target=("feather", 8),
+                        learned_drops=LearnedDrops.empty())
+    assert drop_key(fight, gd) == ("chicken", "feather")
+    assert drop_key(MoveAction(x=1, y=1), gd) is None
+
+
+def _ticket_world() -> GameData:
+    gd = _shrimp_world()
+    gd.recipes_catalog.resource_drops_full = {
+        "shrimp_spot": [("shrimp", 1, 1, 1), ("event_ticket", 2, 1, 1)]}
+    gd._resource_skill = {"shrimp_spot": ("fishing", 1)}
+    return gd
+
+
+def test_only_its_own_drop_moves_a_dry_streak():
+    """Review C1: the streak is kept per `(source, item)`. A dry attempt adds
+    one; the drop landing resets its key only; a leg planned for no drop is
+    progress and leaves every streak as it was; a failed leg is no progress
+    and adds nothing. At 1 in 2 the eighth dry attempt is past luck (7)."""
+    gd = _ticket_world()
+    dry = make_state(inventory={"shrimp": 1})
+    landed = make_state(inventory={"shrimp": 1, "event_ticket": 1})
+    streaks = {("chicken", "feather"): 5}
+    for _ in range(7):
+        assert leg_progressed(streaks, _ticket_gather(), make_state(), dry, True, gd)
+        assert leg_progressed(streaks, MoveAction(x=1, y=1), make_state(), dry, True, gd)
+    assert not leg_progressed(streaks, _ticket_gather(), make_state(), dry, False, gd)
+    assert streaks == {("chicken", "feather"): 5, ("shrimp_spot", "event_ticket"): 7}
+    assert not leg_progressed(streaks, _ticket_gather(), make_state(), dry, True, gd)
+    assert streaks[("shrimp_spot", "event_ticket")] == 8
+    assert leg_progressed(streaks, _ticket_gather(), make_state(), landed, True, gd)
+    assert streaks == {("chicken", "feather"): 5, ("shrimp_spot", "event_ticket"): 0}

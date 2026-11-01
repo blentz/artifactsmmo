@@ -5536,15 +5536,42 @@ DRY_STREAK_MUTATIONS = [
      "    if isinstance(action, GatherAction):\n        rate, _low, _high = game_data.gather_drop_row(",
      "    if False:\n        rate, _low, _high = game_data.gather_drop_row("),
 ]
-DRY_STREAK_PLAYER_MUTATIONS = [
-    ("dry streak: the run loop never counts a dry leg",
-     "                self._dry_streak = 0 if delivered else self._dry_streak + 1\n",
-     "                self._dry_streak = 0\n"),
+# Review C1/M1 (fix round 1): the streak is kept per `(source, item)`, only a
+# successful leg planned for a drop moves it, and a zero chance is named.
+# Killed by tests/test_ai/test_intention_progress.py.
+DRY_STREAK_KEY_MUTATIONS = [
+    ("dry streak: a zero chance divides by zero",
+     "    if chance <= 0:\n        raise ImpossibleDropError(",
+     "    if chance < 0:\n        raise ImpossibleDropError("),
+    ("dry streak: a failed leg is progress",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if not ok:\n        return True\n    key = drop_key("),
+    ("dry streak: a failed leg adds to the streak",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if False:\n        return False\n    key = drop_key("),
+    ("dry streak: a leg planned for no drop is no progress",
+     "    if key is None:\n        return True\n    if step_delivered(",
+     "    if key is None:\n        return False\n    if step_delivered(",),
+    ("dry streak: a landed drop leaves its streak",
+     "        streaks[key] = 0\n        return True\n",
+     "        return True\n"),
+    ("dry streak: a dry attempt adds nothing",
+     "    streaks[key] = streaks.get(key, 0) + 1\n",
+     "    streaks[key] = streaks.get(key, 0)\n"),
+    ("dry streak: one streak for every source",
+     "    if isinstance(action, GatherAction):\n        return action.resource_code, output[0]\n",
+     "    if isinstance(action, GatherAction):\n        return \"\", output[0]\n"),
+    ("dry streak: a fight's streak is keyed on no monster",
+     "    return action.monster_code, output[0]\n",
+     "    return \"\", output[0]\n"),
 ]
-STEP_DELIVERED_PLAYER_MUTATIONS = [
-    ("stall: the run loop counts any successful leg as progress",
-     "                                      new_state, outcome == \"ok\" and (delivered or dry_within_luck(\n",
-     "                                      new_state, outcome == \"ok\" or 0 * (delivered or dry_within_luck(\n"),
+DRY_STREAK_PLAYER_MUTATIONS = [
+    ("dry streak: the run loop reads every leg as delivered",
+     "                                                     outcome == \"ok\", game_data))\n",
+     "                                                     outcome == \"ok\", game_data) or True)\n"),
+    ("dry streak: the run loop keeps a fresh streak per leg",
+     "                                      leg_progressed(self._dry_streaks, executed_action,\n",
+     "                                      leg_progressed({}, executed_action,\n"),
 ]
 # The ticket farm (live 2026-10-31): the fleet's pooled medals are credited in
 # the price, one character farms a shortfall the fleet cannot pay, and its
@@ -15225,8 +15252,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_player_run.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, STEP_DELIVERED_MUTATIONS,
               "tests/test_ai/test_intention_progress.py", survivors)
-    run_group(PLAYER_SRC, STEP_DELIVERED_PLAYER_MUTATIONS,
-              "tests/test_ai/test_player_run.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_KEY_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, TURN_ROTATION_DIFF_MUTATIONS,
