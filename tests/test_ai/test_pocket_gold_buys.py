@@ -21,6 +21,7 @@ from fractions import Fraction
 from math import ceil
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, acquisition_options, cheapest_route
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
@@ -270,6 +271,11 @@ def test_pocket_and_bank_gold_are_priced_alike() -> None:
                     for r in gold if r.kind == SourceKind.GOLD_DROP.value]
                    + [gold_spend_actions(rich, world, ctx)])
     assert 0 < per_gold < 1
+    # The gold withdraw is ONE action of its recorded seconds (2.9 s), a
+    # fraction of a planner action, not rounded up to a whole one.
+    withdraw = next(r for r in gold if r.kind == SourceKind.WITHDRAW.value)
+    assert withdraw.actions_per_application == (ctx.seconds_of(LogType.WITHDRAW_GOLD)
+                                                 / ctx.action_seconds_of()) < 1
 
     def price(state: WorldState) -> tuple[int, SourceKind | None]:
         return cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
