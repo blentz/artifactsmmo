@@ -1412,21 +1412,21 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 213 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 211 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 185 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 184 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 185 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 184 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ReachSkillLevel(skill='weaponcrafting', level=21)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ReachSkillLevel(skill='weaponcrafting', level=21)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |

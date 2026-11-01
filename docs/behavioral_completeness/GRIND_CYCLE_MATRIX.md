@@ -201,7 +201,7 @@
 | l10_gearcrafting_gap_combat_blocked | alchemy | 1 | earns | Gather(sunflower_field×1) |
 | l10_gearcrafting_gap_combat_blocked | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l10_gearcrafting_gap_combat_blocked | fishing | 1 | earns | Gather(gudgeon_spot×1) |
-| l10_gearcrafting_gap_combat_blocked | gearcrafting | 5 | earns | Fight(chicken) → Gather(ash_tree×20) → Craft(ash_plank×2) → Craft(feather_coat×1) |
+| l10_gearcrafting_gap_combat_blocked | gearcrafting | 5 | earns | Gather(copper_rocks×50) → Craft(copper_bar×5) → Fight(chicken) → Craft(copper_legs_armor×1) |
 | l10_gearcrafting_gap_combat_blocked | jewelrycrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_ring×1) |
 | l10_gearcrafting_gap_combat_blocked | mining | 10 | earns | Gather(iron_rocks×10) → Craft(iron_bar×1) |
 | l10_gearcrafting_gap_combat_blocked | weaponcrafting | 5 | earns | Fight(yellow_slime) → Gather(copper_rocks×50) → Craft(copper_bar×5) → Craft(sticky_sword×1) |
@@ -306,7 +306,7 @@
 | l47_depth3_amulet | cooking | 20 | earns | Fight(pig) → Craft(cooked_porkchop×1) |
 | l47_depth3_amulet | fishing | 20 | earns | Gather(trout_spot×1) |
 | l47_depth3_amulet | gearcrafting | 40 | earns | Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(imp) → Craft(royal_skeleton_armor×1) |
-| l47_depth3_amulet | jewelrycrafting | 40 | earns | Gather(dead_tree×30) → Craft(dead_wood_plank×3) → Fight(wolf) → Fight(vampire) → Fight(skeleton) → Craft(gold_ring×1) |
+| l47_depth3_amulet | jewelrycrafting | 40 | earns | Gather(ash_tree×24) → Gather(birch_tree×36) → Craft(hardwood_plank×6) → Craft(dreadful_amulet×1) → Craft(greater_dreadful_amulet×1) |
 | l47_depth3_amulet | mining | 40 | earns | Transition((-2,6,overworld)->(-2,6,underground)) → Gather(mithril_rocks×10) → Transition((-2,6,underground)->(-2,6,overworld)) → Craft(mithril_bar×1) |
 | l47_depth3_amulet | weaponcrafting | 40 | declined |  |
 | l47_depth3_amulet | woodcutting | 40 | earns | Gather(maple_tree->maple_sap×1) |
