@@ -13,10 +13,10 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression.strategy import _producible
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 

@@ -33,11 +33,6 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -46,6 +41,11 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state, season_8_status
 from tests.test_ai.shared_world import shared_world

@@ -42,12 +42,12 @@ from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable_fighter
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.audit import currency_wall_census as cwc
 from artifactsmmo_cli.audit.currency_wall_census import (
     GOLD_ROW,

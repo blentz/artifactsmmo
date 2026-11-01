@@ -14,9 +14,9 @@ from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.post_buy_bid import POST_BUY_BID_VALUE, PostBuyBidGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.progression.means import MeansKind, means_fires
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.progression.means import MeansKind, means_fires
 from tests.test_ai.fixtures import make_state
 
 

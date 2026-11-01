@@ -9,8 +9,8 @@ cycles each for 0 character XP while neither needed a fish. Since 2026-10-08
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
-from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_gather_demand import _gd
 

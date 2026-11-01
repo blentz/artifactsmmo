@@ -9,10 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
+import artifactsmmo_cli.ai.progression.skill_grind_target as sgt
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
-import artifactsmmo_cli.ai.progression.skill_grind_target as sgt
 from artifactsmmo_cli.ai.progression.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
@@ -26,8 +26,8 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import (
     objective_gain,
     skill_grind_target,
 )
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state, with_missing

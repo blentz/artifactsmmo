@@ -22,14 +22,14 @@ from pathlib import Path
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.scenario import (
     ScenarioCharacter,
     scenario_state,
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, obtainable_now, served_game_data

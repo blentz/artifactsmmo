@@ -42,6 +42,11 @@ from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, mo
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.objective import (
+    GOLD,
+    CharacterObjective,
+)
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.region_edges import (
     REACH_MEMO_SIZE,
@@ -55,11 +60,6 @@ from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.suppliable import is_suppliable
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
-from artifactsmmo_cli.ai.progression.objective import (
-    GOLD,
-    CharacterObjective,
-)
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)

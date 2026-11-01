@@ -58,12 +58,12 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLI
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression_reserve import fee_shortfall, spendable_pocket
 from artifactsmmo_cli.ai.region_edges import door_reaches, door_toll, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from artifactsmmo_cli.audit import craft_completeness
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state

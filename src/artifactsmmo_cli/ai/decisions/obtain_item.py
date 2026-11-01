@@ -47,8 +47,8 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _recipe_has_combat_drop_input,
 )
 from artifactsmmo_cli.ai.obtain_sources import has_non_craft_source
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

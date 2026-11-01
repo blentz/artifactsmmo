@@ -79,11 +79,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import gear_objective_for, task_rate
 from artifactsmmo_cli.ai.heal_catalog import FOOD
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.task_accept import accept_due
-from artifactsmmo_cli.ai.task_coins import tasks_coin_total
-from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
-from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -97,6 +92,11 @@ from artifactsmmo_cli.ai.progression.objective import (
     CharacterObjective,
     GearTarget,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.task_accept import accept_due
+from artifactsmmo_cli.ai.task_coins import tasks_coin_total
+from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, resolve_task_horizon
+from artifactsmmo_cli.ai.task_worth import task_worth_for
 from artifactsmmo_cli.ai.tool_objective import tool_first
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 

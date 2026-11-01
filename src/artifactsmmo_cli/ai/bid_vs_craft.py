@@ -29,8 +29,8 @@ whole-loop cycles, the since-deleted `cheapest_path_to_level` in seconds), and i
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

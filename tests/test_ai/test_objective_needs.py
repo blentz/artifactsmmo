@@ -4,13 +4,13 @@ import json
 from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.progression.objective_needs import _producible_by_self, link_demand, objective_needs
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from tests.test_ai.fixtures import make_state
 
 

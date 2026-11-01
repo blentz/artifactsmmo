@@ -43,11 +43,11 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.progression.strategy import actionable_step
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world

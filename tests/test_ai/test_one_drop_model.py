@@ -32,9 +32,9 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, LEGACY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"

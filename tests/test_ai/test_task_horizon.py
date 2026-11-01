@@ -48,6 +48,7 @@ from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.rung_state_core import HP_PER_LEVEL
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.task_horizon import (
     HORIZON_GEAR,
@@ -58,7 +59,6 @@ from artifactsmmo_cli.ai.task_horizon import (
     resolve_task_horizon,
 )
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state

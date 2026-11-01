@@ -25,14 +25,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import Cycle, LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 TIMING = committed_timing()[0]

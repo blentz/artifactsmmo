@@ -40,10 +40,10 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.decisions import root as _root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.progression import strategy
 from artifactsmmo_cli.ai.progression.meta_goal import StepDecline, no_decline
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # WAVE 3a deleted four private helpers from here — `_candidate_root`,

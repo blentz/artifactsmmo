@@ -7,7 +7,6 @@ import artifactsmmo_cli.ai.decisions.root as _root_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -27,6 +26,7 @@ from artifactsmmo_cli.ai.progression.strategy import (
     root_cost,
     unmet_closure_size,
 )
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 

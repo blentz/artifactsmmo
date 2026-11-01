@@ -30,9 +30,9 @@ from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 
 

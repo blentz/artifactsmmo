@@ -30,8 +30,8 @@ from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
 from artifactsmmo_cli.ai.progression.prerequisite_graph import best_attainable_weapon
+from artifactsmmo_cli.ai.progression_reserve import _best_per_slot
 from tests.test_ai.fixtures import make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"

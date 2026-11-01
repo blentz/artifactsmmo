@@ -75,9 +75,9 @@ from dataclasses import dataclass
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict, sibling_route_verdicts
 

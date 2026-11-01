@@ -19,8 +19,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.progression.leaf_attainable_core import leaf_attainable_pure
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 
 ATTAINABILITY_ALLOWS_GREY = True

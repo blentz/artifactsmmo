@@ -21,8 +21,8 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.bid_vs_craft import should_bid
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 
 _BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json")

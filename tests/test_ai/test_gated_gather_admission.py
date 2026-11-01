@@ -7,8 +7,8 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from tests.test_ai.fixtures import served_game_data
 
 

@@ -22,8 +22,8 @@ from artifactsmmo_cli.ai.equip_value import tool_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel, StepDecline
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

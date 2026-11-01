@@ -5,9 +5,6 @@
 from artifactsmmo_cli.ai.accumulation_sell import sell_targets
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.task_accept import accept_due
-from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
-from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.means import (
     COLLECT_REWARD_ORDER,
@@ -17,6 +14,9 @@ from artifactsmmo_cli.ai.progression.means import (
     active_means,
     means_fires,
 )
+from artifactsmmo_cli.ai.task_accept import accept_due
+from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
+from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state, served_game_data, with_missing
 

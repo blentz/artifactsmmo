@@ -25,8 +25,8 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.progression.skill_grind_target import _cache_key, build_selectable_grind_candidates
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 CTX = TIMED_NO_PROFILE_CONTEXT

@@ -37,8 +37,8 @@ from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective import achievable_fighter
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.audit import drop_wall_census as dwc
 from artifactsmmo_cli.audit.drop_wall_census import (
     GRANT,

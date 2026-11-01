@@ -26,8 +26,8 @@ from artifactsmmo_cli.ai.craft_demand import craft_demand
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_demand import gather_demand
 from artifactsmmo_cli.ai.objective_codes import objective_codes
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

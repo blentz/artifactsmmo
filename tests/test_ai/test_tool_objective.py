@@ -23,10 +23,10 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel, no_decline
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.tool_objective import drop_tool_target, tool_first, tool_target
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state

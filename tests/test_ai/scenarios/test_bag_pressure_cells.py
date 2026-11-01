@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.thresholds import (
     CRAFT_RELIEF_FRACTION,
@@ -44,7 +45,6 @@ from artifactsmmo_cli.ai.thresholds import (
     PRESSURE_CRITICAL_FRACTION,
     PRESSURE_HIGH_FRACTION,
 )
-from artifactsmmo_cli.ai.progression.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 

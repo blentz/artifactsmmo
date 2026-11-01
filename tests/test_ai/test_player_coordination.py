@@ -51,6 +51,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle, MaterialDemand
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
     ROLE_IDLE_WINDOW,
@@ -64,7 +65,6 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
-from artifactsmmo_cli.ai.progression.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
 from tests.test_ai.fixtures import coordination_now, make_state
 from tests.test_ai.shared_world import shared_world

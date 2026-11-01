@@ -26,11 +26,11 @@ from artifactsmmo_cli.ai.inventory_keep import (
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
 from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.progression.objective_needs import NeedSet
 from artifactsmmo_cli.ai.progression.strategy import MetaGoal, ObtainItem, StrategyDecision
+from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state, served_game_data
 

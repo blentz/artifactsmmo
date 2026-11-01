@@ -14,8 +14,8 @@ would have offered it a rung had excluded it on the assumption something would.
 
 from artifactsmmo_cli.ai.craft_demand import craft_demand
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 

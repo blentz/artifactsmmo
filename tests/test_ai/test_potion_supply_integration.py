@@ -32,11 +32,11 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
-from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext, active_guards
 from artifactsmmo_cli.ai.progression.guards import _fires as guard_fires
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
+from artifactsmmo_cli.ai.strategy_driver import map_guard
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 

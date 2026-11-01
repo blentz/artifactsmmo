@@ -4,8 +4,8 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
-from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from tests.test_ai.fixtures import make_state
 
 
@@ -271,8 +271,8 @@ def test_fires_on_idle_surplus_not_under_pressure_or_objective():
 
 
 def test_map_means_returns_recycle_goal():
-    from artifactsmmo_cli.ai.strategy_driver import map_means
     from artifactsmmo_cli.ai.progression.means import MeansKind
+    from artifactsmmo_cli.ai.strategy_driver import map_means
     g = map_means(MeansKind.RECYCLE_SURPLUS, _gd(), _ctx(), make_state())
     assert isinstance(g, RecycleSurplusGoal)
 

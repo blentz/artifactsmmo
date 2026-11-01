@@ -8,8 +8,6 @@ from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.equip_value import equip_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_sources
-from artifactsmmo_cli.ai.requirement_projections import requirement_edges
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
@@ -20,6 +18,8 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
     ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.requirement_projections import requirement_edges
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

@@ -33,11 +33,11 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import map_means
 from artifactsmmo_cli.ai.task_batch import task_batch_size
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
-from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai.fixtures import make_state, patched_logs, season_8_status
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema

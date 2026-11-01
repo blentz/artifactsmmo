@@ -62,6 +62,9 @@ from artifactsmmo_cli.ai.obtain_model.gate import GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY, Policy
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.region_edges import reachable_regions_now
 from artifactsmmo_cli.ai.scenario import (
     FAR_FUTURE,
@@ -72,9 +75,6 @@ from artifactsmmo_cli.ai.scenario import (
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import attached, shared_world

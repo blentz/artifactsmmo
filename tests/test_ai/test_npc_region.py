@@ -13,8 +13,8 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")

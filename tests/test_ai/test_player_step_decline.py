@@ -8,8 +8,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 ROOT = ObtainItem(code="iron_sword", quantity=1, slot="weapon_slot")

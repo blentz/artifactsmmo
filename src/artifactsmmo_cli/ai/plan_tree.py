@@ -6,7 +6,6 @@ sourced from the running goal + action. No planning or I/O."""
 
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
@@ -18,6 +17,7 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
 )
 from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.progression.strategy import RootScore, StrategyDecision
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 

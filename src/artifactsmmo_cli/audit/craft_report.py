@@ -6,7 +6,7 @@ no I/O — the generator script owns file writes and the census run."""
 from collections import defaultdict
 
 from artifactsmmo_cli.audit.craft_census import CellResult
-from artifactsmmo_cli.audit.craft_completeness import nominal_char_level, decade_of
+from artifactsmmo_cli.audit.craft_completeness import decade_of, nominal_char_level
 
 GAP_ABBREV: dict[str, str] = {
     "event_gated": "EG",

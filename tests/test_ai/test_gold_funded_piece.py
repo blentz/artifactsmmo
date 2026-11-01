@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
 from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.scenario import (
     FAR_FUTURE,
@@ -41,7 +42,6 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world

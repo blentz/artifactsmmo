@@ -7,10 +7,10 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression.guards import used_fraction
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.shed_actions import shed_actions
 from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION
-from artifactsmmo_cli.ai.progression.guards import used_fraction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 DRAIN_BANK_JUNK_VALUE = 15.0

@@ -22,9 +22,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
-from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
-from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -32,6 +29,9 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
     ReachTaskOutcome,
 )
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_strategy_driver import _ctx
 

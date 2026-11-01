@@ -15,8 +15,8 @@ from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
-from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_craft_plan_gen import _copper_ring_actions, _ctx, _gd_copper_ring

@@ -143,9 +143,9 @@ from typing import NamedTuple
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
+from artifactsmmo_cli.ai.progression.objective import GOLD
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi
 from artifactsmmo_cli.ai.requirement_projections import demand_set
-from artifactsmmo_cli.ai.progression.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 

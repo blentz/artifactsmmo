@@ -74,6 +74,8 @@ from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -81,8 +83,6 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)

@@ -26,11 +26,11 @@ from artifactsmmo_cli.ai.goals.participate_raid import (
     ParticipateRaidGoal,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, chosen_root_closure, raid_may_fight
-from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem, ReachSkillLevel
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 

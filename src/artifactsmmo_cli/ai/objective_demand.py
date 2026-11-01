@@ -14,8 +14,8 @@ the loop runs at most once per skill, and each skill's tool is looked up once.
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tool_objective import tool_target
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand

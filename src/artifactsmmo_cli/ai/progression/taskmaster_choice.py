@@ -23,8 +23,8 @@ from fractions import Fraction
 from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP
 from artifactsmmo_cli.ai.progression.synergy_core import expected_pool_synergy, synergy_pure
+from artifactsmmo_cli.ai.requirement_graph_memo import CHAR_XP
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

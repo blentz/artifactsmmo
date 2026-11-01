@@ -7,8 +7,8 @@ from fractions import Fraction
 import artifactsmmo_cli.ai.xp_demand as mod
 from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 

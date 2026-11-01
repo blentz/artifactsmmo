@@ -28,13 +28,13 @@ the Wave 0 parity oracle staying green is the proof.
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.requirement_projections import requirement_closure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

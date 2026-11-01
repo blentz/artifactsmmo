@@ -26,8 +26,8 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
 

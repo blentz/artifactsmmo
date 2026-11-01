@@ -27,10 +27,10 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _ALL_SLOTS: dict[str, str | None] = {

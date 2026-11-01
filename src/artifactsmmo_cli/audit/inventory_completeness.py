@@ -93,6 +93,10 @@ from artifactsmmo_cli.ai.inventory_keep import (
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import (
     StrategyArbiter,
@@ -100,10 +104,6 @@ from artifactsmmo_cli.ai.strategy_driver import (
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
-from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, TASKS_COIN_CODE, WorldState
 
 SURPLUS = 6

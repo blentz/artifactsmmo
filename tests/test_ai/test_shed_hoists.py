@@ -33,14 +33,14 @@ from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, bank_shed_hoist_pure
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
+from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, bank_shed_hoist_pure
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")

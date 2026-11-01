@@ -12,12 +12,6 @@ from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
-from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.thresholds import (
-    DEPOSIT_FULL_FRACTION,
-    POTION_GATHER_BATCH,
-    PRESSURE_HIGH_FRACTION,
-)
 from artifactsmmo_cli.ai.progression.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -26,6 +20,12 @@ from artifactsmmo_cli.ai.progression.guards import (
     _quantity_fraction,
     active_guards,
     used_fraction,
+)
+from artifactsmmo_cli.ai.strategy_driver import map_guard
+from artifactsmmo_cli.ai.thresholds import (
+    DEPOSIT_FULL_FRACTION,
+    POTION_GATHER_BATCH,
+    PRESSURE_HIGH_FRACTION,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults

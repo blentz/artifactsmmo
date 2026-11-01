@@ -28,8 +28,8 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
-from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 from artifactsmmo_cli.audit.root_sibling_census import BlockedTargetVerdict, RootSiblingVerdict
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict
 from artifactsmmo_cli.commands import sibling_route_report as cmd

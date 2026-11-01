@@ -38,9 +38,9 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.party_win import party_loadout, party_participants
 from artifactsmmo_cli.ai.player_helpers import delete_cost
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.region_edges import region_edge_actions
 from artifactsmmo_cli.ai.task_batch import task_batch_size
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 

@@ -16,9 +16,9 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.decisions.root import RootResolution, resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ReachSkillLevel
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import attached, shared_world

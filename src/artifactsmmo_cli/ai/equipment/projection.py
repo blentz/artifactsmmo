@@ -36,7 +36,8 @@ class ProjectedStats:
     benefit term is xp-driven cycles — and it was absent from this struct until
     2026-08-08, so a `wisdom_amulet` (+6% xp on every kill to level 50) projected
     byte-identically to doing nothing. `cheapest_path_to_level` (the level-path
-    projection plan C Task 4 deleted) had always CONSUMED wisdom (`xp_per_kill(..., wisdom=wisdom)`); it just read it from
+    projection plan C Task 4 deleted) had always CONSUMED wisdom
+    (`xp_per_kill(..., wisdom=wisdom)`); it just read it from
     `state.wisdom`, the server total for gear already WORN, so a candidate's own
     wisdom never reached the formula that wanted it.
 

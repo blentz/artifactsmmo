@@ -23,10 +23,10 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     log_fights,
     offline_context,
 )
+from artifactsmmo_cli.ai.progression.objective import feasible_now, near_term_model
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.progression.objective import feasible_now, near_term_model
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]

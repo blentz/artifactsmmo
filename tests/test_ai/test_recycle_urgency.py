@@ -16,11 +16,11 @@ from artifactsmmo_cli.ai.goals.recycle_surplus import (
     RecycleSurplusGoal,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.shed_urgency import shed_urgency, shed_urgency_pure
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
-from artifactsmmo_cli.ai.progression.means import MeansKind
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _ALL_SLOTS: dict[str, str | None] = {

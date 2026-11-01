@@ -18,13 +18,13 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.progression_reserve import account_gold
-from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.progression.guards import (
     SelectionContext,
     used_fraction,
 )
+from artifactsmmo_cli.ai.progression_reserve import account_gold
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Semantic name for this module's sell-pressure gate, bound to the SHARED

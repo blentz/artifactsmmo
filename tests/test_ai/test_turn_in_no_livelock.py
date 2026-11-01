@@ -21,8 +21,8 @@ from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data

@@ -44,9 +44,9 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 from tests.test_ai.test_dual_role_fixtures import medal_game_data

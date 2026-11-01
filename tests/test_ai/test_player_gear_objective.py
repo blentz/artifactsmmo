@@ -25,12 +25,12 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.test_gear_objective import BUNDLE, CTX, _carrying_its_target, _robby

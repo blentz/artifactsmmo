@@ -10,9 +10,9 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 )
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
-from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.progression_tree import decide_tree
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 

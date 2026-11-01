@@ -8,9 +8,9 @@ from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression.guards import used_fraction
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
-from artifactsmmo_cli.ai.progression.guards import used_fraction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5

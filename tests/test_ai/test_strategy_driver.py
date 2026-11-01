@@ -60,6 +60,16 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _recipe_has_combat_drop_input,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
+from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
+from artifactsmmo_cli.ai.progression.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+    ReachTaskOutcome,
+)
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -72,16 +82,6 @@ from artifactsmmo_cli.ai.strategy_driver import (
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
-from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
-from artifactsmmo_cli.ai.progression.means import MeansKind
-from artifactsmmo_cli.ai.progression.meta_goal import (
-    ObtainItem,
-    ReachCharLevel,
-    ReachSkillLevel,
-    ReachTaskOutcome,
-)
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
 

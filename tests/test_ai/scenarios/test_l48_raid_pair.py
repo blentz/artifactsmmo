@@ -93,8 +93,8 @@ from artifactsmmo_cli.ai.fight_terms_core import MAX_TURNS
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from tests.test_ai.shared_world import shared_world
 
 _RAID_BOSS = "pixie"
