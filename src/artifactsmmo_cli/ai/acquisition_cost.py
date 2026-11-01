@@ -44,7 +44,6 @@ from artifactsmmo_cli.ai.drop_leg import DropLeg
 from artifactsmmo_cli.ai.dual_role_currency import fleet_pooled
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
-from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_climb_core import amortized_climb_seconds
 from artifactsmmo_cli.ai.game_data import GameData
@@ -87,6 +86,32 @@ def _workshop_venue(skill: str) -> str:
     return f"workshop:{skill}"
 
 
+def _in_actions(seconds: Fraction, ctx: SelectionContext) -> Fraction:
+    """THE ONE CONVERSION from seconds to planner actions (ruling "seconds
+    inside", 2026-10-31): every route option is priced in measured seconds and
+    divided here, once, by the measured seconds of one planner action
+    (`SelectionContext.action_seconds_of`), so every caller still receives
+    planner actions (`decisions/route.py`'s contract) and a fight and a gather
+    compare by the time they take. Before it a gather was one action (~34 s
+    live) and a fight one fight-equivalent (~11 s for Robby): the walk took
+    200 gathers over a 246-action fight that took a third of the time."""
+    return seconds / ctx.action_seconds_of()
+
+
+def _kind_actions(kind: str, ctx: SelectionContext) -> Fraction:
+    """One action of `/my/logs` kind `kind` at its measured seconds
+    (`SelectionContext.seconds_of`), in planner actions (`_in_actions`)."""
+    return _in_actions(ctx.seconds_of(kind), ctx)
+
+
+def _gather_cost(item: str, resource: str, state: WorldState, game_data: GameData,
+                 ctx: SelectionContext) -> Fraction:
+    """Planner actions ONE `item` off `resource` takes: its gathers
+    (`_gather_actions`) at a measured gather's seconds."""
+    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(
+        "gathering", ctx)
+
+
 def _loss_surcharge(monster_code: str, max_hp: int,
                     records: Sequence[tuple[str, int, int]], fight_seconds: Fraction) -> Fraction:
     """Fight-equivalents the learned losses add to one win against
@@ -119,8 +144,7 @@ def leg_prospecting(leg: DropLeg, state: WorldState, game_data: GameData) -> int
 
 
 def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: int,
-                  state: WorldState, game_data: GameData, timing: FightSecondsModel,
-                  evidence: LearnedDrops,
+                  state: WorldState, game_data: GameData, ctx: SelectionContext,
                   records: Sequence[tuple[str, int, int]] = ()) -> Fraction:
     """Whole-loop actions to farm ONE unit off `monster_code`, exact.
 
@@ -140,23 +164,26 @@ def _drop_actions(item: str, monster_code: str, rate: int, min_q: int, max_q: in
     fractional action is still an action the character spends, so the walk
     rounds the route's applications up ONCE; rounding each unit up overpriced a
     farm whose win yields more than a unit's worth of its cost."""
-    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,
-                                       fight_prospecting(monster_code, state, game_data))
-    return kills * _kill_actions(monster_code, state, game_data, timing, records)
+    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,
+                                          fight_prospecting(monster_code, state, game_data))
+    return kills * _kill_actions(monster_code, state, game_data, ctx, records)
 
 
 def _kill_actions(monster_code: str, state: WorldState, game_data: GameData,
-                  timing: FightSecondsModel, records: Sequence[tuple[str, int, int]]) -> Fraction:
+                  ctx: SelectionContext, records: Sequence[tuple[str, int, int]]) -> Fraction:
     """Whole-loop actions ONE win against `monster_code` costs, exact: the
     fight at its learned seconds plus the rest it forces (`cycles_per_kill`),
     and the learned losses expected per win (`_loss_surcharge`). The per-kill
     factor of every fight-priced route: a drop farm (`_drop_actions`) and a
     gold farm (`_priced`'s GOLD_DROP arm, which rounds up once per route, not
     per win: ruling T2m M1)."""
-    fight = walk_seconds(state, game_data, monster_code, (), timing)
+    fight = walk_seconds(state, game_data, monster_code, (), ctx.timing())
     per_kill = cycles_per_kill(
         expected_damage_per_fight(state, game_data, monster_code), state.max_hp, fight)
-    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)
+    # Fight-equivalents (the fight, the rest it forces, the losses) times the
+    # fight's own seconds: the seconds one win takes, in planner actions.
+    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))
+                       * fight, ctx)
 
 
 def _gather_actions(item: str, resource: str, state: WorldState, game_data: GameData,
@@ -203,31 +230,32 @@ def _priced(item: str, source: Source, state: WorldState,
             # piece costs (S-046): pocket and bank gold are one rule, the
             # bank's dearer by the withdraw and its hop.
             return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                               actions_per_application=Fraction(1),
+                               actions_per_application=_kind_actions("withdraw_gold", ctx),
                                yield_per=source.yield_per, capacity=source.capacity)
         return RouteOption(kind=source.kind.value, venue=BANK_VENUE,
-                           actions_per_application=1, yield_per=source.yield_per,
-                           capacity=source.capacity)
+                           actions_per_application=_kind_actions("withdraw_item", ctx),
+                           yield_per=source.yield_per, capacity=source.capacity)
     if source.kind is SourceKind.RECYCLE:
         stats = game_data.item_stats(source.code)
         # `obtain_sources` already refused this source unless the item has a
         # crafting_skill, so the skill is present by that gate, not by luck.
         skill = stats.crafting_skill if stats is not None else ""
         return RouteOption(kind=source.kind.value, venue=_workshop_venue(skill or ""),
-                           actions_per_application=1, yield_per=source.yield_per,
-                           capacity=source.capacity,
+                           actions_per_application=_kind_actions("recycling", ctx),
+                           yield_per=source.yield_per, capacity=source.capacity,
                            inputs={source.code: 1})
     if source.kind is SourceKind.CRAFT:
         stats = game_data.item_stats(item)
         skill = stats.crafting_skill if stats is not None else ""
         recipe = game_data.crafting_recipe(item) or {}
         return RouteOption(kind=source.kind.value, venue=_workshop_venue(skill or ""),
-                           actions_per_application=1, yield_per=source.yield_per,
-                           capacity=source.capacity, inputs=dict(recipe))
+                           actions_per_application=_kind_actions("crafting", ctx),
+                           yield_per=source.yield_per, capacity=source.capacity,
+                           inputs=dict(recipe))
     if source.kind is SourceKind.GATHER:
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=_gather_actions(
-                               item, source.code, state, game_data, ctx.drops()),
+                           actions_per_application=_gather_cost(
+                               item, source.code, state, game_data, ctx),
                            yield_per=1, capacity=source.capacity)
     if source.kind is SourceKind.SELL:
         npc_code, price = _sale_of(source.code, state, game_data, ctx.now)
@@ -237,13 +265,14 @@ def _priced(item: str, source: Source, state: WorldState,
         # whatever the copy cost, and a licensed surplus copy already in the bag
         # costs nothing because `owned` credits it.
         return RouteOption(kind=source.kind.value, venue=npc_code,
-                           actions_per_application=1, yield_per=price,
-                           capacity=source.capacity, inputs={source.code: 1})
+                           actions_per_application=_kind_actions("sell_npc", ctx),
+                           yield_per=price, capacity=source.capacity, inputs={source.code: 1})
     if source.kind is SourceKind.BUY:
         price, currency = npc_price_of(item, source.code, game_data)
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=1, yield_per=source.yield_per,
-                           capacity=source.capacity, inputs={currency: price})
+                           actions_per_application=_kind_actions("buy_npc", ctx),
+                           yield_per=source.yield_per, capacity=source.capacity,
+                           inputs={currency: price})
     if source.kind is SourceKind.GE_FILL:
         price = ge_price_of(item, source.code, game_data)
         # `Source.code` is the ORDER id, not an item — the venue token is the
@@ -251,15 +280,16 @@ def _priced(item: str, source: Source, state: WorldState,
         # at the order's own price, which is what makes it REALIZABLE: we never
         # price a route at an order we would have to post and hope fills.
         return RouteOption(kind=source.kind.value, venue=source.code,
-                           actions_per_application=1, yield_per=source.yield_per,
-                           capacity=source.capacity, inputs={"gold": price})
+                           actions_per_application=_kind_actions("buy_ge", ctx),
+                           yield_per=source.yield_per, capacity=source.capacity,
+                           inputs={"gold": price})
     if source.kind is SourceKind.DROP:
         rate, min_q, max_q = _drop_table(item, source.code, game_data)
         return RouteOption(
             kind=source.kind.value, venue=source.code,
             actions_per_application=_drop_actions(item, source.code, rate, min_q,
-                                                  max_q, state, game_data, ctx.timing(),
-                                                  ctx.drops(), ctx.fight_records),
+                                                  max_q, state, game_data, ctx,
+                                                  ctx.fight_records),
             yield_per=source.yield_per, capacity=source.capacity)
     if source.kind is SourceKind.GOLD_DROP:
         # Gold minted by fighting (ruling T2a): one application is one win
@@ -271,7 +301,7 @@ def _priced(item: str, source: Source, state: WorldState,
         return RouteOption(
             kind=source.kind.value, venue=source.code,
             actions_per_application=_kill_actions(
-                source.code, state, game_data, ctx.timing(), ctx.fight_records),
+                source.code, state, game_data, ctx, ctx.fight_records),
             capacity=source.capacity, yield_per=source.yield_per)
     if source.kind is SourceKind.TASK_REWARD:
         # The task board (ruling T2b): no API datum gives a task's length, so
@@ -354,7 +384,7 @@ def _drop_table(item: str, monster_code: str,
 
 
 def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
-                        store: LearningStore, evidence: LearnedDrops, model: ObtainModel,
+                        store: LearningStore, ctx: SelectionContext, model: ObtainModel,
                         kind: SourceKind, policy: Policy) -> RouteOption | None:
     """The CRAFT or GATHER route whose skill requirement is unmet, priced with
     the grind that would open it. `obtain_sources` withholds it under a policy
@@ -433,12 +463,12 @@ def _gated_skill_option(item: str, state: WorldState, game_data: GameData,
     if kind is SourceKind.GATHER:
         return RouteOption(
             kind=kind.value, venue=route.via,
-            actions_per_application=_gather_actions(item, route.via, state, game_data, evidence),
+            actions_per_application=_gather_cost(item, route.via, state, game_data, ctx),
             yield_per=1, capacity=UNBOUNDED_CAPACITY,
             unlock=f"skill:{skill}:{level}", unlock_actions=grind)
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=_workshop_venue(skill),
-        actions_per_application=1, yield_per=route.yield_per,
+        actions_per_application=_kind_actions("crafting", ctx), yield_per=route.yield_per,
         capacity=UNBOUNDED_CAPACITY, inputs=dict(route.inputs),
         unlock=f"skill:{skill}:{level}",
         unlock_actions=grind,
@@ -572,7 +602,7 @@ def _sibling_craft_option(item: str, state: WorldState, game_data: GameData,
         climb = amortized
     return RouteOption(
         kind=SourceKind.CRAFT.value, venue=BANK_VENUE,
-        actions_per_application=1, yield_per=route.yield_per,
+        actions_per_application=_kind_actions("withdraw_item", ctx), yield_per=route.yield_per,
         capacity=UNBOUNDED_CAPACITY, inputs=dict(route.inputs),
         unlock=f"sibling:{item}",
         unlock_actions=climb + int(cost),
@@ -733,8 +763,7 @@ def _gated_drop_option(item: str, state: WorldState, game_data: GameData,
         option = RouteOption(
             kind=SourceKind.DROP.value, venue=monster,
             actions_per_application=_drop_actions(
-                item, monster, rate, min_q, max_q, state, game_data, ctx.timing(),
-                ctx.drops()),
+                item, monster, rate, min_q, max_q, state, game_data, ctx),
             yield_per=1, capacity=UNBOUNDED_CAPACITY,
             unlock=f"gear:{monster}", unlock_actions=unlock_actions)
         # CHEAPEST BY THE WHOLE PRICE, not by the unlock alone: a dear sword that
@@ -1065,7 +1094,7 @@ def route_options(item: str, state: WorldState, game_data: GameData,
               if (s.kind, s.code) not in climbs]
     if store is not None:
         for kind in (SourceKind.CRAFT, SourceKind.GATHER):
-            gated = _gated_skill_option(item, state, game_data, store, ctx.drops(), model,
+            gated = _gated_skill_option(item, state, game_data, store, ctx, model,
                                         kind, policy)
             if gated is not None:
                 routes.append(gated)
@@ -1316,7 +1345,7 @@ def drop_work_actions(work: Sequence[DropLeg], state: WorldState,
     """Actions `work` (`drop_work`'s legs) takes, exact: each leg's units
     times the per-unit price its route has in the walk — a farm's
     (`_drop_actions`, with the loss surcharge only where the walk charges it)
-    or a gather's (`_gather_actions`) — so at the prospecting of the loadout
+    or a gather's (`_gather_cost`) — so at the prospecting of the loadout
     the leg is attempted in, exactly as the walk prices it: an item that
     loadout would not wear moves no price. Both read the ONE drop model
     (`ctx.drops()`)."""
@@ -1325,10 +1354,10 @@ def drop_work_actions(work: Sequence[DropLeg], state: WorldState,
         if leg.kind is SourceKind.DROP:
             rate, min_q, max_q = _drop_table(leg.item, leg.source, game_data)
             per_unit = _drop_actions(leg.item, leg.source, rate, min_q, max_q, state,
-                                     game_data, ctx.timing(), ctx.drops(),
+                                     game_data, ctx,
                                      ctx.fight_records if leg.surcharged else ())
         else:
-            per_unit = _gather_actions(leg.item, leg.source, state, game_data, ctx.drops())
+            per_unit = _gather_cost(leg.item, leg.source, state, game_data, ctx)
         total += leg.units * per_unit
     return total
 

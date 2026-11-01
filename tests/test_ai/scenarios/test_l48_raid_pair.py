@@ -98,10 +98,13 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from tests.test_ai.shared_world import shared_world
 
 _RAID_BOSS = "pixie"
-_SHIELD = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
-"""Both poles' first missing `L*` piece."""
-_SHIELD_STEP = "UpgradeEquipment(goblin_guard_shield->shield_slot)"
-"""The step goal that acquires `_SHIELD`."""
+_SHIELD = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
+"""Both poles' first missing `L*` piece. The `goblin_guard_shield` until ruling
+"seconds inside" (2026-10-31): priced at its actions' measured seconds, the
+rune's 20000 gold (the fastest gold fight's) costs 1224 actions against the
+shield's 2473-action drop farm at a like gain, so the rune leads."""
+_SHIELD_STEP = "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
+"""The step goal that acquires `_SHIELD`: its gold, fought for."""
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
 
@@ -156,8 +159,7 @@ def test_l48_without_a_raid_fights_only_for_its_missing_piece():
     # RE-DERIVED Task 5 (ruling Z): the root is the first missing `L*` piece,
     # and the pole plans its acquisition — an acquisition fight, not one chosen
     # for XP.
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
-        repr(report.selected_goal), report.plan)
+    assert repr(report.selected_goal) == _SHIELD_STEP, (repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == _SHIELD
 
 
@@ -191,7 +193,7 @@ def test_l48_with_an_active_raid_can_plan():
     walled = _report("l48_band_adequate")
     assert [g.get("goal") for g in report.goals_tried] == \
         [g.get("goal") for g in walled.goals_tried]
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    assert repr(report.selected_goal) == _SHIELD_STEP, (
         repr(report.selected_goal), [g.get("goal") for g in report.goals_tried])
     assert report.decision.chosen_root == _SHIELD
 
@@ -213,11 +215,10 @@ def test_l48_raid_plan_engages_the_boss():
 
     RE-DERIVED Task 5 (ruling Z): the plan is the `L*` piece's acquisition —
     down to the goblin_guard, fight it for its shield, equip it — and no
-    action fights the raid boss."""
+    action fights the raid boss. RE-DERIVED ruling "seconds inside": the piece
+    is the rune (`_SHIELD`), and its plan is one fight for its gold."""
     report = _report("l48_raid_active")
-    assert [repr(a) for a in report.plan] == [
-        "Transition((5,-3,overworld)->(5,-3,underground))", "Fight(goblin_guard)",
-        "Equip(goblin_guard_shield->shield_slot)"]
+    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
     assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
                    for a in report.plan)
     # The cause of the refusal: the estimate exceeds the character's whole hp
@@ -258,7 +259,7 @@ def test_a_survivable_raid_still_yields_to_the_missing_piece(
     report = _report("l48_raid_active")
     assert asked, "the raid candidate was never built"
     assert report.decision.chosen_root == _SHIELD
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)"
+    assert repr(report.selected_goal) == _SHIELD_STEP
     assert not any(isinstance(a, FightAction) and a.monster_code == _RAID_BOSS
                    for a in report.plan)
 

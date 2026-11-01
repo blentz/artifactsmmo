@@ -325,6 +325,12 @@ class SelectionContext:
     # (`timing` / `action_seconds_of`), never a constant.
     fight_seconds: FightSecondsModel | None = None
     action_seconds: Fraction | None = None
+    # The measured seconds of one action of each `/my/logs` kind (`gathering`,
+    # `crafting`, ...: `fight_seconds_model.kind_seconds`), from the
+    # account-log bootstrap or the committed capture offline: the pricer
+    # charges each route's action at its own kind's seconds (B, ruling
+    # "seconds inside", 2026-10-31). None on a context that never prices.
+    kind_seconds: tuple[tuple[str, Fraction], ...] | None = None
 
     # The fleet's drop evidence this cycle (spec 2026-10-18 §2.8, ruling
     # T16a): the ONE drop model the acquisition walk, the obtain model's gather
@@ -368,6 +374,16 @@ class SelectionContext:
         if self.fight_seconds is None:
             raise ValueError("this context carries no learned fight seconds")
         return self.fight_seconds
+
+    def seconds_of(self, kind: str) -> Fraction:
+        """The measured seconds of one action of `/my/logs` kind `kind`; a
+        kind the log never timed is one planner action, the measured mean
+        (`action_seconds_of`). Raises when this context carries no kind
+        seconds."""
+        if self.kind_seconds is None:
+            raise ValueError("this context carries no learned action-kind seconds")
+        measured = dict(self.kind_seconds).get(kind)
+        return measured if measured is not None else self.action_seconds_of()
 
     def action_seconds_of(self) -> Fraction:
         """The learned seconds of one planner action; raises when this context

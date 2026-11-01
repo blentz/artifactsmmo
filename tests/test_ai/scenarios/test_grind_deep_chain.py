@@ -139,8 +139,12 @@ def test_the_premise_straight_from_the_catalog(game_data: GameData,
     assert _steps("sticky_sword", state, game_data) > \
         3 * _steps("apprentice_gloves", state, game_data)
     # The ROUTE-AWARE cost inverts it back, because a feather is a 1-in-8 drop.
+    # Since ruling "seconds inside" (2026-10-31) the 48 chicken kills cost
+    # their measured seconds (5-second fights), so the gloves now tie the
+    # sword (56 actions each) rather than exceed it; neither is cheaper, and
+    # the grind's rate key picks the level-5 sword.
     assert game_data.monsters_dropping("feather") == [("chicken", 8, 1, 1)]
-    assert _routed("apprentice_gloves", state, game_data) > \
+    assert _routed("apprentice_gloves", state, game_data) >= \
         _routed("sticky_sword", state, game_data)
 
 

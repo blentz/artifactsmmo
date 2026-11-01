@@ -26,9 +26,9 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.obtain_model import drop_routes as drop_routes_module
 from artifactsmmo_cli.ai.obtain_model.obtain_model import _walk_order
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
@@ -69,7 +69,6 @@ def test_a_ticket_is_farmed_by_the_fight_that_priced_it(monkeypatch: pytest.Monk
     and every monster a ready 1-in-100 fight that forces no rest (Robby's
     chicken at L41: 86.8 actions a ticket). The price takes a fight, and the
     plan is that fight, not a gather."""
-    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
     monkeypatch.setattr(acquisition_cost, "expected_damage_per_fight", lambda *a: 0)
     state, world, player = _seeded("l40_band_entry")
     assert world.monsters_dropping(TICKET) and TICKET in world.gatherable_drop_items()
@@ -166,7 +165,6 @@ def test_a_grey_dropper_the_walk_admits_is_priced_too(monkeypatch: pytest.Monkey
     (`grey_ok`), but ranked the routes under the bare policy, which prices no
     grey fight, so the chicken ranked after every gather. The ranking now
     prices under the policy the walk admitted the item's routes by."""
-    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
     monkeypatch.setattr(acquisition_cost, "expected_damage_per_fight", lambda *a: 0)
     monkeypatch.setattr(craft_plan_gen, "grey_farm_allowed", lambda item, *a: item == TICKET)
     state, world, player = _seeded("l40_band_entry")
@@ -188,7 +186,6 @@ def test_the_fight_served_is_the_dropper_the_price_took(monkeypatch: pytest.Monk
     """Every monster drops the ticket at 1 in 100, so expected kills tie and
     the old selection fought by distance; the price differs by the rest each
     kill forces, and the plan fights the dropper the price ranked first."""
-    monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
     state, world, player = _seeded("l40_band_entry", gather_rate=100_000)
     ctx = player._selection_context()
     ranked = route_order(TICKET, state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
@@ -198,5 +195,36 @@ def test_the_fight_served_is_the_dropper_the_price_took(monkeypatch: pytest.Monk
     plan = decompose(GatherMaterialsGoal(TICKET, {TICKET: 1}), state, world,
                      player._build_actions(), ctx)
     assert plan is not None
+    fights = [a for a in plan if isinstance(a, FightAction)]
+    assert fights and fights[0].monster_code == monster
+
+
+def test_a_fight_that_wins_in_seconds_beats_a_gather_that_wins_in_actions() -> None:
+    """Ruling "seconds inside" (2026-10-31). At L40, with a ticket 1 in 370
+    off every resource and 1 in 100 off every monster: the gather is 370
+    gathers (one action each, the old unit) and the cheapest fight, the
+    owlbear's, 373 fight-equivalents (each kill forces a rest), so counted in
+    actions the gather won. In the measured seconds they take (a gather 34.5 s;
+    a kill its learned seconds and its rest), the cultist acolyte's farm takes
+    12.6k s against the gather's 12.75k s: the fight wins, and the walk serves
+    it."""
+    state, world, player = _seeded("l40_band_entry", gather_rate=370)
+    ctx = player._selection_context()
+    ranked = route_order(TICKET, state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
+                         store=None)
+    kind, monster = next(iter(ranked))
+    assert kind is SourceKind.DROP
+    gather = min(unit for (k, _via), unit in ranked.items() if k is SourceKind.GATHER)
+    assert ranked[(kind, monster)] < gather
+    # In the old unit, a gather an action and a fight a fight-equivalent, the
+    # gather won.
+    gathers = gather * ctx.action_seconds_of() / ctx.seconds_of("gathering")
+    fight_equivalents = ranked[(kind, monster)] * ctx.action_seconds_of() / walk_seconds(
+        state, world, monster, (), ctx.timing())
+    assert gathers == 370 < fight_equivalents
+    plan = decompose(GatherMaterialsGoal(TICKET, {TICKET: 1}), state, world,
+                     player._build_actions(), ctx)
+    assert plan is not None
+    assert not [a for a in plan if isinstance(a, GatherAction)]
     fights = [a for a in plan if isinstance(a, FightAction)]
     assert fights and fights[0].monster_code == monster

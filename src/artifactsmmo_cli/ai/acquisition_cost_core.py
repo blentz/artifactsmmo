@@ -11,7 +11,10 @@ copper ore off the ground. See `tests/test_ai/test_acquisition_cost_baseline.py`
 which pins those numbers, and `docs/PLAN_unified_acquisition_objective.md`.
 
 THE CURRENCY IS ACTIONS, AND THAT IS LOAD-BEARING. Every term here is a count of
-planner actions, comparable to `cycles_to_fifty` under S-004. Anything that is
+planner actions, comparable to `cycles_to_fifty` under S-004. The impure
+wrapper prices each option in measured seconds and converts them to actions
+once (`acquisition_cost._in_actions`, ruling "seconds inside", 2026-10-31), so
+an option's actions are time-honest across kinds. Anything that is
 not an action count — a gold price, a level gap, a wall-clock cooldown, a travel
 distance — must be CONVERTED to actions before it enters, or it reintroduces the
 seconds/actions confusion that has produced four separate bugs in this project.

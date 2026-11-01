@@ -88,9 +88,9 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     Bank stock used to be added straight into `owned`, so a banked material cost
     NOTHING and this test asserted `copper_dagger` won outright on that basis.
     Under the route model only the BAG is free; the bank is a WITHDRAW route —
-    one hop plus one action per unit — which here costs exactly what gathering
-    the same bars costs, so a banked rung ties an unstocked one rather than
-    beating it.
+    one hop plus a withdraw's measured seconds per code — which here costs
+    less than gathering and smelting the same bars, so a banked rung beats an
+    unstocked one, though not a bagged one.
 
     That is why `wooden_staff` (4 `ash_plank`) now wins where `copper_dagger`
     (6 bars) used to: six withdraws are dearer than four gathers. The old model
@@ -106,9 +106,11 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     in_bag = steps(make_state(skills={"weaponcrafting": 3},
                               inventory={"copper_bar": 6}))
     assert in_bag < banked, "the bag must be free where the bank is not"
-    assert banked == empty, (
-        "here a withdraw and a gather are both one action per unit, so stocking "
-        "the bank buys nothing over gathering — the model saying so is correct")
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): a withdraw costs its
+    # measured 3 seconds and a gather its 34, no longer one planner action
+    # each, so stocking the bank now beats gathering (and smelting) the bars.
+    assert banked < empty, (
+        "a 3-second withdraw is cheaper than a 34-second gather and its smelt")
 
 
 def test_none_when_nothing_craftable_at_level():

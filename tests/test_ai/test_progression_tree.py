@@ -158,7 +158,9 @@ class TestPerScenarioPins:
         seconds are its learned length) the level-10 objective is the set that
         kills `red_slime` fastest, and its first piece, `greater_wooden_staff`,
         steps to the recipe's two `blue_slimeball`s (blue_slime is beaten in
-        copper). No XP grind is offered while the set is missing."""
+        copper). No XP grind is offered while the set is missing. Since ruling
+        "seconds inside" (2026-10-31) every route is priced at its actions'
+        measured seconds, and the helmet now orders ahead of the leg armor."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ObtainItem(code="greater_wooden_staff", quantity=1,
                                            slot="weapon_slot")
@@ -167,8 +169,8 @@ class TestPerScenarioPins:
             "ObtainItem(code='greater_wooden_staff', quantity=1, slot='weapon_slot')",
             "ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')",
             "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
-            "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
+            "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",

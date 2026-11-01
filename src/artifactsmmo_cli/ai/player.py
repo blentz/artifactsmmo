@@ -145,8 +145,10 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
+    committed_kind_seconds,
     committed_timing,
     fetch_fleet_bootstrap,
+    kind_seconds,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -3035,7 +3037,7 @@ class GamePlayer:
         `NO_PROFILE_CONTEXT` on a live path passes here."""
         fight_seconds, action_seconds = self._timing()
         return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,
-                       action_seconds=action_seconds)
+                       action_seconds=action_seconds, kind_seconds=self._kind_seconds())
 
     def _consumable_price(self, code: str) -> Fraction:
         """Acquisition actions per unit to REPLACE a consumable a fight used —
@@ -4458,6 +4460,15 @@ class GamePlayer:
         assert self._bootstrap is not None
         return timing_of(self.history, self._bootstrap)
 
+    def _kind_seconds(self) -> tuple[tuple[str, Fraction], ...]:
+        """The measured seconds of one action of each `/my/logs` kind: the
+        account-log bootstrap's (ruling ZD), or the committed capture's
+        offline, as `_timing` reads its fights."""
+        if self._offline_timing is not None:
+            return committed_kind_seconds()
+        assert self._bootstrap is not None
+        return kind_seconds(self._bootstrap.kinds)
+
     def _fetch_bootstrap(self, api: APIWrapper) -> FleetBootstrap:
         """The account-log bootstrap (ruling ZD), each fight at its
         character's sheet haste from `GET /my/characters`; every request is
@@ -4568,6 +4579,7 @@ class GamePlayer:
                            if self.history is not None else ()),
             fight_seconds=fight_seconds,
             action_seconds=action_seconds,
+            kind_seconds=self._kind_seconds(),
             # The server refused the last action for want of bag room: the
             # arbiter clears the bag before the next plan (Task 13e).
             bag_refused=self._last_outcome == BAG_FULL_OUTCOME,

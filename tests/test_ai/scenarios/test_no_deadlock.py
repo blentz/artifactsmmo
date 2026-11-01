@@ -342,7 +342,9 @@ def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> No
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
-    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): the cheapest gold is
+    # now the yellow slime's 5-second fights, not the highwayman's.
+    assert [repr(a) for a in report.plan] == ["Fight(yellow_slime)"]
     # The climb behind it is bounded (current + 1, not the whole gate), and
     # nothing offers a level grind while a piece is missing.
     assert report.decision.fallback_roots[0] == ReachSkillLevel(skill="weaponcrafting", level=16)
@@ -389,12 +391,16 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     assert player._pick_winnable_monster() == "hellhound"
     assert player._tree_band_adequate() is False
     report = player.plan_from_state()
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 

@@ -742,7 +742,7 @@ def test_a_bag_cap_below_its_worn_bag_raises(gd: GameData) -> None:
         gear_objective(state, gd, CTX, None)
 
 
-_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal_rune"),
+_L48_MISSING = [("rune_slot", "lifesteal_rune"), ("shield_slot", "goblin_guard_shield"),
                 ("ring2_slot", "mithril_ring")]
 
 
@@ -761,7 +761,7 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal
         ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
         ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
-        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
+        ("leg_armor_slot", "royal_skeleton_pants"), ("shield_slot", "slime_shield"),
         ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
         ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
@@ -798,7 +798,14 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     prospecting at a learned slope whose prior is 0, and a drop farm exactly,
     rounded once a route): the level-40 sheet's 160 prospecting no longer
     discounts its drops by `1000/1160`, so its pieces are dearer (shield 291 ->
-    319, pants 445 -> 481), and the shield still orders first."""
+    319, pants 445 -> 481), and the shield still orders first.
+
+    RE-DERIVED ruling "seconds inside" (2026-10-31): every route is priced at
+    its actions' measured seconds. The level-40 pants (gain 0.218 for 357)
+    now order ahead of the shield (0.145 for 264); at level 48 the rune's
+    20000 gold, earned at the fastest gold fight's seconds, prices it at 1224
+    (gain 0.056) against the shield's 2473 drop farm (gain 0.058), so the
+    rune heads the pieces."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

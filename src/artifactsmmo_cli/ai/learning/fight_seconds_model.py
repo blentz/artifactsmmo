@@ -100,16 +100,34 @@ class FleetBootstrap:
 
     fights: tuple[Sample, ...]
     cooldowns: tuple[int, ...]
+    kinds: tuple[tuple[str, int], ...]
+    """Every entry's `(log type, cooldown)`: the per-kind seconds the pricer
+    charges a route's action at (`kind_seconds`)."""
 
     def to_json(self) -> str:
         return json.dumps({"fights": [list(f) for f in self.fights],
-                           "cooldowns": list(self.cooldowns)})
+                           "cooldowns": list(self.cooldowns),
+                           "kinds": [list(k) for k in self.kinds]})
 
     @classmethod
     def from_json(cls, text: str) -> "FleetBootstrap":
         data = json.loads(text)
         return cls(tuple((int(t), int(a), float(c)) for t, a, c in data["fights"]),
-                   tuple(int(c) for c in data["cooldowns"]))
+                   tuple(int(c) for c in data["cooldowns"]),
+                   tuple((str(k), int(c)) for k, c in data["kinds"]))
+
+
+def kind_seconds(kinds: Iterable[tuple[str, int]]) -> tuple[tuple[str, Fraction], ...]:
+    """The mean positive cooldown of each `/my/logs` entry type in `kinds`
+    (`gathering`, `crafting`, `withdraw_item`, ...), sorted by type: the
+    measured seconds of one action of that kind (the committed capture: a
+    gather 34.5 s, a craft 13.2 s). A type with no positive cooldown is
+    absent: it was never timed."""
+    seen: dict[str, list[int]] = {}
+    for kind, cooldown in kinds:
+        if cooldown > 0:
+            seen.setdefault(kind, []).append(cooldown)
+    return tuple(sorted((kind, Fraction(sum(c), len(c))) for kind, c in seen.items()))
 
 
 def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
@@ -124,6 +142,7 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
     spread = min(_HASTE_SPREAD, len(set(hastes.values())))
     fights: list[Sample] = []
     cooldowns: list[int] = []
+    kinds: list[tuple[str, int]] = []
     page = 1
     while True:
         acquire()
@@ -134,13 +153,14 @@ def fetch_fleet_bootstrap(api: APIWrapper, hastes: Mapping[str, int],
                 # so no haste to put its fights at, and not this fleet's.
                 continue
             cooldowns.append(entry.cooldown)
+            kinds.append((entry.type_.value, entry.cooldown))
             if entry.type_ == LogType.FIGHT and entry.cooldown > 0:
                 fights.append((entry.content["fight"]["turns"], hastes[entry.character],
                                float(entry.cooldown)))
         enough = (len(fights) >= BOOTSTRAP_FIGHTS
                   and len({haste for _, haste, _ in fights}) >= spread)
         if enough or page >= result.pages:
-            return FleetBootstrap(tuple(fights), tuple(cooldowns))
+            return FleetBootstrap(tuple(fights), tuple(cooldowns), tuple(kinds))
         page += 1
 
 
@@ -229,6 +249,19 @@ def offline_timing(path: Path = FIGHT_LOGS) -> tuple[FightSecondsModel, Fraction
     return fit_model(samples), seconds
 
 
+def offline_kind_seconds(path: Path = FIGHT_LOGS) -> tuple[tuple[str, Fraction], ...]:
+    """`kind_seconds` of a `/my/logs` capture's entries (see `FIGHT_LOGS`)."""
+    capture = json.loads(path.read_text())
+    return kind_seconds((kind, cooldown) for character in capture["characters"].values()
+                        for kind, cooldown, _turns in character["entries"])
+
+
+@cache
+def committed_kind_seconds() -> tuple[tuple[str, Fraction], ...]:
+    """`offline_kind_seconds` of the committed capture, read once per process."""
+    return offline_kind_seconds()
+
+
 @cache
 def committed_timing() -> tuple[FightSecondsModel, Fraction]:
     """`offline_timing` of the committed capture, fitted once per process."""
@@ -242,4 +275,5 @@ def offline_context(ctx: SelectionContext) -> SelectionContext:
     (`LearnedDrops.empty()`, ruling T16a)."""
     model, seconds = committed_timing()
     return replace(ctx, fight_seconds=model, action_seconds=seconds,
+                   kind_seconds=committed_kind_seconds(),
                    learned_drops=LearnedDrops.empty())

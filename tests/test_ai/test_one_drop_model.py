@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 import artifactsmmo_cli.ai.player as player_mod
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_options
+from artifactsmmo_cli.ai.acquisition_cost import _kind_actions, acquisition_options
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -79,10 +79,13 @@ def _evidence(path: Path, game_data, rows) -> LearnedDrops:  # type: ignore[no-u
 def _walk_gathers(state, game_data, evidence, policy=DECOMPOSE_POLICY):  # type: ignore[no-untyped-def]
     """The acquisition walk's GATHER routes to a pearl under `policy`:
     `{resource: gathers a pearl}`. DECOMPOSE_POLICY (the fast path's) offers
-    every pearl spot; LEGACY only the primary one."""
+    every pearl spot; LEGACY only the primary one. A route is priced in planner
+    actions at a gather's measured seconds (ruling "seconds inside",
+    2026-10-31), so the gathers are its price over one gather's."""
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
     options = acquisition_options("small_pearls", state, game_data, ctx, policy=policy)
-    return {o.venue: o.actions_per_application for o in options["small_pearls"]
+    gather = _kind_actions("gathering", ctx)
+    return {o.venue: o.actions_per_application / gather for o in options["small_pearls"]
             if o.kind == "gather"}
 
 

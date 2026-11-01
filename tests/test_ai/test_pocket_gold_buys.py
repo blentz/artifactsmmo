@@ -261,7 +261,14 @@ def test_pocket_and_bank_gold_are_priced_alike() -> None:
     assert poor.gold == 100
     rich = replace(poor, bank_gold=50_000, bank_items={})
     ctx = attached(rich, world, TIMED_NO_PROFILE_CONTEXT, None)
-    per_gold = gold_spend_actions(rich, world, ctx)
+    # The charge a gold piece pays: the faster of `m*`'s gold rate and the
+    # closure's own gold fights (`_gold_priced`). Since ruling "seconds
+    # inside" (2026-10-31) a fight costs its measured seconds, and the yellow
+    # slime's 5-second fights earn gold faster than `m*`'s rate.
+    gold = acquisition_options(RUNE.code, rich, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    per_gold = min([Fraction(r.actions_per_application) / r.yield_per
+                    for r in gold if r.kind == SourceKind.GOLD_DROP.value]
+                   + [gold_spend_actions(rich, world, ctx)])
     assert 0 < per_gold < 1
 
     def price(state: WorldState) -> tuple[int, SourceKind | None]:
@@ -270,10 +277,14 @@ def test_pocket_and_bank_gold_are_priced_alike() -> None:
 
     banked, route = price(rich)
     assert route is SourceKind.BUY
-    assert banked == 3 + ceil(100 * per_gold) + ceil(1 + (PRICE - 100) * per_gold)
+    # The buy's measured 3 seconds is a fraction of an action, rounded with the
+    # route's gold once rather than charged a whole action: one rounding.
+    assert banked - (3 + ceil(100 * per_gold) + ceil(1 + (PRICE - 100) * per_gold)) in (-1, 0)
     pocketed, _ = price(replace(rich, gold=50_000, bank_gold=0))
     assert pocketed == 2 + ceil(PRICE * per_gold)
-    assert banked - pocketed in (2, 3)  # the withdraw and its hop; one rounding
+    # The withdraw and its hop, each fraction of an action rounded with the
+    # route it rides on (ruling "seconds inside").
+    assert banked - pocketed in (1, 2, 3)
 
 
 def test_the_player_withdraws_then_buys_the_rune() -> None:
@@ -471,9 +482,11 @@ def test_a_gold_fight_the_closure_offers_prices_spent_gold() -> None:
 def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     """While `L*` is being chosen no objective is on the context yet, so each
     candidate's pieces are priced with that candidate's provisional `m*`: the
-    rune's piece price is its route's price at `m*`'s gold rate (the pig's,
-    cheaper here than any gold fight), plus the equip. The gold is banked, so
-    it is SPENT, not fought for: the rate is what prices it."""
+    rune's piece price is its route's price at that candidate's gold rate,
+    plus the equip. The gold is banked, so it is SPENT, not fought for: the
+    cheaper of `m*`'s rate and the closure's gold fights prices it (since
+    ruling "seconds inside", 2026-10-31, the yellow slime's 5-second fights,
+    cheaper than the pig's rate)."""
     world = _world()
     state = replace(_state(world), bank_gold=50_000, bank_items={})
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
@@ -482,7 +495,7 @@ def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
     fight = min(Fraction(r.actions_per_application) / r.yield_per
                 for r in gold if r.kind == SourceKind.GOLD_DROP.value)
-    assert gold_spend_actions(state, world, ctx) < fight
+    assert fight < gold_spend_actions(state, world, ctx)
     piece = next(p for p in objective.missing if p.code == RUNE.code)
     price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
                                    pocket=spendable_pocket(state, world, frozenset({RUNE.code})))

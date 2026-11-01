@@ -348,6 +348,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     model = grind_model(state, game_data, ctx.now)
     pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,
                           fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
+                          kind_seconds=ctx.kind_seconds,
                           learned_drops=ctx.drops())
     # The SAME `current_level` `skill_grind_target` hands the selection core.
     current_level = state.skills.get(skill, 0)

@@ -1500,18 +1500,18 @@ PRODUCE_FILTER_MUTATIONS = [
 # plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
 DROP_PRICE_MUTATIONS = [
     ("drop price: a GATHER route ignores the context's evidence",
-     "                               item, source.code, state, game_data, ctx.drops()),",
-     "                               item, source.code, state, game_data, LearnedDrops.empty()),"),
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(",
+     "    return _gather_actions(item, resource, state, game_data, LearnedDrops.empty()) * _kind_actions("),
     ("drop price: a DROP route ignores the context's evidence",
-     "                                                  ctx.drops(), ctx.fight_records),",
-     "                                                  LearnedDrops.empty(), ctx.fight_records),"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = LearnedDrops.empty().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("drop price: a gather ignores its loadout's prospecting",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
      "                                      gather_prospecting(resource, state, game_data))",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
-     "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
-     "    kills = 0 * evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = 0 * ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("gather price: a ready gather yields two a gather",
      "                           yield_per=1, capacity=source.capacity)",
      "                           yield_per=2, capacity=source.capacity)"),
@@ -4725,9 +4725,9 @@ SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
      "    price, route = priced_route(item, qty, options, owned, frozenset(), charge)\n"),
     ("acquisition_cost: each win for gold rounded up on its own (M1)",
      "            actions_per_application=_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records),\n",
+     "                source.code, state, game_data, ctx, ctx.fight_records),\n",
      "            actions_per_application=ceil(_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records)),\n"),
+     "                source.code, state, game_data, ctx, ctx.fight_records)),\n"),
     ("acquisition_cost: an unpriced climb has no route",
      "    for kind in _SKILL_GATE:\n        if _skill_gated(item, model, kind, policy) is not None:\n",
      "    for kind in ():\n        if _skill_gated(item, model, kind, policy) is not None:\n"),
@@ -4907,9 +4907,10 @@ LEGACY_GATHER_SKILL_MUTATIONS = [
 # tests/test_ai/test_acquisition_cost_wrapper.py.
 GATED_GATHER_MUTATIONS = [
     ("acquisition_cost: a climb's gather ignores the observations",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data, evidence),",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data,\n"
-     "                                                    LearnedDrops.empty()),"),
+     "            actions_per_application=_gather_cost(item, route.via, state, game_data, ctx),",
+     "            actions_per_application=_gather_cost(\n"
+     "                item, route.via, state, game_data,\n"
+     "                replace(ctx, learned_drops=LearnedDrops.empty())),"),
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
@@ -5440,6 +5441,49 @@ PRICED_ROUTE_FIGHT_MUTATIONS = [
     ("priced walk: the drop leg fights whichever dropper kills fewest",
      "                                  if isinstance(a, FightAction) and a.monster_code == route.via]\n",
      "                                  if isinstance(a, FightAction)]\n"),
+]
+# Ruling "seconds inside" (2026-10-31): every route option is priced at its
+# actions' measured seconds and converted to planner actions once. Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py and
+# tests/test_ai/test_priced_route_served.py.
+SECONDS_INSIDE_PRICE_MUTATIONS = [
+    ("seconds inside: the seconds are never converted to actions",
+     "    return seconds / ctx.action_seconds_of()\n",
+     "    return seconds\n"),
+    ("seconds inside: every kind's action is one planner action",
+     "    return _in_actions(ctx.seconds_of(kind), ctx)\n",
+     "    return _in_actions(ctx.action_seconds_of(), ctx)\n"),
+    ("seconds inside: a win is fight-equivalents, not its seconds",
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return (per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"),
+    ("seconds inside: a craft is priced as a gather",
+     "                           actions_per_application=_kind_actions(\"crafting\", ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n",
+     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n"),
+    ("seconds inside: a recycle is priced as a craft",
+     "                           actions_per_application=_kind_actions(\"recycling\", ctx),\n",
+     "                           actions_per_application=_kind_actions(\"crafting\", ctx),\n"),
+    ("seconds inside: an item withdraw is priced as a gather",
+     "                           actions_per_application=_kind_actions(\"withdraw_item\", ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n",
+     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n"),
+    ("seconds inside: a GE fill is priced as a gather",
+     "                           actions_per_application=_kind_actions(\"buy_ge\", ctx),\n",
+     "                           actions_per_application=_kind_actions(\"gathering\", ctx),\n"),
+    ("seconds inside: a gather is one action whatever its seconds",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(\n"
+     "        \"gathering\", ctx)\n",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops())\n"),
+]
+SECONDS_INSIDE_KIND_MUTATIONS = [
+    ("seconds inside: a zero cooldown is timed",
+     "        if cooldown > 0:\n            seen.setdefault(kind, []).append(cooldown)\n",
+     "        if cooldown >= 0:\n            seen.setdefault(kind, []).append(cooldown)\n"),
 ]
 PRICED_ROUTE_KEY_MUTATIONS = [
     ("priced walk: a sibling's craft is keyed as this character's craft",
@@ -8230,11 +8274,14 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
-     "    return per_kill\n"),
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return _in_actions(per_kill * fight, ctx)\n"),
     ("loss risk: the routes drop the context's records",
-     "                                                  ctx.drops(), ctx.fight_records),\n",
-     "                                                  ctx.drops(), ()),\n"),
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ctx.fight_records),\n",
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ()),\n"),
     ("loss risk: the surcharge reads any monster's record",
      "        if monster == monster_code:\n",
      "        if True:\n"),
@@ -13915,8 +13962,8 @@ POCKET_GOLD_ROUTE_MUTATIONS = [
 
 POCKET_GOLD_PRICE_MUTATIONS = [
     ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
-     "                               actions_per_application=Fraction(1),\n",
-     "                               actions_per_application=1,\n"),
+     "                               actions_per_application=_kind_actions(\"withdraw_gold\", ctx),\n",
+     "                               actions_per_application=ceil(_kind_actions(\"withdraw_gold\", ctx)),\n"),
     # S-046: spent gold costs the time to earn it again.
     ("acquisition_cost: banked gold is free to spend (S-046)",
      "    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route\n",
@@ -14772,6 +14819,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, PRICED_ROUTE_FIGHT_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_SRC, SECONDS_INSIDE_PRICE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, SECONDS_INSIDE_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
     run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
               "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(ACQUISITION_COST_CORE_SRC, PRICED_ROUTE_CORE_MUTATIONS,

@@ -15,8 +15,10 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     BOOTSTRAP_FIGHTS,
     BOOTSTRAP_PAGE,
     FleetBootstrap,
+    committed_kind_seconds,
     fetch_fleet_bootstrap,
     fit_model,
+    kind_seconds,
     learned_action_seconds,
     learned_model,
     log_fights,
@@ -93,7 +95,9 @@ def test_a_character_without_fights_bootstraps_from_the_account_log() -> None:
     bootstrap = fetch_fleet_bootstrap(api, {"R2D2": 0, "Robby": 8, "Lor": 2},  # type: ignore[arg-type]
                                       lambda: calls.append("acquire"))
     assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0), (10, 2, 20.0)),
-                                       cooldowns=(25, 9, 0, 20))
+                                       cooldowns=(25, 9, 0, 20),
+                                       kinds=(("gathering", 25), ("fight", 9), ("fight", 0),
+                                              ("fight", 20)))
     assert calls == ["acquire"] and api.calls == [(1, BOOTSTRAP_PAGE)]
     model, seconds = timing_of(None, bootstrap)
     assert (model.samples, model.haste_identified, seconds) == (2, True, 18)
@@ -133,11 +137,12 @@ def test_a_character_off_the_roster_is_no_observation() -> None:
     api = _Api([[_entry("Ghost", LogType.FIGHT, 30, 15), _entry("Ghost", LogType.GATHERING, 40),
                  _entry("Robby", LogType.FIGHT, 9, 5)]])
     bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8}, lambda: None)  # type: ignore[arg-type]
-    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9,))
+    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9,),
+                                       kinds=(("fight", 9),))
 
 
 def test_a_bootstrap_round_trips_through_json() -> None:
-    bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25))
+    bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25), kinds=())
     assert FleetBootstrap.from_json(bootstrap.to_json()) == bootstrap
 
 
@@ -196,18 +201,18 @@ def test_the_action_seconds_are_learned_then_bootstrapped_or_raise(tmp_path: Pat
 
 
 def test_timing_without_a_store_fits_the_bootstrap_alone(tmp_path: Path) -> None:
-    bootstrap = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30))
+    bootstrap = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30), kinds=())
     model, seconds = timing_of(None, bootstrap)
     assert (model.s_turn, model.samples, seconds) == (Fraction(2), 2, Fraction(20))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
-        timing_of(None, FleetBootstrap(fights=(), cooldowns=(0, 0)))
+        timing_of(None, FleetBootstrap(fights=(), cooldowns=(0, 0), kinds=()))
 
 
 def test_timing_with_a_store_pools_the_fleet_and_the_bootstrap(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _fight(store, 0, 5, 0, 15.0)
-        model, seconds = timing_of(store, FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,)))
+        model, seconds = timing_of(store, FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,), kinds=()))
         assert (model.s_turn, model.samples, seconds) == (Fraction(5, 2), 2, Fraction(15))
     finally:
         store.close()
@@ -299,3 +304,12 @@ def test_the_action_mean_is_read_once_per_recorded_cycle(tmp_path: Path) -> None
     finally:
         store.close()
         other.close()
+
+
+def test_each_log_kind_is_timed_by_its_mean_positive_cooldown() -> None:
+    """`kind_seconds` (ruling "seconds inside", 2026-10-31): the measured
+    seconds of one action of each log kind, its entries' mean positive
+    cooldown; a kind never timed (only zero cooldowns) is absent."""
+    assert kind_seconds([("gathering", 30), ("gathering", 40), ("fight", 0), ("crafting", 13)]) == (
+        ("crafting", Fraction(13)), ("gathering", Fraction(35)))
+    assert dict(committed_kind_seconds())["gathering"] > dict(committed_kind_seconds())["crafting"]

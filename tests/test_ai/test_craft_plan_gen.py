@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
@@ -61,7 +62,7 @@ def _ctx(**kw: object) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
     )
     base.update(kw)
-    return SelectionContext(**base, learned_drops=LearnedDrops.empty())
+    return offline_context(SelectionContext(**base, learned_drops=LearnedDrops.empty()))
 
 def _gd_copper_ring() -> GameData:
     """copper_ring → copper_bar (1 bar each) → copper_ore (10 ore per bar).

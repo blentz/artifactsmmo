@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
-PAGE = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30))
+PAGE = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30), kinds=())
 """An account-log bootstrap: two fights at 2 s a turn and a 30 s gather."""
 
 
@@ -58,7 +58,7 @@ def test_a_player_with_a_store_pools_the_fleet_record(tmp_path: Path) -> None:
 
 
 def test_a_player_with_no_observation_anywhere_raises() -> None:
-    player = GamePlayer(character="hero", fight_bootstrap=FleetBootstrap((), ()))
+    player = GamePlayer(character="hero", fight_bootstrap=FleetBootstrap((), (), ()))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
         player._timing()
 
@@ -111,7 +111,8 @@ def test_a_gathering_character_fits_on_the_accounts_fights(tmp_path: Path) -> No
         acquired: list[str] = []
         player._acquire_account = lambda: acquired.append("account")  # type: ignore[method-assign]
         player._bootstrap = player._fetch_bootstrap(Api())  # type: ignore[arg-type]
-        assert player._bootstrap == FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(25, 10))
+        assert player._bootstrap == FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(25, 10),
+                                                    kinds=(("gathering", 25), ("fight", 10)))
         assert acquired == ["account", "account"]
         model, seconds = player._timing()
         assert (model.s_turn, model.samples, seconds) == (2, 1, Fraction(35, 2))
