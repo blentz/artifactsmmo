@@ -157,6 +157,7 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equip_value.py"
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+SCENARIO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scenario.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
 USE_CONSUMABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "consumable.py"
 CRAFT_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "crafting.py"
@@ -4825,6 +4826,17 @@ GAME_DATA_LEVEL_CAP_MUTATIONS = [
      "                             \"the server status page\")\n",
      "        if self._max_skill_level is None:\n"
      "            return 50\n"),
+]
+# A derived scenario starts from the live base sheet (plan C Task 7). Killed by
+# tests/test_ai/scenarios/test_scenario_builder.py
+# (test_a_derived_scenario_starts_at_base_initiative_100).
+SCENARIO_BASE_STATS_MUTATIONS = [
+    ("scenario: a derived state starts from zero initiative, not the base sheet's",
+     "    initiative, critical_strike = base_combat_stats()\n",
+     "    initiative, critical_strike = 0, base_combat_stats()[1]\n"),
+    ("scenario: the base sheet's initiative is read off its critical strike",
+     "    return int(combat[\"initiative\"]), int(combat[\"critical_strike\"])\n",
+     "    return int(combat[\"critical_strike\"]), int(combat[\"critical_strike\"])\n"),
 ]
 # Killed by tests/test_ai/test_learning_store.py (TestFleetRecycleTotals).
 FLEET_RECYCLE_TOTALS_MUTATIONS = [
@@ -13984,6 +13996,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_recycle_yield.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEVEL_CAP_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
+    run_group(SCENARIO_SRC, SCENARIO_BASE_STATS_MUTATIONS,
+              "tests/test_ai/scenarios/test_scenario_builder.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_RECYCLE_TOTALS_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,

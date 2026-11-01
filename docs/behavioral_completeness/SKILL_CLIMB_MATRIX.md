@@ -8,9 +8,9 @@
 >
 > `g-in`/`g-above` are the in-range and above-range resource counts and `g-xp+` is whether the HIGHEST in-range resource still pays XP.
 
-360 cells over 92 distinct (skill, level) pairs; PASS 350; routed 71; walled 10; silent_stall 0; unexplained 0; skill_catalogue_empty 0
+360 cells over 92 distinct (skill, level) pairs; PASS 350; routed 70; walled 10; silent_stall 0; unexplained 0; skill_catalogue_empty 0
 
-residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 30, gearcrafting 24, weaponcrafting 16, mining 1. A closure in an unrouted skill can only be an explained wall.
+residual scope: 70 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 29, gearcrafting 24, weaponcrafting 16, mining 1. A closure in an unrouted skill can only be an explained wall.
 
 | Scenario | Skill | C | Target | Verdict | routed | in-level | xp+ | obtainable | above | g-in | g-above | g-xp+ | gather drop |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -66,7 +66,7 @@ residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 3
 | l15_midband | cooking | 10 | 11 | PASS | - | 7 | 7 | 7 | 13 | 0 | 0 | - | `None` |
 | l15_midband | fishing | 10 | 11 | PASS | - | 0 | 0 | 0 | 0 | 2 | 5 | yes | `shrimp` |
 | l15_midband | gearcrafting | 10 | 11 | PASS | yes | 18 | 18 | 17 | 114 | 0 | 0 | - | `None` |
-| l15_midband | jewelrycrafting | 6 | 7 | PASS | yes | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
+| l15_midband | jewelrycrafting | 6 | 7 | PASS | - | 2 | 2 | 2 | 48 | 0 | 0 | - | `None` |
 | l15_midband | mining | 12 | 13 | PASS | - | 2 | 1 | 1 | 12 | 2 | 5 | yes | `iron_ore` |
 | l15_midband | weaponcrafting | 10 | 11 | PASS | - | 18 | 18 | 13 | 51 | 0 | 0 | - | `None` |
 | l15_midband | woodcutting | 12 | 13 | PASS | - | 2 | 1 | 1 | 9 | 2 | 5 | yes | `spruce_wood` |
@@ -209,7 +209,7 @@ residual scope: 71 of 360 cells are ROUTED (4 of 8 skills) — jewelrycrafting 3
 | l10_gearcrafting_gap_combat_blocked | alchemy | 1 | 2 | PASS | - | 0 | 0 | 0 | 25 | 1 | 4 | yes | `sunflower` |
 | l10_gearcrafting_gap_combat_blocked | cooking | 1 | 2 | PASS | - | 2 | 2 | 2 | 18 | 0 | 0 | - | `None` |
 | l10_gearcrafting_gap_combat_blocked | fishing | 1 | 2 | PASS | - | 0 | 0 | 0 | 0 | 1 | 6 | yes | `gudgeon` |
-| l10_gearcrafting_gap_combat_blocked | gearcrafting | 5 | 6 | PASS | yes | 7 | 7 | 5 | 125 | 0 | 0 | - | `None` |
+| l10_gearcrafting_gap_combat_blocked | gearcrafting | 5 | 6 | PASS | yes | 7 | 7 | 6 | 125 | 0 | 0 | - | `None` |
 | l10_gearcrafting_gap_combat_blocked | jewelrycrafting | 1 | 2 | PASS | yes | 1 | 1 | 1 | 49 | 0 | 0 | - | `None` |
 | l10_gearcrafting_gap_combat_blocked | mining | 10 | 11 | PASS | - | 2 | 2 | 2 | 12 | 2 | 5 | yes | `iron_ore` |
 | l10_gearcrafting_gap_combat_blocked | weaponcrafting | 5 | 6 | PASS | yes | 10 | 10 | 8 | 59 | 0 | 0 | - | `None` |

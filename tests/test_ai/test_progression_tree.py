@@ -151,7 +151,12 @@ class TestPerScenarioPins:
         seconds are its learned length) the level-10 objective is the set that
         kills `red_slime` fastest, and its first piece, `greater_wooden_staff`,
         steps to the recipe's two `blue_slimeball`s (blue_slime is beaten in
-        copper). No XP grind is offered while the set is missing."""
+        copper). No XP grind is offered while the set is missing.
+
+        The shield precedes the helmet since plan C Task 7: at the base sheet's
+        initiative 100 the shield's gain per unit of price (0.0291 / 121) edges
+        the helmet's (0.0665 / 280); at initiative 0 it was 0.0194 / 121
+        against 0.0500 / 279."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ObtainItem(code="greater_wooden_staff", quantity=1,
                                            slot="weapon_slot")
@@ -161,8 +166,8 @@ class TestPerScenarioPins:
             "ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')",
             "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
-            "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
             "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
+            "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
             "ReachSkillLevel(skill='jewelrycrafting', level=2)",
@@ -204,7 +209,13 @@ class TestPerScenarioPins:
         the root is weaponcrafting 2 and the sword is the published ask. The
         satchel assertion is kept verbatim — the region gate is unrelated and
         must keep holding: the satchel needs `jasper_crystal`, sold only behind
-        an unreachable trader."""
+        an unreachable trader.
+
+        The `fire_and_earth_amulet`'s jewelrycrafting climb follows the iron
+        armor since plan C Task 7: the amulet is in layer 0 now, not 1. Its
+        `red_slimeball` drops off `red_slime` (initiative 100), which the copper
+        held fighter beat at 0.36 from initiative 0 and beats at 0.83 from the
+        base sheet's 100 (a tie, won on HP)."""
         d, _ = _decide("l12_taskgated_bag")
         assert d.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=2)
         assert d.blocked_target == "iron_sword"
@@ -212,10 +223,10 @@ class TestPerScenarioPins:
             "ReachSkillLevel(skill='weaponcrafting', level=2)",
             "ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')",
             "ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')",
+            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
             "ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='mushroom', quantity=4)",
-            "ReachSkillLevel(skill='jewelrycrafting', level=2)",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
             "ReachSkillLevel(skill='mining', level=10)",

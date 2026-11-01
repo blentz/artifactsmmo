@@ -854,6 +854,51 @@
         "level": 6,
         "max_hp": 145,
         "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "captured_at": "2026-10-31",
+        "character": "Robby",
+        "critical_strike": 0,
+        "initiative": 100,
+        "level": 41,
+        "max_hp": 320,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "captured_at": "2026-10-31",
+        "character": "R2D2",
+        "critical_strike": 0,
+        "initiative": 100,
+        "level": 37,
+        "max_hp": 300,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "captured_at": "2026-10-31",
+        "character": "C3P0",
+        "critical_strike": 0,
+        "initiative": 100,
+        "level": 36,
+        "max_hp": 295,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "captured_at": "2026-10-31",
+        "character": "HAL",
+        "critical_strike": 0,
+        "initiative": 100,
+        "level": 39,
+        "max_hp": 310,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "captured_at": "2026-10-31",
+        "character": "Lor",
+        "critical_strike": 0,
+        "initiative": 100,
+        "level": 36,
+        "max_hp": 295,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
       }
     ]
   }

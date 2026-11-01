@@ -57,6 +57,19 @@ def test_live_anchor_level_6() -> None:
     assert doc["base_stats"]["6"]["max_hp"] == 145
 
 
+def test_the_2026_10_31_live_anchors_match_their_rows() -> None:
+    """Every read-only capture of 2026-10-31 (a live sheet less its worn gear)
+    agrees with the derived row at its level: max_hp, initiative and critical
+    strike."""
+    doc = generate_base_stats_table.generate_table()
+    anchors = [a for a in doc["provenance"]["live_anchors"] if a.get("captured_at") == "2026-10-31"]
+    assert sorted(a["character"] for a in anchors) == ["C3P0", "HAL", "Lor", "R2D2", "Robby"]
+    for anchor in anchors:
+        row = doc["base_stats"][str(anchor["level"])]
+        assert (row["max_hp"], row["initiative"], row["critical_strike"]) == (
+            anchor["max_hp"], anchor["initiative"], anchor["critical_strike"])
+
+
 def test_combat_stats_zero_and_initiative_100() -> None:
     """attack and resistance are all-zero; critical_strike=0; initiative=100 at sampled levels."""
     doc = generate_base_stats_table.generate_table()

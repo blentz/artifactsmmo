@@ -191,14 +191,20 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     the same grind. Since plan B Task 12a a drop farm is priced exactly
     (rounded once a route, not once a unit), so the chicken's feathers are
     cheaper and the cheaper gearcrafting rung is the `feather_coat`: a
-    chicken's feathers, the ash planks, then the coat."""
+    chicken's feathers, the ash planks, then the coat. Since plan C Task 7 (a
+    derived character starts at the base sheet's initiative 100) it moves first
+    against `chicken`, a fight one turn shorter, so the Rest a win forces costs
+    more of it (`cycles_per_kill`) and a feather is dearer: the coat's five
+    feathers take its chain from 80 to 82 actions, the legs' two take theirs
+    from 81 to 82, and of the two equal rungs the first listed is the
+    `copper_legs_armor`: the copper, a chicken's feathers, then the legs."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == [
-        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
-        "Craft(feather_coat×1)"]
+        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
+        "Craft(copper_legs_armor×1)"]
     assert report.decision.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
     assert report.decision.blocked_target == "leather_boots"
     assert report.decision.declined == ()

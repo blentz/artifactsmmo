@@ -12,7 +12,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.audit.craft_census import BARE, LOSES, PARTY, CellResult, fight_needs, run_cell
+from artifactsmmo_cli.audit.craft_census import BARE, LOSES, CellResult, fight_needs, run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
     ARMORY_BAG,
     HELD_LEAF_QTY,
@@ -209,20 +209,24 @@ def test_a_party_cell_brings_copies_of_the_census_character() -> None:
     assert census_state("adamantite_sword", replace(cell, party=0), gd).party == ()
 
 
-def test_duskworm_recipes_plan_under_a_party() -> None:
-    """adamantite_sword's duskworm_skin: no loadout beats duskworm alone; three
-    census characters wearing a health potion do (docs/PLAN_group_fights.md
-    increment 2). Before lifesteal healed its real share of crit damage
-    (2026-10-17) the party needed a water-resistance potion too.
+def test_duskworm_recipes_plan_on_the_held_skull_when_no_party_wins() -> None:
+    """adamantite_sword's duskworm_skin: no loadout beats duskworm alone.
 
-    The party plans at L60, not at the nominal L50 (plan C Task 6): the geared
-    census character now wears `L*` grown over the armory (chosen for its XP
-    target, not the old catalogue-best sheet), and at L50 a party of three in it
-    does not beat duskworm, adventurer_skull's only dropper: the cell is
-    combat_blocked. At L60 the same party wins, on the same potion."""
+    Until plan C Task 7 three census characters wearing a health potion did,
+    at L60 (docs/PLAN_group_fights.md increment 2; the party planned at L60, not
+    the nominal L50, since plan C Task 6 grew the census gear as `L*`). Since
+    Task 7 the census character starts at the base sheet's initiative 100, and
+    its level-60 `L*`, chosen for its `m*`, is a `desert_whip` set (was
+    `hell_reaper`) in which no party of two or three beats duskworm, so the
+    party rung fails too. The ladder's last resort plans the sword on a held
+    `adventurer_skull` (duskworm's drop): the remaining fights are bare but one,
+    `sea_marauder`, won in a greater health potion. The party arm keeps its
+    witness in `tests/test_ai/test_party_win.py`, on a declared loadout."""
     result = climb("adamantite_sword", _gd(), _achieved())
-    assert result.rung == "party@L60" and result.result.passed
-    assert dict(result.result.fights)["duskworm"] == f"{PARTY}3:enhanced_health_potion"
+    assert result.rung == "held:adventurer_skull" and result.result.passed
+    assert dict(result.result.fights) == {
+        "dusk_beetle": BARE, "bat": BARE, "sea_marauder": "greater_health_potion",
+        "goblin_wolfrider": BARE}
 
 
 def test_a_recipe_no_rung_plans_is_named_by_its_held_leaves() -> None:
@@ -247,9 +251,13 @@ def test_the_held_resort_that_still_fails_stays_unplanned(monkeypatch: pytest.Mo
 
 
 def test_the_geared_census_loadout_is_level_capped_and_suppliable() -> None:
+    """The level-30 census loadout is `L*` for its `m*`. Since plan C Task 7
+    (the census character starts at the base sheet's initiative 100) `m*` is
+    `rat` (R 1.510) with the `obsidian_battleaxe`, not `imp` (1.460) with the
+    `elderwood_staff`."""
     gd = _gd()
     gear = census_gear(30, frozenset(), True, gd)
-    assert gear["weapon_slot"] == "elderwood_staff"
+    assert gear["weapon_slot"] == "obsidian_battleaxe"
     assert all(gd.item_stats(code).level <= 30 for code in gear.values())
     assert "novice_guide" not in gear.values()  # fixed supply, not suppliable
 

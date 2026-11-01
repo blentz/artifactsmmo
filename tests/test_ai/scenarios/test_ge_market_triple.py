@@ -60,15 +60,26 @@ CELL5_BUSY_ADEQUATE = "l12_ge_book_adequate"
 TRIPLE = (CELL4_BUSY_GRIND, CELL7_QUIET_GRIND, CELL5_BUSY_ADEQUATE)
 
 SKILL = "gearcrafting"
-RUNG = "feather_coat"
+RUNG = "copper_legs_armor"
 """The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
-(`{feather: 5, ash_plank: 2}`; feather off the chicken, ash_plank from
-ash_wood) — the shape that is 70.7 % of the catalogue and 87.2 % of live
-`UpgradeEquipment` cycles. It was `copper_legs_armor` from spec 2026-10-18
-§2.9 until plan B Task 12a, which prices a drop farm exactly and ranks a
-rung as its descent serves it (rulings T12j, T12k: produced, its closure
-with no GE fill), so the book cannot move the rung."""
+(`{copper_bar: 5, feather: 2}`; feather off the chicken, copper_bar from
+copper_ore) — the shape that is 70.7 % of the catalogue and 87.2 % of live
+`UpgradeEquipment` cycles — and it carries a standing sell order in the busy
+book (10 gold). It was `copper_legs_armor` from spec 2026-10-18 §2.9 until
+plan B Task 12a, which prices a drop farm exactly and ranks a rung as its
+descent serves it (rulings T12j, T12k: produced, its closure with no GE fill),
+so the book cannot move the rung; then `feather_coat` (79 actions against the
+legs' 81). Plan C Task 7 (a derived character starts at the base sheet's
+initiative 100) makes it the legs again: the character moves first against
+`chicken`, a turn shorter a fight, so the Rest a win forces costs more of it
+(`cycles_per_kill`) and a feather is dearer; the coat takes five, the legs
+two, and both chains price 83, the legs listed first."""
 
+DESCENT_RUNG = "feather_coat"
+"""An unheld gearcrafting rung with a standing sell order in the busy book (248
+gold), for the plain descent's leaf: `RUNG` is worn (the cells' leg slot), so
+its plain descent stays at it in either book and cannot show the order
+leafing it. It was `RUNG` itself until plan C Task 7 moved the rung."""
 LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
 item Robby stalled on live."""
@@ -181,13 +192,16 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     so the order book IS load-bearing here and `produce` is what neutralises it.
     Since plan B Task 12a the grind's RANKING neutralises it too: the rung is
     priced as its descent serves it (rulings T12j, T12k), so the busy book's
-    standing orders on the rung and on its rivals' materials price nothing."""
-    node = ObtainItem(code=RUNG, quantity=1)
+    standing orders on the rung and on its rivals' materials price nothing.
+
+    The plain descent is asked of `DESCENT_RUNG`: `RUNG` is worn, so asking it
+    of `RUNG` would leaf in both books and show nothing about the order."""
+    node = ObtainItem(code=DESCENT_RUNG, quantity=1)
     busy_state = _state(CELL4_BUSY_GRIND, busy)
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
     assert actionable_step(node, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == node
     assert actionable_step(node, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) != node
-    rung_legs = ["Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+    rung_legs = ["Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
                  f"Craft({RUNG}×1)"]
     assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
     assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs

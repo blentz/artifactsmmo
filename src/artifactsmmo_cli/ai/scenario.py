@@ -29,6 +29,7 @@ their own descriptions."""
 import json
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from functools import cache
 from pathlib import Path
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -116,10 +117,11 @@ class ScenarioCharacter:
     trivially (epic P3, docs/PLAN_events_raids_epic.md)."""
     derive_combat_stats: bool = False
     """When True, scenario_state computes the server-total combat stats
-    (attack/dmg/dmg_elements/resistance/critical_strike/initiative) by
-    summing the equipped items' catalog stats — the server reports totals =
-    base 0 + gear, so this reproduces what a live character wearing this
-    loadout would report. Requires game_data at scenario_state time.
+    (attack/dmg/dmg_elements/resistance/critical_strike/initiative) as the
+    base sheet plus the equipped items' catalog stats — the server reports
+    totals = base + gear, the base being initiative 100 and zero elsewhere
+    (`base_combat_stats`), so this reproduces what a live character wearing
+    this loadout would report. Requires game_data at scenario_state time.
 
     Also derives max_hp = 115 + 5*level + sum(equipped gear hp_bonus) — the
     same base-HP formula the server uses, live-validated against a real
@@ -190,11 +192,27 @@ class _CombatTotals:
     haste: int = 0
 
 
+BASE_STATS = Path(__file__).resolve().parents[3] / "formal" / "sim" / "character_base_stats.json"
+"""The live base sheet: a character's stats with nothing worn
+(`formal/sim/generate_base_stats_table.py`, live-anchored at levels 1, 6 and
+36-41). The server reports base + gear, so a derived state starts here."""
+
+
+@cache
+def base_combat_stats() -> tuple[int, int]:
+    """`(initiative, critical_strike)` of the base sheet: level-invariant, so
+    read from its `combat_stats` (100 and 0; every live anchor reads the same).
+    Its attack and resistance are zero at every level."""
+    combat = json.loads(BASE_STATS.read_text())["provenance"]["combat_stats"]
+    return int(combat["initiative"]), int(combat["critical_strike"])
+
+
 def _derived_combat_totals(
     equipment: dict[str, str | None], game_data: GameData,
 ) -> _CombatTotals:
-    """Sum of every equipped item's catalog stats: a character's base combat
-    stats are zero, so the server's reported totals are exactly the gear sum.
+    """The base sheet (`base_combat_stats`: initiative 100, critical strike
+    0, no attack or resistance) plus every equipped item's catalog stats, so
+    the totals are what the server reports for a character wearing them.
     Utility slots are SKIPPED: boost-family potions fold boost_dmg_*/boost_
     res_*/boost_hp into dmg_elements/resistance/hp_bonus at catalog-build
     time (game_data.py fill), which are combat-time effects the live sheet
@@ -205,8 +223,7 @@ def _derived_combat_totals(
     dmg = 0
     dmg_elements: dict[str, int] = {}
     resistance: dict[str, int] = {}
-    critical_strike = 0
-    initiative = 0
+    initiative, critical_strike = base_combat_stats()
     hp_bonus = 0
     wisdom = 0
     prospecting = 0

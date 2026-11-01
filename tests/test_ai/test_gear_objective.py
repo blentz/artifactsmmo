@@ -784,16 +784,16 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal
         ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
         ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
-        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
-        ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
+        ("body_armor_slot", "royal_skeleton_armor"), ("leg_armor_slot", "royal_skeleton_pants"),
+        ("helmet_slot", "royal_skeleton_helmet"), ("shield_slot", "slime_shield"),
         ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
     ("l48_band_adequate", "hellhound", _L48_MISSING),
     ("l48_raid_active", "hellhound", _L48_MISSING),
     ("l10_gearcrafting_gap_combat_blocked", "red_slime", [
         ("weapon_slot", "greater_wooden_staff"), ("amulet_slot", "air_and_water_amulet"),
-        ("body_armor_slot", "leather_armor"), ("boots_slot", "leather_boots"),
-        ("leg_armor_slot", "leather_legs_armor"), ("shield_slot", "iron_shield"),
+        ("shield_slot", "iron_shield"), ("body_armor_slot", "leather_armor"),
+        ("boots_slot", "leather_boots"), ("leg_armor_slot", "leather_legs_armor"),
         ("helmet_slot", "adventurer_helmet"), ("ring1_slot", "forest_ring"),
         ("ring2_slot", "forest_ring")])])
 def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str, monster: str,
@@ -821,7 +821,15 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     prospecting at a learned slope whose prior is 0, and a drop farm exactly,
     rounded once a route): the level-40 sheet's 160 prospecting no longer
     discounts its drops by `1000/1160`, so its pieces are dearer (shield 291 ->
-    319, pants 445 -> 481), and the shield still orders first."""
+    319, pants 445 -> 481), and the shield still orders first.
+
+    RE-DERIVED plan C Task 7 (a derived sheet starts at the base sheet's
+    initiative 100): the level-40 sheet, at 250 now, moves first against
+    `cultist_acolyte` (200), and the gains re-rank within layer 0: the armor
+    (0.070 -> 0.144 per 500) leads and the shield (0.145 -> 0.030 per 323)
+    falls to fourth. The level-10 sheet's `iron_shield` joins layer 0 (was 1):
+    its `wool` drops off `sheep` (initiative 50), which the held copper fighter
+    beat at 0.58 from initiative 0 and beats at 0.92 from 100."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

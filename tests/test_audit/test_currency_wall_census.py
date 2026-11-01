@@ -574,7 +574,12 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # `l32_held_task_closable`'s ogre task, whose `L*` is held and loses, asks
     # for nothing where the walk asked `earth_boost_potion` (-7). No charged
     # cell moves.
-    assert "25 of 1484 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
+    # 1484 -> 1491 (plan C Task 7, a derived character starts at the base
+    # sheet's initiative 100): `l13_drop_recipe_grind`'s walk offers a 7th
+    # root, `leather_boots` (+7), and `l15_midband`'s `m*` moves from
+    # `highwayman` to `red_slime`, whose `L*` asks the `leather_boots` where
+    # the jewelrycrafting climb was (same count). No charged cell moves.
+    assert "25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(
         "An uncharged currency can only be not_demanded.")

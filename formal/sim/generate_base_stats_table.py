@@ -23,7 +23,10 @@ All other base combat stats are level-invariant:
 
 This is NOT a 49-point physical capture (Robby is level 6; unequipping at 49
 levels is impractical). It is a fully-derived table from the formula above,
-live-validated at level 6 (algebraic capture) and level 1 (game start).
+live-validated at level 6 (algebraic capture) and level 1 (game start), and
+on 2026-10-31 by read-only algebraic capture of all five fleet characters at
+levels 36-41 (`LIVE_ANCHORS_2026_10_31`: initiative 100 and max_hp
+115 + 5 * level on every one).
 
 Usage::
 
@@ -57,6 +60,19 @@ LIVE_ANCHOR_LEVEL_6 = {
     "source": "algebraic_subtraction_from_equipped_character_stats",
     "captured_at": "2026-06-20T15:31:40.332273+00:00",
 }
+# Read-only algebraic captures, 2026-10-31: each live sheet (GET
+# /characters/{name}) less the catalogue stats of every worn non-utility piece.
+# All five read initiative 100, critical strike 0, zero attack and resistance,
+# and max_hp = 115 + 5 * level.
+# The measured values are written literally, never through the formula.
+LIVE_ANCHORS_2026_10_31 = [
+    {"level": level, "character": character, "max_hp": max_hp,
+     "initiative": 100, "critical_strike": 0,
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "captured_at": "2026-10-31"}
+    for character, level, max_hp in (("Robby", 41, 320), ("R2D2", 37, 300), ("C3P0", 36, 295),
+                                     ("HAL", 39, 310), ("Lor", 36, 295))
+]
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parent / "character_base_stats.json"
 
@@ -87,7 +103,7 @@ def generate_table() -> dict[str, Any]:
                 "NOT a 49-point physical capture."
             ),
             "formula": "max_hp = 115 + 5 * level",
-            "live_anchors": [LIVE_ANCHOR_LEVEL_1, LIVE_ANCHOR_LEVEL_6],
+            "live_anchors": [LIVE_ANCHOR_LEVEL_1, LIVE_ANCHOR_LEVEL_6, *LIVE_ANCHORS_2026_10_31],
             "combat_stats": {
                 "attack": "zero at all levels (all attack comes from gear)",
                 "resistance": "zero at all levels (all resistance comes from gear)",

@@ -820,18 +820,24 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the rune's 20000
     # gold is earned by fighting, a finite price, so it orders ahead of the
     # jewelrycrafting climb, which has no grind rate offline and so no price.
+    #
+    # RE-DERIVED plan C Task 7 (a derived character starts at the base sheet's
+    # initiative 100): `R` without the sword, re-picked from what the character
+    # owns, rose from 0.3545 to 0.3772 against `rat`, so the sword's gain per
+    # unit of price (0.3015 / 2316) fell below the `steel_boots`' (0.0402 /
+    # 297), which head the objective now; the sword is the first alternative.
+    # The cycle plans the boots' first gather.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
-        code="death_knight_sword", quantity=1, slot="weapon_slot")
+        code="steel_boots", quantity=1, slot="boots_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="steel_boots", quantity=1, slot="boots_slot"),
+        ObtainItem(code="death_knight_sword", quantity=1, slot="weapon_slot"),
         ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
-    assert [repr(a) for a in report.plan] == [
-        "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]
+    assert [repr(a) for a in report.plan] == ["Gather(ash_tree×4)"]
     goal, plan, _declined = _plan_root("l35_artifact_fill", pearl)
     assert goal.startswith("GatherMaterials(small_pearls"), goal
     assert len(plan) == 1 and plan[0].startswith("Gather(bass_spot->small_pearls"), plan

@@ -268,7 +268,13 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     plan B Task 12a: its drop-fed materials are priced exactly, rounded once a
     route instead of once a unit. It moved 111 -> 115 with ruling T14a-B': the
     bank holds 3 of the 4 iron_bar, so the 4th is smelted (the smelt and the
-    mining hop) from 2 more gathered ore (the gathers and the rocks hop)."""
+    mining hop) from 2 more gathered ore (the gathers and the rocks hop). It
+    moved 115 -> 121 with plan C Task 7: a derived character starts at the base
+    sheet's initiative 100, so it moves first against the level-2 to 4 slimes
+    (initiative 50) and each fight is a turn shorter; the Rest a kill forces is
+    priced in fight-equivalents of that shorter fight (`cycles_per_kill`), so a
+    `red_slime` win costs 2.41 actions (was 2.23) and a `yellow_slime` win 1.62
+    (was 1.54) for the amulet's slimeballs."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     quiet = shared_world(BUNDLE)
     ctx = TIMED_NO_PROFILE_CONTEXT
@@ -289,7 +295,7 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     assert [(r.kind, r.unlock, r.unlock_actions) for r in route_options(
         AMULET.code, climbing, quiet, ctx, store, policy=PIECE_POLICY)] == [
         ("craft", "skill:jewelrycrafting:10", 25)]
-    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 115
+    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 121
     assert actionable_step(AMULET, gone, quiet, ctx) == ObtainItem("iron_bar", 4)
 
 
@@ -317,7 +323,11 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     carries both climbs: the price with both skills already at 10, plus each
     grind, exactly as `LEGACY` (which refuses the routes) prices it. The
     ready price moved 214 -> 213 with plan B Task 12a: a drop farm is priced
-    exactly, rounded once a route instead of once a unit."""
+    exactly, rounded once a route instead of once a unit. It moved 213 -> 214
+    with plan C Task 7: at the base sheet's initiative 100 the character moves
+    first against the `cow` whose cowhide the armor takes, and the Rest a win
+    forces is priced in fight-equivalents of that shorter fight
+    (`cycles_per_kill`)."""
     world = _world(CLIMB_CELL)
     ctx = TIMED_NO_PROFILE_CONTEXT
     state = replace(derived_scenario_state(SCENARIOS[CLIMB_CELL], world),
@@ -328,10 +338,10 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     assert rates == {"gearcrafting": 30.0, "woodcutting": 30.0}
     climbs = sum(skill_grind_cycles(1, 0, MAX_XP, 10, 30.0) for _ in rates)
 
-    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 213
+    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 214
     assert climbs == 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 213 + 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 213 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 214 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 214 + 90
 
 
 def test_an_unpriceable_climb_leaves_the_piece_unpriced() -> None:
@@ -445,7 +455,10 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
     200 held leaves 13 to fight for under `PIECE_POLICY`, while `LEGACY`, with
     no gold route, takes the climbed craft.
 
-    The 13 are 7 yellow_slime wins (11 actions, rounded once): ruling T15a
+    The 13 are 7 yellow_slime wins (12 actions, rounded once; 11 until plan C
+    Task 7, when the derived character's base initiative 100 let it move first
+    and the Rest each win forces became 0.62 of the shorter fight, was 0.54,
+    `cycles_per_kill`): ruling T15a
     takes the level-15 highwayman, whose gold per action was the cheapest, out
     of a level-12 character's gold routes (above its fight ceiling), and its
     4 wins cost 12. The LEGACY craft moved 38 -> 42 with ruling T14a-B': the
@@ -464,7 +477,7 @@ def test_held_gold_is_free_up_to_the_pocket() -> None:
                           pocket=climbing.gold) == (
         2, SourceKind.GE_FILL)
     short = replace(climbing, gold=200)
-    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 15
+    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 16
     assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY,
                           pocket=short.gold) == (
         42, SourceKind.CRAFT)
