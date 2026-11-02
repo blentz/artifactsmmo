@@ -42,8 +42,12 @@ Option-A residual set:
   loop cannot run (no bag room for a kill's drops: a bag the carried keep fills).
   `gear_objective` then returns None (tested:
   `test_gear_objective.py::test_none_when_every_winning_candidate_rates_zero`), so
-  there is no root and no grind target. Plan C Task 8c's food-carry fix narrows the
-  keep but does not close this.
+  there is no root and no grind target. Plan C Task 8c's food-carry fix narrows it
+  but does not close it: a food's carry is now the least of the horizon, the bag's
+  room for it and (no replacement) the units held (`chosen_loadout.food_carry`), so a
+  carry past the bag or past the stock no longer zeroes `R`; a bounded carry that
+  fills the room (a made food eaten several a fight in a small bag) or a carried keep
+  that fills the bag still does.
 * **not-held phase (NAMED RESIDUAL, ruling C4-R)** — the not-held phase terminates and
   `L*` is held again after a level-up. While `L*` misses a piece production fights
   nothing for XP (`GearTierLeveling.no_xp_fight_of_not_held`; the root is a piece's

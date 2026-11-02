@@ -953,7 +953,7 @@ def _reentry_actions(item: str, route: Route, door: Door, state: WorldState,
         # share a gather's drops pay; a sale adds none (gold takes no slot).
         units = route.yield_per if route.kind is SourceKind.BUY else 0
         return trip_share(Fraction(reentry), Fraction(units),
-                          state.inventory_max - carried_keep(state, game_data, ctx))
+                          state.inventory_max - carried_keep(state, game_data, ctx).units)
     evidence = ctx.drops()
     if route.kind is SourceKind.GATHER:
         prospecting = gather_prospecting(route.via, state, game_data)
@@ -971,7 +971,7 @@ def _reentry_actions(item: str, route: Route, door: Door, state: WorldState,
         evidence.units_per_attempt(route.via, code, rate, low, high, prospecting)
         for code, rate, low, high in table if code != item)])
     share = trip_share(Fraction(reentry), drops,
-                       state.inventory_max - carried_keep(state, game_data, ctx))
+                       state.inventory_max - carried_keep(state, game_data, ctx).units)
     return None if share is None else attempts * share
 
 

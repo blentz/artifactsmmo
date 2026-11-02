@@ -24,6 +24,8 @@ from artifactsmmo_cli.ai.loop_rate_core import (
 )
 
 EAT = Fraction(3)
+ROOM = 99
+"""Room for more units of a food than any recovery here eats: the bag never binds."""
 
 
 class TestParts:
@@ -45,53 +47,54 @@ class TestRecovery:
         assert recovery_seconds(60, 100, [], EAT) == 60
 
     def test_nothing_missing_costs_nothing(self) -> None:
-        assert recovery_seconds(0, 100, [(50, Fraction(0), 0)], EAT) == 0
+        assert recovery_seconds(0, 100, [(50, Fraction(0), 0, ROOM)], EAT) == 0
         assert recovery_seconds(-3, 100, [], EAT) == 0
 
     def test_free_food_is_one_flat_use(self) -> None:
         # Two 50-HP foods in ONE use (the cooldown is flat whatever the quantity).
-        assert recovery_seconds(60, 100, [(50, Fraction(0), 0)], EAT) == 3
+        assert recovery_seconds(60, 100, [(50, Fraction(0), 0, ROOM)], EAT) == 3
 
     def test_a_dear_food_is_eaten_only_while_it_beats_resting(self) -> None:
         # one unit (3 + 40) then rest 10 HP (10 s) = 53 < 60
-        assert recovery_seconds(60, 100, [(50, Fraction(40), 0)], EAT) == 53
+        assert recovery_seconds(60, 100, [(50, Fraction(40), 0, ROOM)], EAT) == 53
         # at 60 s a unit it never pays: rest
-        assert recovery_seconds(60, 100, [(50, Fraction(60), 0)], EAT) == 60
+        assert recovery_seconds(60, 100, [(50, Fraction(60), 0, ROOM)], EAT) == 60
 
     def test_two_foods_combine(self) -> None:
         # 90 missing. A 2-s 20-HP food alone: five in one use, 3 + 10 = 13. A
         # 1/2-s 10-HP food: nine in one use, 3 + 9/2 = 15/2, the minimum.
-        foods = [(20, Fraction(2), 0), (10, Fraction(1, 2), 0)]
+        foods = [(20, Fraction(2), 0, ROOM), (10, Fraction(1, 2), 0, ROOM)]
         assert recovery_seconds(90, 100, foods, EAT) == Fraction(15, 2)
         assert recovery_seconds(90, 100, foods[:1], EAT) == 13
 
     def test_equals_brute_force_over_count_vectors(self) -> None:
-        foods = [(20, Fraction(7), 0), (35, Fraction(11, 2), 0), (8, Fraction(1), 0)]
+        foods = [(20, Fraction(7), 0, ROOM), (35, Fraction(11, 2), 0, ROOM), (8, Fraction(1), 0, ROOM)]
         for missing in range(0, 101, 9):
             best = Fraction(rest_part(missing, 100))
             for counts in product(range(14), range(4), range(14)):
-                eaten = sum(k * r for k, (r, _, _) in zip(counts, foods, strict=True))
+                eaten = sum(k * r for k, (r, _, _, _) in zip(counts, foods, strict=True))
                 cost = sum((EAT + k * p) if k else Fraction(0)
-                           for k, (_, p, _) in zip(counts, foods, strict=True))
+                           for k, (_, p, _, _) in zip(counts, foods, strict=True))
                 best = min(best, cost + rest_part(max(0, missing - eaten), 100))
             assert recovery_seconds(missing, 100, foods, EAT) == best, missing
 
     def test_never_worse_than_resting(self) -> None:
         for missing in range(0, 120, 7):
             rest = rest_part(missing, 100)
-            assert recovery_seconds(missing, 100, [(15, Fraction(9), 0)], EAT) <= rest
+            assert recovery_seconds(missing, 100, [(15, Fraction(9), 0, ROOM)], EAT) <= rest
 
     def test_more_missing_never_recovers_faster(self) -> None:
-        foods = [(15, Fraction(9), 0), (40, Fraction(30), 0)]
+        foods = [(15, Fraction(9), 0, ROOM), (40, Fraction(30), 0, ROOM)]
         values = [recovery_seconds(m, 100, foods, EAT) for m in range(0, 110)]
         assert values == sorted(values)
 
     @pytest.mark.parametrize("args, match", [
         ((10, 0, [], EAT), "max_hp"),
         ((10, 100, [], Fraction(-1)), "eat_seconds"),
-        ((10, 100, [(0, Fraction(0), 0)], EAT), "restore"),
-        ((10, 100, [(5, Fraction(-1), 0)], EAT), "restore"),
-        ((10, 100, [(5, Fraction(1), -1)], EAT), "held"),
+        ((10, 100, [(0, Fraction(0), 0, ROOM)], EAT), "restore"),
+        ((10, 100, [(5, Fraction(-1), 0, ROOM)], EAT), "restore"),
+        ((10, 100, [(5, Fraction(1), -1, ROOM)], EAT), "held"),
+        ((10, 100, [(5, Fraction(1), 0, -1)], EAT), "room"),
     ])
     def test_invalid_inputs_raise(self, args: tuple, match: str) -> None:  # type: ignore[type-arg]
         with pytest.raises(ValueError, match=match):
@@ -100,9 +103,11 @@ class TestRecovery:
 
 class TestHeld:
     def test_food_bound(self) -> None:
-        assert food_bound(90, 20, Fraction(1), 2) == 5      # priced: ⌈90/20⌉
-        assert food_bound(90, 20, None, 2) == 2             # no replacement: the held two
-        assert food_bound(90, 20, None, 9) == 5
+        assert food_bound(90, 20, Fraction(1), 2, ROOM) == 5      # priced: ⌈90/20⌉
+        assert food_bound(90, 20, None, 2, ROOM) == 2             # no replacement: the held two
+        assert food_bound(90, 20, None, 9, ROOM) == 5
+        assert food_bound(90, 20, Fraction(1), 2, 3) == 3         # the bag carries three
+        assert food_bound(90, 20, None, 9, 4) == 4
 
     def test_eat_cost(self) -> None:
         assert eat_cost(0, EAT, Fraction(7), 0) == 0
@@ -113,41 +118,66 @@ class TestHeld:
 
     def test_held_units_are_free_then_priced(self) -> None:
         # 60 s a unit never pays (Rest 60 s) — but two held 50-HP units are free.
-        assert recovery_seconds(60, 100, [(50, Fraction(60), 2)], EAT) == 3
+        assert recovery_seconds(60, 100, [(50, Fraction(60), 2, ROOM)], EAT) == 3
         # One held: eat it free (3 s) and rest the other 10 HP (10 s).
-        assert recovery_seconds(60, 100, [(50, Fraction(60), 1)], EAT) == 13
+        assert recovery_seconds(60, 100, [(50, Fraction(60), 1, ROOM)], EAT) == 13
         # One held, 5 s past it: two in one use (3 + 5) beats resting 10 HP.
-        assert recovery_choice(60, 100, [(50, Fraction(5), 1)], EAT) == (8, (2,))
+        assert recovery_choice(60, 100, [(50, Fraction(5), 1, ROOM)], EAT) == (8, (2,))
 
     def test_no_replacement_caps_at_held(self) -> None:
-        assert recovery_choice(60, 100, [(50, None, 1)], EAT) == (13, (1,))
-        assert recovery_choice(60, 100, [(50, None, 0)], EAT) == (60, (0,))
+        assert recovery_choice(60, 100, [(50, None, 1, ROOM)], EAT) == (13, (1,))
+        assert recovery_choice(60, 100, [(50, None, 0, ROOM)], EAT) == (60, (0,))
 
     def test_more_held_never_slows_recovery(self) -> None:
         for held in range(0, 6):
             for missing in range(0, 101, 13):
-                more = recovery_seconds(missing, 100, [(20, Fraction(9), held + 1)], EAT)
-                assert more <= recovery_seconds(missing, 100, [(20, Fraction(9), held)], EAT)
+                more = recovery_seconds(missing, 100, [(20, Fraction(9), held + 1, ROOM)], EAT)
+                assert more <= recovery_seconds(missing, 100, [(20, Fraction(9), held, ROOM)], EAT)
 
     def test_the_choice_eats_the_fewest_units_among_the_cheapest(self) -> None:
         # Both free and held: one 400-HP unit covers what four 100-HP units do,
         # in the same one use (3 s) — the choice eats one, whatever the order.
-        foods = [(100, Fraction(0), 9), (400, Fraction(0), 9)]
+        foods = [(100, Fraction(0), 9, ROOM), (400, Fraction(0), 9, ROOM)]
         assert recovery_choice(350, 1000, foods, EAT) == (3, (0, 1))
         assert recovery_choice(350, 1000, foods[::-1], EAT) == (3, (1, 0))
 
     def test_a_full_tie_keeps_the_fewer_of_the_earlier_food(self) -> None:
-        foods = [(50, Fraction(0), 9), (50, Fraction(0), 9)]
+        foods = [(50, Fraction(0), 9, ROOM), (50, Fraction(0), 9, ROOM)]
         assert recovery_choice(50, 100, foods, EAT) == (3, (0, 1))
 
     def test_the_choice_costs_its_value(self) -> None:
-        foods = [(20, Fraction(7), 1), (35, Fraction(11, 2), 0), (8, None, 3)]
+        foods = [(20, Fraction(7), 1, ROOM), (35, Fraction(11, 2), 0, ROOM), (8, None, 3, ROOM)]
         for missing in range(0, 101, 7):
             value, counts = recovery_choice(missing, 100, foods, EAT)
-            eaten = sum(k * r for k, (r, _, _) in zip(counts, foods, strict=True))
-            cost = sum(eat_cost(k, EAT, p, h) for k, (_, p, h) in zip(counts, foods, strict=True))
+            eaten = sum(k * r for k, (r, _, _, _) in zip(counts, foods, strict=True))
+            cost = sum(eat_cost(k, EAT, p, h) for k, (_, p, h, _) in zip(counts, foods, strict=True))
             assert value == cost + rest_part(max(0, missing - eaten), 100), missing
             assert counts[2] <= 3
+
+
+class TestRoom:
+    """Task 8c (ruling C2-food): no recovery eats more of a food than the bag
+    carries of it; past the room it falls back to the other foods and to Rest,
+    each priced in seconds — an alternative, never a veto."""
+
+    def test_room_caps_the_units_eaten(self) -> None:
+        # Two free 50-HP units would be one 3 s use; room for one: eat it and
+        # rest the other 10 HP (10 s).
+        assert recovery_choice(60, 100, [(50, Fraction(0), 0, 1)], EAT) == (13, (1,))
+
+    def test_no_room_falls_back_to_rest(self) -> None:
+        assert recovery_choice(60, 100, [(50, Fraction(0), 0, 0)], EAT) == (60, (0,))
+
+    def test_no_room_falls_back_to_the_next_food(self) -> None:
+        # The first food has no room, the second (dearer) one is eaten.
+        foods = [(50, Fraction(0), 0, 0), (50, Fraction(1), 0, ROOM)]
+        assert recovery_choice(60, 100, foods, EAT) == (5, (0, 2))
+
+    def test_more_room_never_slows_recovery(self) -> None:
+        for room in range(0, 6):
+            for missing in range(0, 101, 13):
+                more = recovery_seconds(missing, 100, [(20, Fraction(1), 0, room + 1)], EAT)
+                assert more <= recovery_seconds(missing, 100, [(20, Fraction(1), 0, room)], EAT)
 
 
 class TestConsumed:
@@ -198,7 +228,7 @@ def test_one_table_answers_every_query_on_the_same_menu() -> None:
     starts from, so a band's loadouts and monsters share one table: the second
     query on the same menu builds no new table and answers exactly what a fresh
     table answers."""
-    menu = ((30, Fraction(7), 2), (75, Fraction(40), 0), (12, None, 3))
+    menu = ((30, Fraction(7), 2, ROOM), (75, Fraction(40), 0, ROOM), (12, None, 3, ROOM))
     _recovery_table.cache_clear()
     first = recovery_choice(140, 300, menu, EAT)
     shared = recovery_choice(95, 300, list(menu), EAT)

@@ -31,7 +31,7 @@ from artifactsmmo_cli.ai.gear_objective import (
 )
 from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
-from artifactsmmo_cli.ai.inventory_keep import carried_keep
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep, carried_keep
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -263,7 +263,7 @@ def test_the_keep_s_carry_is_room_no_drop_has(monkeypatch: pytest.MonkeyPatch,
     """The bag's room for drops is its cap less what the keep holds in it
     (`carried_keep`): a keep that fills any bag leaves no loop that drops
     something running, so no monster pays and there is no objective."""
-    monkeypatch.setattr(mod, "carried_keep", lambda *_args: 10 ** 6)
+    monkeypatch.setattr(mod, "carried_keep", lambda *_args: CarriedKeep(10 ** 6, 0))
     assert gear_objective(_novice(gd), gd, CTX, None) is None
 
 

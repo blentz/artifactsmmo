@@ -572,6 +572,8 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.rate_antitone_missing     -- more HP lost never raises the rate
 #check @Formal.LoopRate.held_free_le              -- more held food never slows recovery
 #check @Formal.LoopRate.priced_le_unpriced        -- a replacement never slows recovery
+#check @Formal.LoopRate.room_mono                 -- more bag room never slows recovery (Task 8c)
+#check @Formal.LoopRate.no_room_skips             -- a food with no room falls back to the rest (Task 8c)
 #check @Formal.LoopRate.recovery_le_planCost      -- recovery is the minimum over feasible plans
 #check @Formal.LoopRate.eatCost_held_zero         -- nothing held: the increment-3 eat cost
 #check @Formal.LoopRate.potionCost_held_zero      -- nothing held: every drink at its price

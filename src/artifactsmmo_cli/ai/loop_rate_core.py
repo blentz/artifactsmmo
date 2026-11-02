@@ -6,10 +6,14 @@ RECOVERY. After a fight the character is `missing_hp` short of full. It can rest
 (`rest_cooldown_core.rest_cooldown_seconds`: one second per percent missing,
 rounded up, at least three) or eat food first and rest off whatever is left.
 
-A FOOD is `(restore, price, held)` (USER 2026-10-09, "free until used up"):
-the first `held` units are free and every further unit costs `price`, its
+A FOOD is `(restore, price, held, room)` (USER 2026-10-09, "free until used
+up"): the first `held` units are free and every further unit costs `price`, its
 replacement in seconds; a `None` price has no replacement, so no more than
-`held` units can be eaten. Eating `k > 0` units of one food is ONE use: the
+`held` units can be eaten. `room` is the units of it the bag can carry
+(`chosen_loadout.food_room`, Task 8c ruling C2-food): no recovery eats more of
+it than the bag holds, so a food the bag has no room for falls back to the
+other foods and to Rest, each priced in seconds (a priced alternative, not a
+veto). Eating `k > 0` units of one food is ONE use: the
 published consumable cooldown is flat whatever the quantity
 (`cost_core.CONSUMABLE_COOLDOWN_SECONDS`, "flat, whatever the quantity"), so it
 costs `eat_seconds + max(0, k − held) × price`. With nothing left missing there
@@ -20,7 +24,7 @@ does not apply to a zero remainder).
 the vector that reaches it (`Formal.LoopRate.recovery_le_planCost`: no feasible
 vector costs less). The search per food is bounded by the count needed:
 `k ≤ ⌈m / restore⌉` where `m` is what is still missing when that food is
-reached, and `k ≤ held` for a food with no replacement. More units than
+reached, `k ≤ held` for a food with no replacement, and `k ≤ room`. More units than
 `⌈m / restore⌉` restore nothing more and cost no less, so the bound loses no
 optimum. Among the cheapest vectors the one eating the FEWEST units in all is
 chosen (fewer consumables drawn for the same seconds); on a tie in both, the
@@ -56,8 +60,8 @@ from functools import lru_cache
 
 from artifactsmmo_cli.ai.rest_cooldown_core import rest_cooldown_seconds
 
-Food = tuple[int, Fraction | None, int]
-"""`(restore HP, price seconds or None, held units)`."""
+Food = tuple[int, Fraction | None, int, int]
+"""`(restore HP, price seconds or None, held units, room units)`."""
 
 Potion = tuple[int, Fraction | None, int]
 """`(units used, price seconds or None, held units)`."""
@@ -73,10 +77,11 @@ def count_bound(missing: int, restore: int) -> int:
     return -(-missing // restore)
 
 
-def food_bound(missing: int, restore: int, price: Fraction | None, held: int) -> int:
-    """The most units of a food the search tries: ⌈m / r⌉, and no more than are
-    held when the food has no replacement."""
-    bound = count_bound(missing, restore)
+def food_bound(missing: int, restore: int, price: Fraction | None, held: int,
+               room: int) -> int:
+    """The most units of a food the search tries: ⌈m / r⌉, no more than are
+    held when the food has no replacement, and no more than the bag's `room`."""
+    bound = min(count_bound(missing, restore), room)
     return bound if price is not None else min(bound, held)
 
 
@@ -95,10 +100,10 @@ def _validate(max_hp: int, food: Sequence[Food], eat_seconds: Fraction) -> None:
         raise ValueError(f"max_hp {max_hp} must be positive")
     if eat_seconds < 0:
         raise ValueError(f"eat_seconds {eat_seconds} must be non-negative")
-    for restore, price, held in food:
-        if restore <= 0 or (price is not None and price < 0) or held < 0:
-            raise ValueError(f"food ({restore}, {price}, {held}) needs restore > 0, "
-                             f"price >= 0 and held >= 0")
+    for restore, price, held, room in food:
+        if restore <= 0 or (price is not None and price < 0) or held < 0 or room < 0:
+            raise ValueError(f"food ({restore}, {price}, {held}, {room}) needs restore > 0, "
+                             f"price >= 0, held >= 0 and room >= 0")
 
 
 RECOVERY_TABLES = 64
@@ -124,10 +129,10 @@ def _recovery_table(max_hp: int, foods: tuple[Food, ...],
         if index == len(foods):
             choice: tuple[Fraction, int, tuple[int, ...]] = (Fraction(rest_part(missing, max_hp)), 0, ())
         else:
-            restore, price, held = foods[index]
+            restore, price, held, room = foods[index]
             rest_value, rest_units, rest_counts = best(index + 1, missing)
             choice = (rest_value, rest_units, (0, *rest_counts))
-            for k in range(1, food_bound(missing, restore, price, held) + 1):
+            for k in range(1, food_bound(missing, restore, price, held, room) + 1):
                 tail_value, tail_units, tail_counts = best(index + 1, max(0, missing - k * restore))
                 value = eat_cost(k, eat_seconds, price, held) + tail_value
                 if (value, k + tail_units) < choice[:2]:
@@ -142,7 +147,7 @@ def recovery_choice(missing_hp: int, max_hp: int, food: Sequence[Food],
                     eat_seconds: Fraction) -> tuple[Fraction, tuple[int, ...]]:
     """The cheapest way, in seconds, to recover `missing_hp`, and the units of
     each food it eats (see the module doc). Restores must be positive, prices,
-    held counts and `eat_seconds` non-negative."""
+    held counts, rooms and `eat_seconds` non-negative."""
     _validate(max_hp, food, eat_seconds)
     value, _, counts = _recovery_table(max_hp, tuple(food), eat_seconds)(0, max(0, missing_hp))
     return value, counts

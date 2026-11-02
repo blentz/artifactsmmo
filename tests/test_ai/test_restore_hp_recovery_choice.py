@@ -30,7 +30,8 @@ def _plan(hp: int, held: int) -> list[str]:
 
 
 def _loop_choice(hp: int, held: int) -> tuple[Fraction, tuple[int, ...]]:
-    return recovery_choice(1000 - hp, 1000, [(150, None, held)], EAT_SECONDS)
+    # Eaten from the bag: its room for the cheese is the units it holds.
+    return recovery_choice(1000 - hp, 1000, [(150, None, held, held)], EAT_SECONDS)
 
 
 def test_it_eats_the_chosen_food_when_the_loop_model_says_eating_is_cheaper() -> None:

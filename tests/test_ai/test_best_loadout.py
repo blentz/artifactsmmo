@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.strategy_driver import _fight_step_prep
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
@@ -107,7 +108,7 @@ def _bare(state: WorldState, gd: GameData) -> LoopRate:
     """The no-potion loop over `state`'s food menu: what the pick ranks the
     potions against."""
     loop = loop_rate(state, gd, "ogre", [], food_menu(state, gd, _CTX), {}, _CTX.timing(),
-                     _CTX.drops(), 0)
+                     _CTX.drops(), CarriedKeep(0, 0))
     assert loop is not None
     return loop
 
@@ -131,7 +132,7 @@ class TestBest:
         assert best.loadout == ("fire_res_potion",)
         food = food_menu(state, gd, _CTX)
         expected = loop_rate(state, gd, "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                             food, {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
+                             food, {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), CarriedKeep(0, 0))
         assert best.rate == expected
         assert best.rate.win is True
         # one boost a fight, and the held apples the recovery eats
@@ -197,7 +198,7 @@ class TestBest:
         state = _state(bank_items={"fire_res_potion": 40, "water_boost": 40})
         assert list(candidate_potions(state, gd, _CTX)) == ["water_boost", "fire_res_potion"]
         pair = loop_rate(state, gd, "ogre", [("water_boost", 1), ("fire_res_potion", 1)], (),
-                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
+                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing(), _CTX.drops(), CarriedKeep(0, 0))
         best = best_loadout(state, gd, _CTX, "ogre")
         assert pair is not None and pair.xp_per_second == best.rate.xp_per_second > 0
         assert best.loadout == ("fire_res_potion",)
@@ -218,7 +219,7 @@ class TestBest:
         bare = _bare(state, _gd())
         fire = loop_rate(state, _gd(), "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
                          food_menu(state, _gd(), _CTX), {"fire_res_potion": None}, _CTX.timing(),
-                         _CTX.drops(), 0)
+                         _CTX.drops(), CarriedKeep(0, 0))
         assert fire is not None
         assert seen == [[(bare.xp_per_second, units_used(bare)), (fire.xp_per_second, 3)]]
 

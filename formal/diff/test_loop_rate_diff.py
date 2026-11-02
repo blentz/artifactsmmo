@@ -33,7 +33,8 @@ from formal.diff.oracle_client import run_oracle
 
 _price = st.fractions(min_value=0, max_value=60, max_denominator=12)
 _food = st.tuples(st.integers(min_value=6, max_value=120), st.one_of(st.none(), _price),
-                  st.integers(min_value=0, max_value=4))
+                  st.integers(min_value=0, max_value=4),
+                  st.integers(min_value=0, max_value=30))          # room (Task 8c)
 _recovery_case = st.tuples(
     st.integers(min_value=-3, max_value=160),                   # missing
     st.integers(min_value=1, max_value=400),                    # max hp
@@ -48,10 +49,11 @@ def _scale(values: list[Fraction]) -> int:
 
 def _recovery_args(missing: int, max_hp: int, food: list[Food],
                    eat: Fraction) -> tuple[int, list[int]]:
-    scale = _scale([eat, *(p for _, p, _ in food if p is not None)])
+    scale = _scale([eat, *(p for _, p, _, _ in food if p is not None)])
     args = [scale, int(eat * scale), max_hp, max(0, missing), len(food)]
-    for restore, price, held in food:
-        args += [restore, 0 if price is None else 1, 0 if price is None else int(price * scale), held]
+    for restore, price, held, room in food:
+        args += [restore, 0 if price is None else 1, 0 if price is None else int(price * scale), held,
+                 room]
     return scale, args
 
 
@@ -73,16 +75,19 @@ def test_recovery_witnesses_against_lean() -> None:
     """The Lean file's witnesses, through the oracle and the live code."""
     cases: list[tuple[int, int, list[Food], Fraction]] = [
         (60, 100, [], Fraction(3)),
-        (60, 100, [(50, Fraction(0), 0)], Fraction(3)),
-        (60, 100, [(50, Fraction(40), 0)], Fraction(3)),
-        (60, 100, [(50, Fraction(60), 0)], Fraction(3)),
-        (60, 100, [(50, Fraction(60), 2)], Fraction(3)),
-        (60, 100, [(50, None, 1)], Fraction(3)),
-        (0, 100, [(50, Fraction(0), 0)], Fraction(3)),
+        (60, 100, [(50, Fraction(0), 0, 2)], Fraction(3)),
+        (60, 100, [(50, Fraction(40), 0, 2)], Fraction(3)),
+        (60, 100, [(50, Fraction(60), 0, 2)], Fraction(3)),
+        (60, 100, [(50, Fraction(60), 2, 2)], Fraction(3)),
+        (60, 100, [(50, None, 1, 2)], Fraction(3)),
+        (0, 100, [(50, Fraction(0), 0, 2)], Fraction(3)),
         (1, 100, [], Fraction(3)),
         (250, 100, [], Fraction(3)),
+        # Task 8c: room for one unit, then for none (the Rest fallback).
+        (60, 100, [(50, Fraction(0), 0, 1)], Fraction(3)),
+        (60, 100, [(50, Fraction(0), 0, 0)], Fraction(3)),
     ]
-    expected = [60, 3, 53, 60, 3, 13, 0, 3, 100]
+    expected = [60, 3, 53, 60, 3, 13, 0, 3, 100, 13, 60]
     built = [_recovery_args(*case) for case in cases]
     rows = run_oracle("loop_recovery", [args for _, args in built])
     assert [Fraction(row["recovery"], scale) for (scale, _), row in zip(built, rows, strict=True)] == expected

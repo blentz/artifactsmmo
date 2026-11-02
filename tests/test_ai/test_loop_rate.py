@@ -8,12 +8,13 @@ import pytest
 import artifactsmmo_cli.ai.loop_rate as loop_mod
 from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE, travel_seconds
 from artifactsmmo_cli.ai.boost_selection import project_equip
-from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, food_carry, potion_carry
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
 from artifactsmmo_cli.ai.fight_odds_core import win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
 from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.loop_rate import EAT_SECONDS, FoodOffer, LoopRate, food_menu, loop_rate
@@ -27,6 +28,8 @@ _CTX = NO_PROFILE_CONTEXT
 _TIMING = committed_timing()[0]
 """The committed live capture's fight-seconds fit (spec 2026-10-18 §2.9)."""
 _UTILITY = dict(level=1, type_="utility")
+_NOTHING_KEPT = CarriedKeep(0, 0)
+"""A bag the keep leaves empty through a deposit."""
 
 
 def _gd() -> GameData:
@@ -62,7 +65,7 @@ def _rate(state: WorldState, gd: GameData, loadout: list[tuple[str, int]],
           prices: dict[str, Fraction | None] | None = None,
           food: tuple[FoodOffer, ...] = ()) -> LoopRate | None:
     return loop_rate(state, gd, "ogre", loadout, food, _FREE if prices is None else prices,
-                     _TIMING, LearnedDrops.empty(), 0)
+                     _TIMING, LearnedDrops.empty(), _NOTHING_KEPT)
 
 
 def _state(**kw: object) -> WorldState:
@@ -136,7 +139,8 @@ class TestLoop:
         gd = _gd()
         worn = _state(inventory={"fire_res_potion": 1})
         worn = project_equip(worn, "fire_res_potion", gd, stock=1)
-        assert loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING, LearnedDrops.empty(), 0).win is False  # type: ignore[union-attr]
+        bare = loop_mod.loop_rate(worn, gd, "ogre", [], (), {}, _TIMING, LearnedDrops.empty(), _NOTHING_KEPT)
+        assert bare is not None and bare.win is False
 
     def test_a_priced_consumable_costs_its_price(self) -> None:
         rate = _rate(_state(), _gd(), [("fire_res_potion", 1)], prices={"fire_res_potion": Fraction(7)})
@@ -178,7 +182,7 @@ class TestLoop:
 
     def test_foods_shorten_recovery_and_are_reported_eaten(self) -> None:
         gd = _gd()
-        state = _state(inventory={"heal_potion": 5})
+        state = _state(inventory={"heal_potion": 5}, inventory_max=200)
         food = (FoodOffer("apple", 30, Fraction(0), 1), FoodOffer("bread", 60, None, 1))
         with_food = _rate(state, gd, [("heal_potion", 5)], food=food)
         without = _rate(state, gd, [("heal_potion", 5)])
@@ -198,7 +202,7 @@ class TestOdds:
         # IS the one `fight_walk` walk, priced the way the loop was before the
         # odds (a held drink free, the rest at their price, the food menu).
         gd = _gd()
-        state = _state(inventory={"heal_potion": 1, "apple": 1})
+        state = _state(inventory={"heal_potion": 1, "apple": 1}, inventory_max=200)
         loadout = [("heal_potion", 5)]
         prices: dict[str, Fraction | None] = {"heal_potion": Fraction(7)}
         food = (FoodOffer("apple", 30, Fraction(3), 1),)
@@ -206,8 +210,11 @@ class TestOdds:
         assert outcome.win and restore == "heal_potion" and outcome.used > 1
         consumed = consumed_seconds([(outcome.used, Fraction(7), 1)])
         assert consumed is not None and consumed > 0
+        # The bag's room for the apple: its cap less the potion carry past the
+        # five worn.
+        room = 200 - (potion_carry(outcome.used) - 5)
         recovery, counts = recovery_choice(max_hp - outcome.hp_end // 10_000, max_hp,
-                                           [(30, Fraction(3), 1)], EAT_SECONDS)
+                                           [(30, Fraction(3), 1, room)], EAT_SECONDS)
         xp = gd.xp_per_kill("ogre", 5)
         rate = _rate(state, gd, loadout, prices=prices, food=food)
         assert rate is not None and rate.p_win == 1
@@ -437,7 +444,8 @@ def _trip_gd() -> GameData:
 
 def _trip_rate(state: WorldState, gd: GameData, monster: str = "ogre",
                loadout: list[tuple[str, int]] | None = None, food: tuple[FoodOffer, ...] = (),
-               drops: LearnedDrops | None = None, carried: int = 0) -> LoopRate | None:
+               drops: LearnedDrops | None = None,
+               carried: CarriedKeep = _NOTHING_KEPT) -> LoopRate | None:
     return loop_rate(state, gd, monster, loadout or [], food, _FREE, _TIMING,
                      LearnedDrops.empty() if drops is None else drops, carried)
 
@@ -460,7 +468,7 @@ class TestBankTrips:
             rate.fight_seconds + rate.recovery_seconds + trip * 2 / 20)
 
     def test_the_bag_holds_less_what_the_keep_carries(self) -> None:
-        rate = _trip_rate(_state(**_WINS), _trip_gd(), carried=5)
+        rate = _trip_rate(_state(**_WINS), _trip_gd(), carried=CarriedKeep(5, 1))
         assert rate is not None
         trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
         assert rate.xp_per_second == rate.xp_per_kill / (
@@ -474,7 +482,7 @@ class TestBankTrips:
         trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
         assert rate.xp_per_second == rate.xp_per_kill / (
             rate.fight_seconds + rate.recovery_seconds
-            + trip * 2 / (100 - food_carry(eaten)))
+            + trip * 2 / (100 - food_carry(eaten, 100, None)))
 
     def test_the_potion_carry_past_the_worn_stock_is_carried(self) -> None:
         """A heal potion worn one at a time: what the carry holds past it sits
@@ -521,8 +529,8 @@ class TestBankTrips:
         it is still the loop it would be (its fight and recovery), named by
         `runnable`, never a bare None."""
         gd = _trip_gd()
-        stuck = _trip_rate(_state(**_WINS), gd, carried=20)
-        runs = _trip_rate(_state(**_WINS), gd, carried=19)
+        stuck = _trip_rate(_state(**_WINS), gd, carried=CarriedKeep(20, 1))
+        runs = _trip_rate(_state(**_WINS), gd, carried=CarriedKeep(19, 1))
         assert stuck is not None and runs is not None
         assert (stuck.runnable, stuck.xp_per_second) == (False, 0)
         assert runs.runnable and runs.xp_per_second > 0
@@ -531,7 +539,7 @@ class TestBankTrips:
 
     def test_a_loop_that_drops_nothing_needs_no_room_and_no_bank(self) -> None:
         gd = _gd()
-        rate = _trip_rate(_state(**_WINS), gd, carried=20)
+        rate = _trip_rate(_state(**_WINS), gd, carried=CarriedKeep(20, 1))
         assert rate is not None
         assert rate.xp_per_second == rate.xp_per_kill / (rate.fight_seconds
                                                          + rate.recovery_seconds)
@@ -624,8 +632,72 @@ class TestKillsPerSecond:
         """No room for the drops: the loop does not run, so it kills nothing,
         though the same loop with one unit of room kills."""
         gd = _trip_gd()
-        stuck = _trip_rate(_state(**_WINS), gd, carried=20)
-        runs = _trip_rate(_state(**_WINS), gd, carried=19)
+        stuck = _trip_rate(_state(**_WINS), gd, carried=CarriedKeep(20, 1))
+        runs = _trip_rate(_state(**_WINS), gd, carried=CarriedKeep(19, 1))
         assert stuck is not None and runs is not None
         assert (stuck.runnable, stuck.kills_per_second) == (False, 0)
         assert runs.kills_per_second > 0
+
+
+class TestFoodRoom:
+    """Task 8c (ruling C2-food): a food's carry is the least of the horizon
+    demand, the bag's room for it and, with no replacement, the units held
+    (`chosen_loadout.food_carry`), and the recovery eats no more of a food a
+    fight than that room."""
+
+    def test_a_held_food_eaten_several_a_fight_leaves_a_near_empty_bag_runnable(self) -> None:
+        """An empty bag of 100 and 40 held 10-HP crumbs with no replacement: the
+        recovery eats six a fight, whose horizon carry (120) is past the bag.
+        The uncapped carry read the bag full and the loop `runnable=False`;
+        bounded by the 40 held, it leaves 60 units of room for the drops."""
+        state = _state(**_WINS, inventory_max=100)
+        rate = _trip_rate(state, _trip_gd(), food=(FoodOffer("crumb", 10, None, 40),))
+        assert rate is not None
+        [(_, eaten)] = rate.eaten
+        assert eaten >= 5 and eaten * CARRY_HORIZON_FIGHTS > 100
+        assert rate.runnable and rate.xp_per_second > 0
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / (100 - 40))
+
+    def test_the_recovery_eats_no_more_than_the_bag_carries(self) -> None:
+        """A bag of 3 carries three free 10-HP crumbs: the recovery eats those
+        three and rests off the rest — Rest is the priced fallback, not a veto.
+        The crumbs fill the bag, so the loop does not run."""
+        state = _state(**_WINS, inventory_max=3)
+        rate = _trip_rate(state, _trip_gd(), food=(FoodOffer("crumb", 10, Fraction(0), 0),))
+        assert rate is not None
+        missing = rate.max_hp - rate.hp_end
+        assert missing > 30
+        assert rate.eaten == (("crumb", 3),)
+        assert rate.recovery_seconds == recovery_seconds(missing, rate.max_hp,
+                                                         [(10, Fraction(0), 0, 3)], EAT_SECONDS)
+        assert rate.recovery_seconds > recovery_seconds(missing, rate.max_hp,
+                                                        [(10, Fraction(0), 0, 99)], EAT_SECONDS)
+        assert not rate.runnable
+
+    def test_a_food_with_no_slot_falls_back_to_rest(self) -> None:
+        """The keep's stacks fill every slot: a food the bag holds no stack of
+        has no room, so the recovery rests; one free slot and it eats."""
+        state = _state(**_WINS, inventory_max=100, inventory_slots_max=2)
+        food = (FoodOffer("crumb", 10, Fraction(0), 0),)
+        full = _trip_rate(state, _trip_gd(), food=food, carried=CarriedKeep(5, 2))
+        slot = _trip_rate(state, _trip_gd(), food=food, carried=CarriedKeep(5, 1))
+        assert full is not None and slot is not None
+        assert full.eaten == () and slot.eaten
+        assert full.recovery_seconds > slot.recovery_seconds
+
+    def test_a_food_carried_takes_a_slot_from_the_next(self) -> None:
+        """Two held foods with no replacement, both eaten a fight, and one slot
+        free past the keep: the first food's stack takes it, so the second
+        carries nothing, and a bag of the keep plus two units keeps one unit of
+        room for the drops."""
+        state = _state(**_WINS, inventory_max=7, inventory_slots_max=2)
+        food = (FoodOffer("bread", 50, None, 1), FoodOffer("crumb", 10, None, 1))
+        rate = _trip_rate(state, _trip_gd(), food=food, carried=CarriedKeep(5, 1))
+        assert rate is not None
+        assert rate.eaten == (("bread", 1), ("crumb", 1))
+        assert rate.runnable
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / (7 - 5 - 1))

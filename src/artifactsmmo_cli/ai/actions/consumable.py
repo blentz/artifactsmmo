@@ -72,8 +72,9 @@ class UseConsumableAction(Action):
         codes = [code for code, stats in self._item_stats.items()
                  if state.inventory.get(code, 0) > 0 and stats.hp_restore > 0
                  and stats.level <= state.level]
-        food = [(self._item_stats[code].hp_restore, None, state.inventory[code])
-                for code in codes]
+        # Eaten from the bag: its room for each food is the units it holds.
+        food = [(self._item_stats[code].hp_restore, None, state.inventory[code],
+                 state.inventory[code]) for code in codes]
         _, counts = recovery_choice(deficit, state.max_hp, food,
                                     Fraction(CONSUMABLE_COOLDOWN_SECONDS))
         for code, units in zip(codes, counts, strict=True):

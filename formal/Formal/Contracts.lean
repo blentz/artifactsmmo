@@ -3529,31 +3529,42 @@ example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f �
       Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.recovery scale eat maxHp fs m' :=
   @Formal.LoopRate.recovery_mono_missing
 
-example : ∀ (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp ((r, p, h) :: fs) m
+example : ∀ (scale eat maxHp r h c : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p, h, c) :: fs) m
       ≤ Formal.LoopRate.recovery scale eat maxHp fs m :=
   @Formal.LoopRate.add_food_le
 
-example : ∀ (scale eat maxHp r h p p' : Nat) (post : List Formal.LoopRate.Food), p' ≤ p →
+example : ∀ (scale eat maxHp r h c p p' : Nat) (post : List Formal.LoopRate.Food), p' ≤ p →
     ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
-      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p', h) :: post) m
-        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p', h, c) :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m :=
   @Formal.LoopRate.price_mono
 
-example : ∀ (scale eat maxHp r h p : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some 0, h) :: post) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
+example : ∀ (scale eat maxHp r h c p : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some 0, h, c) :: post) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m :=
   @Formal.LoopRate.free_food_le
 
-example : ∀ (scale eat maxHp r h h' : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
+example : ∀ (scale eat maxHp r h h' c : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
     h ≤ h' → ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
-      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h') :: post) m
-        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h) :: post) m :=
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h', c) :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m :=
   @Formal.LoopRate.held_free_le
 
-example : ∀ (scale eat maxHp r h q : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some q, h) :: post) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, none, h) :: post) m :=
+example : ∀ (scale eat maxHp r h c c' : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
+    c ≤ c' → ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c') :: post) m
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m :=
+  @Formal.LoopRate.room_mono
+
+example : ∀ (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p, h, 0) :: fs) m
+      = Formal.LoopRate.recovery scale eat maxHp fs m :=
+  @Formal.LoopRate.no_room_skips
+
+example : ∀ (scale eat maxHp r h c q : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some q, h, c) :: post) m
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, none, h, c) :: post) m :=
   @Formal.LoopRate.priced_le_unpriced
 
 example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f ∈ fs, 0 < f.1) →

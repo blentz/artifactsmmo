@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, ChosenLoadout
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -953,7 +953,7 @@ def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
             patch.object(craft_completeness, "loadout_for", side_effect=eats_gudgeon):
         state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
         plan = plan_craft("iron_boots", state, gd)
-        assert repr(plan[0]) == f"Gather(gudgeon_spot×{food_carry(1)})"
+        assert repr(plan[0]) == f"Gather(gudgeon_spot×{CARRY_HORIZON_FIGHTS})"
         fight = next(a for a in plan if isinstance(a, FightAction))
         asked.clear()
         assert advances_a_heal_prep(plan[0], plan, state, gd)

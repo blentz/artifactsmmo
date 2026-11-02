@@ -462,6 +462,8 @@ open Formal.PriorityBand
 #print axioms Formal.LoopRate.rate_antitone_missing
 #print axioms Formal.LoopRate.held_free_le
 #print axioms Formal.LoopRate.priced_le_unpriced
+#print axioms Formal.LoopRate.room_mono
+#print axioms Formal.LoopRate.no_room_skips
 #print axioms Formal.LoopRate.recovery_le_planCost
 #print axioms Formal.LoopRate.eatCost_held_zero
 #print axioms Formal.LoopRate.potionCost_held_zero

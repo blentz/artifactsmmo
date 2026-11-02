@@ -16,10 +16,15 @@ without importing the loop-rate machinery (which imports the context).
 * CARRY — what the character takes into a run of fights: the units one fight
   uses × `CARRY_HORIZON_FIGHTS`. A utility slot holds at most
   `UTILITY_SLOT_MAX_STACK` units (the API's equip maximum), so a potion's carry
-  is capped there; food sits in the bag and is not capped."""
+  is capped there. Food sits in the bag, so a food's carry is capped by what
+  the bag can hold of it and, where the reader prices from held stock, by that
+  stock (`food_carry`, Task 8c ruling C2-food): the uncapped horizon asked a
+  recovery eating several units a fight for more than the bag could ever hold,
+  so a nearly empty bag read full and the loop read `runnable=False`."""
 
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 
 CARRY_HORIZON_FIGHTS = 20
@@ -71,7 +76,25 @@ def potion_carry(used_per_fight: int) -> int:
     return min(used_per_fight * CARRY_HORIZON_FIGHTS, UTILITY_SLOT_MAX_STACK)
 
 
-def food_carry(eaten_per_fight: int) -> int:
-    """Units of a chosen food to carry in the bag: one recovery's use × the
-    horizon."""
-    return eaten_per_fight * CARRY_HORIZON_FIGHTS
+def food_room(bag_units: int, slots_free: int, qty_free: int) -> int:
+    """Units of one food a bag can hold: the units of it the bag already holds,
+    plus the bag's quantity room when the food's stack is held or a slot is free
+    for it (`inventory_room.has_room`, the one slot and quantity model: a new
+    stack needs a free slot, a held stack grows on quantity alone); otherwise
+    only the units held. `slots_free` and `qty_free` are the reader's bag less
+    every other keep."""
+    new_stacks = 0 if bag_units > 0 else 1
+    if not has_room(new_stacks, 0, slots_free, qty_free):
+        return bag_units
+    return bag_units + qty_free
+
+
+def food_carry(eaten_per_fight: int, room: int, stock: int | None) -> int:
+    """Units of a chosen food to carry in the bag: the least of (a) one
+    recovery's use × the horizon, (b) `room`, what the bag can hold of it
+    (`food_room`), and (c) `stock`, the units held or obtainable now (bag and
+    bank) when the reader prices from held stock; `stock` is None when units
+    past the held ones are made, so no stock bounds the carry. The ONE bound:
+    the keep, the loop rate and the heal prep all read it."""
+    carry = min(eaten_per_fight * CARRY_HORIZON_FIGHTS, room)
+    return carry if stock is None else min(carry, stock)

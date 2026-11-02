@@ -57,7 +57,15 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   bank (`GameData.bank_location`) and back, and pays one deposit
   (`cost_core.DEPOSIT_SECONDS_PER_CODE`) per distinct drop code. A loop with
   drops and no room for them does not run (`LoopRate.runnable` False, no XP a
-  second); one with no drops makes no trip and needs no bank."""
+  second); one with no drops makes no trip and needs no bank.
+* FOOD ROOM (Task 8c, ruling C2-food) — a food's carry is bounded by what that
+  bag can hold of it (`chosen_loadout.food_room`: the cap and the slots less
+  the keep's units and stacks, the potion carry, and the foods before it in
+  menu order) and, for a food with no replacement, by the units held
+  (`food_carry`). The recovery eats no more of a food a fight than the room
+  the keep and the potion carry leave (`loop_rate_core.recovery_choice`), so a
+  food the bag cannot carry falls back to the other foods and to Rest, priced
+  in seconds."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -69,7 +77,7 @@ from artifactsmmo_cli.ai.actions.cost_core import (
     DEPOSIT_SECONDS_PER_CODE,
     travel_seconds,
 )
-from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_room, potion_carry
 from artifactsmmo_cli.ai.combat import fight_stats
 from artifactsmmo_cli.ai.consumable_price import replacement_price_of
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
@@ -80,6 +88,7 @@ from artifactsmmo_cli.ai.fight_walk import fight_walk, odds_walk, walk_seconds, 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, heal_candidates
 from artifactsmmo_cli.ai.held_stock import held_count
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loop_rate_core import (
@@ -156,11 +165,12 @@ class LoopRate:
 class LoopInputs:
     """What every loop of one character's cycle reads alike, whatever the
     monster or the gear: the learned fight seconds, the cycle's drop evidence
-    and the units the keep holds in the bag (`inventory_keep.carried_keep`)."""
+    and the units and slots the keep holds in the bag
+    (`inventory_keep.carried_keep`)."""
 
     timing: FightSecondsModel
     drops: LearnedDrops
-    carried: int
+    carried: CarriedKeep
 
 
 def food_menu(state: WorldState, game_data: GameData, ctx: SelectionContext,
@@ -206,14 +216,17 @@ def bank_walk(state: WorldState, game_data: GameData, monster: str) -> int:
 def loop_rate(state: WorldState, game_data: GameData, monster: str,
               loadout: Sequence[tuple[str, int]], food: Sequence[FoodOffer],
               prices: Mapping[str, Fraction | None],
-              timing: FightSecondsModel, drops: LearnedDrops, carried: int) -> LoopRate | None:
+              timing: FightSecondsModel, drops: LearnedDrops,
+              carried: CarriedKeep) -> LoopRate | None:
     """The loop's expected XP per second against `monster` wearing `loadout` and
     recovering over `food` (see the module doc): every crit ending of the fight
     is priced (`odds_walk`), a loss walks back from `RESPAWN_TILE`, the
     fight lasts `walk_seconds` under `timing`, and the bank trips its drops
     force are shared over the fights between them, the drops priced on
-    `drops` and the bag's room less `carried`, the units the keep holds in it
-    other than food and potions (`inventory_keep.carried_keep`). `prices` holds
+    `drops` and the bag's room less `carried`, the units and slots the keep
+    holds in it other than food and potions (`inventory_keep.carried_keep`);
+    each food's carry and its units a recovery eats are bounded by the room
+    left for it (`chosen_loadout.food_room`, `food_carry`). `prices` holds
     every loadout potion's replacement price. None when a potion with no
     replacement is expected (rounded up) to be drunk past the held units. A
     fight that drops something into a bag with no room for it is a loop that
@@ -221,17 +234,32 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     outcome, max_hp, restore_code = fight_walk(state, game_data, monster, loadout)
     endings, _, _ = odds_walk(state, game_data, monster, loadout)
     p_win = odds_win(endings)
-    menu = [(f.restore, f.price, f.held) for f in food]
     extra = Fraction(0)
     if p_win < 1:
         extra = (1 - p_win) * travel_seconds(RESPAWN_TILE, monster_tile(state, game_data, monster))
     held = {code: held_count(code, state) for code, _ in loadout}
+    drunk = [tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)
+             for e in endings]
     used_mean = {code: Fraction(0) for code, _ in loadout}
+    for e, used in zip(endings, drunk, strict=True):
+        for code, n in used:
+            used_mean[code] += e.prob * n
+    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
+    if any(prices[code] is None and n > held[code] for code, n in used_units):
+        return None
+    stats = fight_stats(wear(state, game_data, loadout)[0], game_data, monster)
+    # The bag after a deposit: the keep's units and stacks, then the potion
+    # carry the utility slots do not hold; the foods' room is what is left.
+    potion_bag = [max(0, potion_carry(n) - stock)
+                  for (_, stock), (_, n) in zip(loadout, used_units, strict=True)]
+    qty_free = stats.inventory_max - carried.units - sum(potion_bag)
+    slots_free = state.inventory_slots_max - carried.stacks - sum(1 for u in potion_bag if u > 0)
+    room = food_room(0, slots_free, qty_free)
+    menu = [(f.restore, f.price, f.held, room) for f in food]
     eaten_mean = [Fraction(0)] * len(food)
     recovery_mean = consumed_mean = hp_end_mean = Fraction(0)
-    for e in endings:
-        used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)
-        # A potion with no replacement is paid on its expectation (below), so no
+    for e, used in zip(endings, drunk, strict=True):
+        # A potion with no replacement is paid on its expectation (above), so no
         # single ending prices it: only the priced ones enter, and a priced
         # drink always has a price.
         consumed = consumed_seconds([(n, prices[code], held[code]) for code, n in used
@@ -242,28 +270,27 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
         recovery_mean += e.prob * recovery
         consumed_mean += e.prob * consumed
         hp_end_mean += e.prob * hp_end
-        for code, n in used:
-            used_mean[code] += e.prob * n
         for i, k in enumerate(counts):
             eaten_mean[i] += e.prob * k
     extra += recovery_mean + consumed_mean
     xp = game_data.xp_per_kill(monster, state.level, state.wisdom)
     fight = walk_seconds(state, game_data, monster, loadout, timing)
-    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)
-    if any(prices[code] is None and n > held[code] for code, n in used_units):
-        return None
-    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)
-    stats = fight_stats(wear(state, game_data, loadout)[0], game_data, monster)
-    carry = (carried + sum(food_carry(n) for _, n in eaten)
-             + sum(max(0, potion_carry(n) - stock)
-                   for (_, stock), (_, n) in zip(loadout, used_units, strict=True)))
+    eaten_offers = [(f, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0]
+    eaten = tuple((f.code, n) for f, n in eaten_offers)
+    # Each eaten food carries what the bag has left for it, in menu order; one
+    # with no replacement carries no more than is held.
+    for f, n in eaten_offers:
+        units = food_carry(n, food_room(0, slots_free, qty_free),
+                           f.held if f.price is None else None)
+        qty_free -= units
+        slots_free -= 1 if units > 0 else 0
     table = game_data.monster_drops(monster)
     per_fight = drops_per_fight(p_win, [
         drops.units_per_attempt(monster, item, drop_rate, low, high, stats.prospecting)
         for item, drop_rate, low, high in table])
     walk = bank_walk(state, game_data, monster) if per_fight > 0 else 0
     trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),
-                       per_fight, stats.inventory_max - carry)
+                       per_fight, qty_free)
     rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)
     # A kill pays one: the same renewal-reward over the same seconds.
     kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)
