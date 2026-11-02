@@ -67,19 +67,19 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 _ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}
-"""The walk's fixed tiers around the priced middle (`walk_graph`'s `prefer`):
+"""The walk's fixed groups around the priced middle (`walk_graph`'s `prefer`):
 stock already owned (a withdraw, a recycle of a held copy) before anything that
 makes new copies, and a sale of a licensed surplus after them. Every other
-kind is tier 1, ordered by the price."""
+kind is group 1, ordered by the price."""
 
 
 def _walk_order(route: Route, priced: Mapping[tuple[SourceKind, str], int | Fraction]
                 ) -> tuple[int, int | Fraction | float]:
-    """`route`'s place in the walk: its tier (`_ORDER_STOCK`), then, in the
-    middle tier, the unit cost the pricer fills it at; a route the pricer does
+    """`route`'s place in the walk: its group (`_ORDER_STOCK`), then, in the
+    middle group, the unit cost the pricer fills it at; a route the pricer does
     not list goes after every priced one."""
-    tier = _ORDER_STOCK.get(route.kind, 1)
-    return tier, (priced.get((route.kind, route.via), inf) if tier == 1 else 0)
+    group = _ORDER_STOCK.get(route.kind, 1)
+    return group, (priced.get((route.kind, route.via), inf) if group == 1 else 0)
 
 
 _MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
