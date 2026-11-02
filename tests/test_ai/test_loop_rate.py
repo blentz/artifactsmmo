@@ -724,6 +724,25 @@ class TestFoodRoom:
                                                   strict=True))
         assert not rate.runnable
 
+    def test_every_ending_eats_within_the_deepest_endings_allotment(self) -> None:
+        """One slot, and a fight that ends 60 or 30 HP short. The deepest
+        ending's cheapest recovery in the bag is one 60-HP pie (3 + 2 s); the
+        shallow one alone would eat three free crumbs, a second food the one
+        slot cannot hold. The bag is allotted the pie, and every ending eats
+        within it, so the loop eats pies only and never a crumb it has no stack
+        for."""
+        state = _state(attack={"fire": 40}, critical_strike=50, inventory_max=100,
+                       inventory_slots_max=1)
+        endings, _, _ = odds_walk(state, _trip_gd(), "ogre", [])
+        assert sorted({e.hp_end // 10_000 for e in endings}) == [40, 70]
+        food = (FoodOffer("pie", 60, Fraction(2), 0), FoodOffer("crumb", 10, None, 3))
+        rate = _trip_rate(state, _trip_gd(), food=food)
+        assert rate is not None
+        assert recovery_choice(30, 100, [(60, Fraction(2), 0, 100), (10, None, 3, 100)],
+                               EAT_SECONDS, 100, 1)[1] == (0, 3)
+        assert rate.eaten == (("pie", 1),)
+        assert rate.recovery_seconds == 5
+
     def test_two_foods_with_two_slots_share_the_room(self) -> None:
         """Two held foods with no replacement, both eaten a fight, and two
         slots free past the keep: both carry their fight."""
