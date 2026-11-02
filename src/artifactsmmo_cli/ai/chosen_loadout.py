@@ -16,10 +16,23 @@ without importing the loop-rate machinery (which imports the context).
 * CARRY — what the character takes into a run of fights: the units one fight
   uses × `CARRY_HORIZON_FIGHTS`. A utility slot holds at most
   `UTILITY_SLOT_MAX_STACK` units (the API's equip maximum), so a potion's carry
-  is capped there; food sits in the bag and is not capped."""
+  is capped there. Food sits in the bag, so a food's carry is capped by what
+  the bag can hold of it and, where the reader prices from held stock, by that
+  stock (`food_carry`, Task 8c ruling C2-food): the uncapped horizon asked a
+  recovery eating several units a fight for more than the bag could ever hold,
+  so a nearly empty bag read full and the loop read `runnable=False`.
+* ONE ROOM — the bag's room is shared by every food the recovery eats, so it is
+  allocated jointly (`food_shares`): each food's share is its part of the room
+  in proportion to the units one fight eats of it, the recovery's own plan, so
+  no listing order and no code decides who gets the room. The loop's recovery
+  never eats more of the foods a fight than that room holds
+  (`loop_rate_core.recovery_choice`), so every food it eats has a share of at
+  least one fight's units (`Formal.LoopRate.share_covers`)."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 
 CARRY_HORIZON_FIGHTS = 20
@@ -71,7 +84,36 @@ def potion_carry(used_per_fight: int) -> int:
     return min(used_per_fight * CARRY_HORIZON_FIGHTS, UTILITY_SLOT_MAX_STACK)
 
 
-def food_carry(eaten_per_fight: int) -> int:
-    """Units of a chosen food to carry in the bag: one recovery's use × the
-    horizon."""
-    return eaten_per_fight * CARRY_HORIZON_FIGHTS
+def food_shares(foods: Sequence[tuple[int, int]], slots_free: int, qty_free: int) -> tuple[int, ...]:
+    """The bag's room for each of the loadout's foods, allocated jointly: one
+    room for all of them (Task 8c ruling C2-food, fix round 1). `foods` holds,
+    per food, the units one fight eats of it and the units of it the bag holds;
+    `slots_free` and `qty_free` are the reader's bag less every other keep.
+
+    The room is the foods' own units plus the free quantity (none past the cap). A food the bag
+    holds a stack of grows on quantity alone; the foods it holds none of need a
+    new stack each, and a bag without a free slot for every one of them takes
+    none of them (`inventory_room.has_room`, the one slot and quantity model —
+    which of them would get a short slot is no fact the bag knows). The foods
+    admitted share the room in proportion to the units one fight eats of each,
+    rounded down: the shares sum to at most the room, and a room that holds one
+    fight's units of every admitted food gives each at least its fight
+    (`Formal.LoopRate.shares_sum_le`, `share_covers`)."""
+    qty = sum(bag for _, bag in foods) + max(0, qty_free)
+    new_stacks = sum(1 for eaten, bag in foods if eaten > 0 and bag == 0)
+    admits_new = has_room(new_stacks, 0, slots_free, qty)
+    admitted = [eaten > 0 and (bag > 0 or admits_new) for eaten, bag in foods]
+    total = sum(eaten for (eaten, _), yes in zip(foods, admitted, strict=True) if yes)
+    return tuple(eaten * qty // total if yes else 0
+                 for (eaten, _), yes in zip(foods, admitted, strict=True))
+
+
+def food_carry(eaten_per_fight: int, room: int, stock: int | None) -> int:
+    """Units of a chosen food to carry in the bag: the least of (a) one
+    recovery's use × the horizon, (b) `room`, the bag's room for it
+    (`food_shares`), and (c) `stock`, the units held or obtainable now (bag and
+    bank) when the reader prices from held stock; `stock` is None when units
+    past the held ones are made, so no stock bounds the carry. The ONE bound:
+    the keep, the loop rate and the heal prep all read it."""
+    carry = min(eaten_per_fight * CARRY_HORIZON_FIGHTS, room)
+    return carry if stock is None else min(carry, stock)

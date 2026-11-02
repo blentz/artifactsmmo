@@ -44,33 +44,33 @@ SHED_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
                    / "shed_reachability_completeness.py")
 LIVENESS_CENSUS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "audit"
                        / "liveness_completeness.py")
-GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "guards.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
 OPTIMIZE_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "optimize_loadout.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
-SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
+SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "skill_grind_selection.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
-PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
+PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "prerequisite_graph.py"
 RECYCLE_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "recycle.py"
 DESTRUCTIVE_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "destructive_license.py"
-OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
-STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
+OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "objective.py"
+STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
 KIT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "kit_selection.py"
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
-OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
+OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "owned_count.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
-DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
+DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "decide_key.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
@@ -88,7 +88,6 @@ BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_ve
 HELD_TASK_PAYS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_task_pays.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
-POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
 GOLD_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gold_surplus_core.py"
@@ -97,10 +96,6 @@ DEPOSIT_ALL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "deposi
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 REST_COOLDOWN_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "rest_cooldown_core.py"
-OBSERVED_RATE_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
-                          / "observed_rate_core.py")
-EQUIP_ACTIONS_CORE_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment"
-                          / "equip_actions_core.py")
 FIGHT_LOOP_COST_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                        / "fight_loop_cost.py")
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
@@ -117,9 +112,9 @@ CHOSEN_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "chosen_loadout.
 UTILITY_SLOT_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "utility_slot.py"
 CRAFT_POTIONS_GOAL_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "craft_potions.py"
 CONSUMABLE_FLOOR_SRC_W5 = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor.py"
-MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
+MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "means.py"
 FLEET_WORK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_work.py"
-GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "guards.py"
 THRESHOLDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "thresholds.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
@@ -136,9 +131,7 @@ BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ban
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
 MONSTER_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_catalog.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
-COMBAT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_picker.py"
 TASK_RESERVATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_reservation.py"
-PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 COORDINATION_STORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 SUPPLY_BATCH_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "supply_batch_target.py"
 # Phase-18 — additional Goal sources.
@@ -164,6 +157,10 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equip_value.py"
 GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+SCENARIO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scenario.py"
+DROP_WALL_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "drop_wall_census.py"
+CURRENCY_WALL_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "currency_wall_census.py"
+GEAR_OBJECTIVE_FIGHTER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 RECYCLE_YIELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_yield.py"
 USE_CONSUMABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "consumable.py"
 CRAFT_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "crafting.py"
@@ -174,21 +171,19 @@ PROGRESSION_RESERVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progressio
 DECOMPOSE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decompose_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
-PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 GEAR_OBJECTIVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_core.py"
 FLEET_CLIMB_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climb_core.py"
 FLEET_CLIMBER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_climber.py"
 FLEET_PIECES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fleet_pieces.py"
 GEAR_OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective.py"
 GEAR_OBJECTIVE_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_objective_context.py"
-PROGRESSION_TREE_IMPURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree.py"
 SLOT_OCCUPANCY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "slot_occupancy.py"
 REGION_EDGES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "region_edges.py"
 TRANSITION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "transition.py"
 DROP_ROUTES_SRC_T14A = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model"
                         / "drop_routes.py")
 CURRENCY_BUY_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "currency_buy_batch.py"
-SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "synergy_core.py"
+SYNERGY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "synergy_core.py"
 REQUIREMENT_GRAPH_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "requirement_graph_memo.py"
 ROLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "role_selection.py"
 PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
@@ -202,8 +197,7 @@ GRIND_HEAL_PREP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "grind_heal_pre
 FOOD_PRODUCER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "food_producer.py"
 BAG_PEAK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bag_peak.py"
 ACTION_REJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "action_rejection.py"
-TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "taskmaster_choice.py"
-EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
+TASKMASTER_CHOICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "taskmaster_choice.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
 # Task 9 (formal/mutation debt for the fleet-currency-turn-in epic).
@@ -406,7 +400,7 @@ FIGHT_OPPONENT_RECORD_MUTATIONS = [
 ]
 
 # Doomed-memo (2026-06-15 feather_coat CPU-peg fix).
-LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
+LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "leaf_attainable_core.py"
 OBTAIN_MODEL_READY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "ready_core.py"
 OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "policy.py"
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
@@ -419,6 +413,7 @@ WITHDRAW_GOLD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "with
 POST_BUY_BID_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "post_buy_bid.py"
 GOAL_SERIALIZATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goal_serialization.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
+VENDOR_REACH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "vendor_reach.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
@@ -428,17 +423,20 @@ STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_drive
 TASK_WORTH_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth_core.py"
 CURRENCY_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_demand.py"
 XP_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "xp_demand.py"
+OBJECTIVE_CODES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_codes.py"
+SUPPLIABLE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "suppliable.py"
+OBJECTIVE_DEMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_demand.py"
 CONSUMABLE_FLOOR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_floor_core.py"
 LOSS_RISK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loss_risk_core.py"
 FIGHT_TERMS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_terms_core.py"
 FIGHT_OUTCOME_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_outcome_core.py"
 FIGHT_ODDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_odds_core.py"
-TIER_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "tier_progress.py"
 COMBAT_TARGETS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_targets.py"
 WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_threshold_core.py"
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 EXPECTED_DAMAGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "expected_damage.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
+SELECTION_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "selection_context.py"
 FIGHT_SECONDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_seconds_core.py"
 FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                            / "fight_seconds_model.py")
@@ -484,6 +482,8 @@ PLAY_COMMAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "commands" / "play.py"
 FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 FIGHT_TILES_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_tiles.py"
 CRAFT_COMPLETENESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_completeness.py"
+REACHABILITY_CLAIMS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "reachability_claims.py"
+VOCABULARY_GATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "vocabulary_gate.py"
 CRAFT_CENSUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "audit" / "craft_census.py"
 HELD_STOCK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "held_stock.py"
 FIGHT_WALK_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_walk.py"
@@ -502,12 +502,8 @@ HOLD_FOR_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "hol
 JOIN_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "join_party.py"
 PARTY_COORD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "coordination_store.py"
 PARTY_LEASE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_lease_core.py"
-PARTY_LOOP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "party_loop.py"
-BAND_TARGET_PARTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 RESTORE_HP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "restore_hp.py"
 TASK_WORTH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_worth.py"
-FIGHT_UPKEEP_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "fight_upkeep_core.py"
-BAND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "band_target.py"
 TASK_ACCEPT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_accept.py"
 DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decision.py"
 OBTAIN_ITEM_DECISION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "decisions" / "obtain_item.py"
@@ -923,12 +919,6 @@ ODDS_CLEAR_MUTATIONS = [
     ("odds_clear: the threshold itself loses (>= -> >)",
      "    return p_win >= theta\n",
      "    return p_win > theta\n"),
-]
-# Post-merge review 2026-10-16: a rung is cleared on BARE gear.
-TIER_CLEARED_BARE_MUTATIONS = [
-    ("tier_cleared: the worn potions clear the rung",
-     "    rested = unpotioned(dataclasses.replace(state, hp=state.max_hp))\n",
-     "    rested = dataclasses.replace(state, hp=state.max_hp)\n"),
 ]
 # Post-merge review 2026-10-16: the verdict reads the worn stock and the hp.
 COMBAT_TARGETS_KEY_MUTATIONS = [
@@ -1500,18 +1490,18 @@ PRODUCE_FILTER_MUTATIONS = [
 # plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
 DROP_PRICE_MUTATIONS = [
     ("drop price: a GATHER route ignores the context's evidence",
-     "                               item, source.code, state, game_data, ctx.drops()),",
-     "                               item, source.code, state, game_data, LearnedDrops.empty()),"),
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(",
+     "    return _gather_actions(item, resource, state, game_data, LearnedDrops.empty()) * _kind_actions("),
     ("drop price: a DROP route ignores the context's evidence",
-     "                                                  ctx.drops(), ctx.fight_records),",
-     "                                                  LearnedDrops.empty(), ctx.fight_records),"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = LearnedDrops.empty().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("drop price: a gather ignores its loadout's prospecting",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
      "                                      gather_prospecting(resource, state, game_data))",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
-     "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
-     "    kills = 0 * evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = 0 * ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("gather price: a ready gather yields two a gather",
      "                           yield_per=1, capacity=source.capacity)",
      "                           yield_per=2, capacity=source.capacity)"),
@@ -1593,20 +1583,16 @@ ONE_DROP_MODEL_PLAYER_MUTATIONS = [
     ("player: the trace's context keeps no evidence",
      "        self._last_ctx = replace(self._last_ctx, learned_drops=self._learned_drops)\n",
      ""),
-    ("player: the band context prices the prior",
-     "                                   learned_drops=self._cycle_learned_drops()))",
-     "                                   learned_drops=LearnedDrops.empty()))"),
-    ("player: the consumable price prices the prior",
-     "                                  learned_drops=self._cycle_learned_drops()))\n        batch",
-     "                                  learned_drops=LearnedDrops.empty()))\n        batch"),
     ("player: the role board's work prices the prior",
      "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
      "                                  learned_drops=self._cycle_learned_drops()))\n        work",
      "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
      "                                  learned_drops=LearnedDrops.empty()))\n        work"),
     ("player: the actions carry the prior",
-     "            learned_drops=self._cycle_learned_drops(),\n        )\n        # Route around",
-     "            learned_drops=LearnedDrops.empty(),\n        )\n        # Route around"),
+     "            learned_drops=self._cycle_learned_drops(),\n"
+     "            now=self._cycle_now,\n        )\n        # Route around",
+     "            learned_drops=LearnedDrops.empty(),\n"
+     "            now=self._cycle_now,\n        )\n        # Route around"),
 ]
 # The cycle's selection context carries the cycle's evidence (ruling T16b, I2).
 # Killed by tests/test_ai/test_player_gear_objective.py.
@@ -1627,8 +1613,8 @@ ONE_DROP_MODEL_GRIND_MUTATIONS = [
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n",
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n"),
     ("grind: the rungs price the prior",
-     "                          learned_drops=ctx.drops())",
-     "                          learned_drops=LearnedDrops.empty())"),
+     "                   kind_seconds=ctx.kind_seconds, learned_drops=ctx.drops())",
+     "                   kind_seconds=ctx.kind_seconds, learned_drops=LearnedDrops.empty())"),
 ]
 ONE_DROP_MODEL_FACTORY_MUTATIONS = [
     ("factory: a targeted gather carries no evidence",
@@ -1653,8 +1639,8 @@ FIGHTER_PROSPECTING_MUTATIONS = [
 # tests/test_ai/test_gear_objective.py.
 FIGHTER_PIECE_PRICE_MUTATIONS = [
     ("gear objective: a piece is priced on the L* fighter, not the character (T14d-3)",
-     "    prices = {code: [_price(state, game_data, _candidate_ctx(",
-     "    prices = {code: [_price(targets[code][0], game_data, _candidate_ctx("),
+     "            price, route = _price(state, game_data, ctx, history, code)\n",
+     "            price, route = _price(fighter, game_data, ctx, history, code)\n"),
 ]
 
 DROP_ROWS_STORE_MUTATIONS = [
@@ -1877,8 +1863,26 @@ LOOP_RATE_CORE_MUTATIONS = [
      "    return -(-missing // restore)",
      "    return missing // restore"),
     ("loop_rate: the count bound loses its last count",
-     "            for k in range(1, food_bound(missing, restore, price, held) + 1):",
-     "            for k in range(1, food_bound(missing, restore, price, held)):"),
+     "            for k in range(1, bound + 1):",
+     "            for k in range(1, bound):"),
+    # Task 8c fix round 1: ONE room for all the foods.
+    ("loop_rate: the recovery eats past the bag's room left",
+     "            bound = 0 if slots == 0 else min(food_bound(missing, restore, price, held, room), qty)\n",
+     "            bound = 0 if slots == 0 else food_bound(missing, restore, price, held, room)\n"),
+    ("loop_rate: a food eaten takes no stack",
+     "                                                           qty - k, slots - 1)",
+     "                                                           qty - k, slots)"),
+    ("loop_rate: a food eaten takes no room",
+     "                                                           qty - k, slots - 1)",
+     "                                                           qty, slots - 1)"),
+    ("loop_rate: a bag with no stack left still eats",
+     "            bound = 0 if slots == 0 else min(food_bound(missing, restore, price, held, room), qty)\n",
+     "            bound = min(food_bound(missing, restore, price, held, room), qty)\n"),
+    # Task 8c (ruling C2-food): no recovery eats more of a food than the bag
+    # carries; past the room it falls back to the other foods and to Rest.
+    ("loop_rate: the recovery eats past the bag's room",
+     "    bound = min(count_bound(missing, restore), room)\n",
+     "    bound = count_bound(missing, restore)\n"),
     ("loop_rate: the eat cooldown charged per unit, not per use",
      "    return eat_seconds if price is None else eat_seconds + past * price",
      "    return eat_seconds if price is None else units * eat_seconds + past * price"),
@@ -1939,18 +1943,41 @@ LOOP_RATE_CHOICE_MUTATIONS = [
 # loop_rate: the reader (increments 3-4). OWN run_group: unit-killed by
 # tests/test_ai/test_loop_rate.py.
 LOOP_RATE_READER_MUTATIONS = [
+    # Ruling C2-grey: a kill pays one, whatever XP it pays.
+    ("loop_rate reader: a kill a second weighs the kill's XP",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)"),
+    ("loop_rate reader: a loop with no room still kills",
+     "    kills = Fraction(0) if trips is None else expected_xp_per_second(1, p_win, fight, extra + trips)",
+     "    kills = expected_xp_per_second(1, p_win, fight, extra + (trips or 0))"),
     ("loop_rate reader: a boost is not consumed",
-     "        used = tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)",
-     "        used = tuple((code, e.used if code == restore_code else 0) for code, _ in loadout)"),
+     "    drunk = [tuple((code, e.used if code == restore_code else 1) for code, _ in loadout)",
+     "    drunk = [tuple((code, e.used if code == restore_code else 0) for code, _ in loadout)"),
     ("loop_rate reader: recovery from a full bar whatever the fight left",
-     "        recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS)",
-     "        recovery, counts = recovery_choice(max_hp, max_hp, menu, EAT_SECONDS)"),
+     "        recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS, room, slots)",
+     "        recovery, counts = recovery_choice(max_hp, max_hp, menu, EAT_SECONDS, room, slots)"),
     ("loop_rate reader: a loss earns the kill's XP",
      "    return LoopRate(rate, xp if p_win > 0 else 0, outcome.win, p_win,",
      "    return LoopRate(rate, xp, outcome.win, p_win,"),
     ("loop_rate reader: the food menu is ignored",
-     "    menu = [(f.restore, f.price, f.held) for f in food]",
+     "    menu = [(f.restore, f.price, f.held, units) for f, units in zip(food, allotted, strict=True)]",
      "    menu = []"),
+    # Task 8c (ruling C2-food): the recovery sees the bag's room for a food.
+    ("loop_rate reader: an ending eats past the bag's allotment",
+     "    menu = [(f.restore, f.price, f.held, units) for f, units in zip(food, allotted, strict=True)]",
+     "    menu = [(f.restore, f.price, f.held, room) for f in food]"),
+    # Not mutated, EQUIVALENT by construction: the endings' own slot bound and
+    # the eaten foods' shares' slot check. The allotment's foods already number
+    # at most the slots, and every ending eats within the allotment.
+    ("loop_rate reader: the allotment is the shallowest ending's",
+     "    _, allotted = recovery_choice(max(max_hp - h for h in hp_ends), max_hp,",
+     "    _, allotted = recovery_choice(min(max_hp - h for h in hp_ends), max_hp,"),
+    ("loop_rate reader: an unpriced food carries past the units held",
+     "    qty_free -= sum(food_carry(n, share, f.held if f.price is None else None)",
+     "    qty_free -= sum(food_carry(n, share, None)"),
+    ("loop_rate reader: the keep's stacks take no slot",
+     "    slots_free = state.inventory_slots_max - carried.stacks - sum(1 for u in potion_bag if u > 0)",
+     "    slots_free = state.inventory_slots_max - sum(1 for u in potion_bag if u > 0)"),
     ("loop_rate reader: held potions are not counted",
      "    held = {code: held_count(code, state) for code, _ in loadout}",
      "    held = {code: 0 for code, _ in loadout}"),
@@ -1965,8 +1992,8 @@ LOOP_RATE_READER_MUTATIONS = [
      "    if any(prices[code] is None and n > held[code] for code, n in used_units):",
      "    if any(prices[code] is None and n >= held[code] for code, n in used_units):"),
     ("loop_rate reader: an uneaten food is reported eaten",
-     "    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0)",
-     "    eaten = tuple((f.code, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True))"),
+     "    eaten_offers = [(f, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0]",
+     "    eaten_offers = [(f, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True)]"),
     ("loop_rate reader: a food above the level is on the menu",
      "        if stats.level > state.level:\n            continue\n        held = held_count(code, state)",
      "        held = held_count(code, state)"),
@@ -1985,8 +2012,8 @@ LOOP_RATE_READER_MUTATIONS = [
      "    tiles = game_data.monster_locations(monster)\n    if not tiles:\n"
      "        raise ValueError(f\"{monster} has no spawn tile: a loss's"),
     ("loop_rate reader: a loss recovers from its own pool",
-     "        hp_end = e.hp_end // SCALE if e.win else LOSS_HP",
-     "        hp_end = e.hp_end // SCALE"),
+     "    hp_ends = [e.hp_end // SCALE if e.win else LOSS_HP for e in endings]",
+     "    hp_ends = [e.hp_end // SCALE for e in endings]"),
     ("loop_rate reader: drinks round down",
      "    used_units = tuple((code, math.ceil(used_mean[code])) for code, _ in loadout)",
      "    used_units = tuple((code, math.floor(used_mean[code])) for code, _ in loadout)"),
@@ -2000,32 +2027,32 @@ LOOP_RATE_READER_MUTATIONS = [
      "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
      "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra)"),
     ("loop_rate reader: the capacity is ignored",
-     "                       per_fight, stats.inventory_max - carry)",
+     "                       per_fight, qty_free)",
      "                       per_fight, 1)"),
     ("loop_rate reader: nothing the bag carries takes room",
-     "                       per_fight, stats.inventory_max - carry)",
+     "                       per_fight, qty_free)",
      "                       per_fight, stats.inventory_max)"),
     ("loop_rate reader: one deposit for all codes",
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), len(table)),",
      "    trips = trip_share(trip_seconds(walk, Fraction(DEPOSIT_SECONDS_PER_CODE), 1),"),
     ("loop_rate reader: a loop with no room runs",
-     "                    trips is not None)",
-     "                    True)"),
+     "                    trips is not None, kills)",
+     "                    True, kills)"),
     ("loop_rate reader: a loop with no room earns its rate without trips",
      "    rate = Fraction(0) if trips is None else expected_xp_per_second(xp, p_win, fight, extra + trips)",
      "    rate = expected_xp_per_second(xp, p_win, fight, extra + (trips or 0))"),
     ("loop_rate reader: the keep's carry takes no room",
-     "    carry = (carried + sum(food_carry(n) for _, n in eaten)",
-     "    carry = (0 + sum(food_carry(n) for _, n in eaten)"),
+     "    qty_free = stats.inventory_max - carried.units - sum(potion_bag)",
+     "    qty_free = stats.inventory_max - sum(potion_bag)"),
     ("loop_rate reader: the food carry takes no room",
-     "    carry = (carried + sum(food_carry(n) for _, n in eaten)",
-     "    carry = (carried + sum(0 for _, n in eaten)"),
+     "    qty_free -= sum(food_carry(n, share, f.held if f.price is None else None)",
+     "    qty_free -= 0 * sum(food_carry(n, share, f.held if f.price is None else None)"),
     ("loop_rate reader: the worn potion stock takes room",
-     "             + sum(max(0, potion_carry(n) - stock)",
-     "             + sum(potion_carry(n)"),
+     "    potion_bag = [max(0, potion_carry(n) - stock)",
+     "    potion_bag = [potion_carry(n)"),
     ("loop_rate reader: a worn stock past the carry frees room",
-     "             + sum(max(0, potion_carry(n) - stock)",
-     "             + sum((potion_carry(n) - stock)"),
+     "    potion_bag = [max(0, potion_carry(n) - stock)",
+     "    potion_bag = [(potion_carry(n) - stock)"),
     ("loop_rate reader: the drops land at no prospecting",
      "        drops.units_per_attempt(monster, item, drop_rate, low, high, stats.prospecting)",
      "        drops.units_per_attempt(monster, item, drop_rate, low, high, 0)"),
@@ -2118,7 +2145,7 @@ BEST_LOADOUT_READER_MUTATIONS = [
      "    return sum(n for _, n in rate.used)"),
     ("best_loadout reader: the keep's carry takes no room",
      "    carried = carried_keep(state, game_data, ctx)",
-     "    carried = 0"),
+     "    carried = type(carried_keep(state, game_data, ctx))(0, 0)"),
 ]
 
 # Spec 2026-10-18 §2.10: what stays in the bag through a deposit, but food and
@@ -2128,11 +2155,14 @@ CARRIED_KEEP_MUTATIONS = [
      "        if stats.type_ not in (FOOD, POTION):",
      "        if True:"),
     ("carried keep: every held unit stays",
-     "            total += min(held, keep_in_bag(code, state, game_data, ctx))",
-     "            total += held"),
+     "            kept = min(held, keep_in_bag(code, state, game_data, ctx))",
+     "            kept = held"),
     ("carried keep: the keep counts past what is held",
-     "            total += min(held, keep_in_bag(code, state, game_data, ctx))",
-     "            total += keep_in_bag(code, state, game_data, ctx)"),
+     "            kept = min(held, keep_in_bag(code, state, game_data, ctx))",
+     "            kept = keep_in_bag(code, state, game_data, ctx)"),
+    ("carried keep: a kept stack fills no slot",
+     "            stacks += 1 if kept > 0 else 0\n",
+     "            stacks += 0\n"),
 ]
 
 # Spec 2026-10-18 §2.10: a worn bag raises the bag cap. Killed by
@@ -2707,49 +2737,6 @@ RANK_ADVERSARY_MUTATIONS = [
 ]
 
 
-# pursuit_value CROSS-SLOT DOMINANCE mutations (2026-08-04). `pursuit_value` is
-# the ONE ruler read LEXICOGRAPHICALLY: `combat * SCALE + clamp(efficiency)`,
-# and the property that makes it an order-embedding is `2 * EFFICIENCY_BUDGET <
-# STRATEGIC_SCALE`. Break that inequality and a prospecting artifact can outrank
-# a combat weapon cross-slot again — the exact 2026-07-08 defect. OWN run_group
-# (unit-killed mutants need their own group) — killed by
-# tests/test_ai/test_pursuit_value.py.
-#
-# Replaces the retired `combat_raw_of` dmg_elements-hoist mutant: that adapter
-# is gone, and the divergence it guarded (a monster-blind ruler blind to
-# per-element damage %) is now impossible by construction — the economics layer
-# reads `armor_score`'s own term, which has priced `dmg_elements` since
-# 170ed8d8.
-PURSUIT_DOMINANCE_MUTATIONS = [
-    ("pursuit_value: budget widened past half the scale — the efficiency SPAN "
-     "exceeds one combat unit and cross-slot dominance is no longer structural",
-     "EFFICIENCY_BUDGET = (STRATEGIC_SCALE - 1) // 2",
-     "EFFICIENCY_BUDGET = STRATEGIC_SCALE - 1"),
-    ("pursuit_value: efficiency stats re-weighted to combat parity — a bag "
-     "priced like a weapon, the original cross-slot bug",
-     "_EFFICIENCY_RATE = 1",
-     "_EFFICIENCY_RATE = STRATEGIC_SCALE"),
-]
-
-# strategic_value SYMMETRIC-BOUND mutations. The bound must clamp BOTH ends:
-# live items carry negative efficiency stats (obsidian_battleaxe
-# inventory_space -25), so a one-sided cap leaves the block's span unbounded
-# below and the order-embedding stops being one. OWN run_group — killed by
-# tests/test_ai/test_tiers_strategic_value.py.
-STRATEGIC_BOUND_MUTATIONS = [
-    ("strategic_value: drop the lower bound (span unbounded below)",
-     "        if efficiency_part < -efficiency_budget:\n"
-     "            efficiency_part = -efficiency_budget",
-     "        if False:\n"
-     "            efficiency_part = -efficiency_budget"),
-    ("strategic_value: drop the upper bound (span unbounded above)",
-     "        if efficiency_part > efficiency_budget:\n"
-     "            efficiency_part = efficiency_budget",
-     "        if False:\n"
-     "            efficiency_part = efficiency_budget"),
-]
-
-
 # slot_occupancy mutations -- the ONE authority rule for slot occupancy. Every
 # clause is a dominance requirement whose loss lets the acquisition path
 # pre-empt `pick_loadout` on a swap the picker reverses, i.e. re-opens the
@@ -2777,53 +2764,6 @@ SLOT_OCCUPANCY_MUTATIONS = [
 ]
 
 
-# Target-naming occupancy mutations. The deferral that keeps an owned,
-# contested candidate out of the ranking (so it can neither burn a cooldown nor
-# sit there as a permanently-unservable root) moved into
-# `slot_occupancy.defers_to_picker` on 2026-09-20, when the SECOND walk that
-# names gear roots -- `CharacterObjective.gear_targets_with_blockers` -- was
-# found to have never had it (live HAL: 1,464 equips, 2026-09-08..09-20). The
-# predicate's own clauses are mutated here; each CALL SITE gets its own group
-# below so a survivor names the walk that stopped asking.
-OCCUPANCY_PREDICATE_MUTATIONS = [
-    ("slot_occupancy: defer even an UNOWNED candidate",
-     "    if not owned:\n"
-     "        return False",
-     "    if False:\n"
-     "        return False"),
-    # SURVIVED every run from c7f35044 until 2026-08-15, with a test named for
-    # the exact property sitting in the bound file the whole time:
-    # test_a_banked_copy_counts_as_owned. It was VACUOUS. The board banked a
-    # `piggy_armor` against a worn `mushmush_jacket`, and the pursuit_value
-    # unification had since inverted that pair (gain -82_799_980), so the
-    # `gain > 0` check dropped the candidate before ownership was consulted and
-    # `== []` held with the bank clause deleted. The pair is now the
-    # positive-gain one, with vacuity guards on both the gain and may_displace.
-    ("slot_occupancy: ownership ignores the bank",
-     "    owned = (state.inventory.get(code, 0) > 0\n"
-     "             or (state.bank_items or {}).get(code, 0) > 0)",
-     "    owned = state.inventory.get(code, 0) > 0"),
-    ("slot_occupancy: defer on an EMPTY slot",
-     "    if incumbent is None:\n"
-     "        return False",
-     "    if incumbent is None:\n"
-     "        return True"),
-    ("slot_occupancy: drop the dominance deferral",
-     "    return not may_displace(candidate_stats, incumbent_stats)",
-     "    return False"),
-]
-
-TREE_OCCUPANCY_MUTATIONS = [
-    ("progression_tree: drop the occupancy deferral",
-     "        if defers_to_picker(code, slot, state, game_data):\n"
-     "            continue",
-     "        if False:\n"
-     "            continue"),
-]
-
-# The hole this group exists for: the objective's gear-target walk feeds
-# `IsMyGearBehindMyTier -> WhichSlotIsFurthestBehind`, whose winner
-# `obtain_item_routing._equippable_goal` commits to without asking again.
 # Region-edge admission. No goal admits `MapTransitionAction` (tag "movement")
 # and the planner rejects any action whose `travel_region` differs from the
 # character's, so off-region content was emitted, applicable and unreachable --
@@ -2844,10 +2784,15 @@ TREE_OCCUPANCY_MUTATIONS = [
 # the live 2026-09-21 livelock actually ran through.
 OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS = [
     ("obtain_item: re-equip a currency under a live turn-in claim",
-     "            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:\n"
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n"
+     "                    and ctx.turn_in.currency == self.step.code):\n"
      "                return None",
      "            if False:\n"
      "                return None"),
+    # Review I1: a not-ready claim (the shortfall's farmer) reserves nothing.
+    ("obtain_item: a farmer's not-ready claim reserves the currency",
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            if (ctx.turn_in is not None\n"),
 ]
 
 PLANNER_STATE_KEY_MUTATIONS = [
@@ -2882,12 +2827,14 @@ GATHERING_CURRENCY_BATCH_MUTATIONS = [
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
      "                                               quantity=batch,\n"
-     "                                               travel_region=game_data.npc_region(npc_code)))\n"
+     "                                               travel_region=game_data.npc_region(npc_code),\n"
+     "                                               now=self._now))\n"
      "                continue",
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
      "                                               quantity=qty,\n"
-     "                                               travel_region=game_data.npc_region(npc_code)))\n"
+     "                                               travel_region=game_data.npc_region(npc_code),\n"
+     "                                               now=self._now))\n"
      "                continue"),
     ("gathering: ferry nets the pocket a second time",
      "                quantity = shortfall if cap is None else min(shortfall, cap)",
@@ -2984,15 +2931,6 @@ GE_ORDER_404_REFRESH_MUTATIONS = [
      "            if e.code in (ERROR_CODE_ORDER_NOT_FOUND, ERROR_CODE_OFFER_SHORT) \\",
      "            if True \\"),
 ]
-
-OBJECTIVE_OCCUPANCY_MUTATIONS = [
-    ("objective: drop the gear-target occupancy deferral",
-     "                if defers_to_picker(code, slot, state, self._game_data):\n"
-     "                    continue",
-     "                if False:\n"
-     "                    continue"),
-]
-
 
 # UpgradeEquipmentGoal inventory-path occupancy mutation -- the SECOND producer
 # of a displacing equip. Its own `_is_upgrade_over` is level-based, so a
@@ -3142,7 +3080,7 @@ _GRIND_GUARD = (
 # theorem above without touching skill_grind_selection.py). Killed by
 # tests/test_ai/scenarios/test_grind_deep_chain.py, which drives the REAL
 # catalog.
-SKILL_GRIND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_target.py"
+SKILL_GRIND_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression" / "skill_grind_target.py"
 
 SKILL_GRIND_TARGET_MUTATIONS = [
     # THE REGRESSION: go back to counting recipe entries instead of chain
@@ -3356,51 +3294,18 @@ SKILL_GRINDABLE_MUTATIONS = [
     # fixture (under-target but no feasible rung).
     ("skill_grindable: drop grind-rung conjunct",
      "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
-     "            or has_grind_target(skill, state, game_data))\n",
+     "            or has_grind_target(skill, state, game_data, now))\n",
      "    return True\n"),
     # drop the GATHER arm of the rung conjunct -- a gather skill with no craft
     # rung (alchemy @ 1) becomes not-applicable, violating hasGrindRung. Killed
     # by the gather-skill fixture (skill_grind_target None, best_gather present).
     ("skill_grindable: drop gather arm of grind-rung conjunct",
      "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
-     "            or has_grind_target(skill, state, game_data))\n",
-     "    return has_grind_target(skill, state, game_data)\n"),
+     "            or has_grind_target(skill, state, game_data, now))\n",
+     "    return has_grind_target(skill, state, game_data, now)\n"),
 ]
 
 
-
-STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
-PURSUIT_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "pursuit_value.py"
-
-# strategic_value mutations -- anchors for the EXTRACTED strategic_value_pure
-# (efficiency-weighted cross-slot scorer, #16). Killed by the differential test
-# formal/diff/test_strategic_value_diff.py, which asserts exact-integer agreement
-# with the proved Lean core Extracted.StrategicValue.strategic_value_pure plus
-# the nonneg + per-stat monotonicity contracts (Bridges9). Each substring is
-# code-unique (the docstring deliberately avoids the `stat * weight` tokens).
-STRATEGIC_VALUE_MUTATIONS = [
-    # drop the haste contribution -- diverges whenever haste>0 and haste_weight>0.
-    ("strategic_value: drop haste term",
-     "        + haste * haste_weight",
-     "        + haste * 0"),
-    # drop the prospecting contribution.
-    ("strategic_value: drop prospecting term",
-     "        + prospecting * prospecting_weight",
-     "        + prospecting * 0"),
-    # swap the inventory weight for the combat weight -- diverges when the two
-    # derived rates differ (they always do: combat dominates).
-    ("strategic_value: inventory weight becomes combat weight",
-     "        + inventory_space * inventory_weight",
-     "        + inventory_space * combat_weight"),
-    # flip the wisdom term's sign -- diverges and breaks nonneg under wisdom>0.
-    ("strategic_value: negate wisdom term",
-     "        + wisdom * wisdom_weight",
-     "        - wisdom * wisdom_weight"),
-    # combat product becomes a sum -- diverges unless combat_raw or weight is 0/1.
-    ("strategic_value: combat product becomes sum",
-     "        combat_raw * combat_weight",
-     "        combat_raw + combat_weight"),
-]
 
 
 # recipe_closure mutations -- old strings matched to current recipe_closure.py text
@@ -3534,14 +3439,8 @@ RECOVERABLE_LEAF_MUTATIONS = [
 
 # objective mutations -- old strings matched to current objective.py text.
 OBJECTIVE_MUTATIONS = [
-    # drop the attainability filter in gear selection: a non-attainable (higher
-    # equip_value) item can be wrongly chosen for the slot.
-    ("objective: drop attainability filter in gear selection",
-     "            attainable = [(value, code) for (value, code) in ranked\n"
-     "                          if is_attainable(code, game_data)]",
-     "            attainable = [(value, code) for (value, code) in ranked]"),
     # drop the monster-drop leaf branch: reverts is_attainable to the old
-    # gathering-ONLY bug that silently dropped body/leg/amulet from target_gear.
+    # gathering-ONLY bug that silently dropped body/leg/amulet from the gear sheet.
     # A craft chain bottoming out in a (spawning) monster drop is wrongly
     # rejected -> killed by test_attainable_spawning_monster_drop_accepted.
     # Updated (C4): leaf_ok now calls leaf_attainable_pure; the mutation targets
@@ -3595,12 +3494,12 @@ OBJECTIVE_MUTATIONS = [
 ]
 
 
-# is_attainable_now's task-earnable arm (2026-07-06): a tasks_coin-priced leaf
+# The near-term model's task-earnable arm (2026-07-06): a tasks_coin-priced leaf
 # is producible-NOW via the always-available C4 funding loop. Since step 4 of
 # the decision-architecture redesign the arm is the obtain model's TASK_REWARD
-# route (the policy switch is pinned in NEAR_TERM_POLICY_MUTATIONS). Dropping
+# route (the policy switch is pinned in CLASSIFY_TARGET_MUTATIONS). Dropping
 # the route silently removes every task-currency-gated item (satchel) from
-# near_term_gear. Bound to tests/test_ai/test_tiers_objective.py.
+# the near-term model. Bound to tests/test_ai/test_tiers_objective.py.
 OBJECTIVE_NOW_MUTATIONS = [
     ("obtain_model: the task board pays nothing",
      "        if not self._gd.is_task_earnable(item):\n            return []",
@@ -3625,7 +3524,7 @@ STRATEGY_MUTATIONS = [
     # obtain leaf is wrongly returned as the actionable step (a node with no real
     # action). The actionable-correctness contract (obtain ⇒ producible) catches it.
     ("strategy: actionable_step drop producible check",
-     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):\n"
+     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data, ctx.now):\n"
      "                return None\n"
      "            return node",
      "            return node"),
@@ -4260,9 +4159,9 @@ EXPAND_BANK_GOAL_MUTATIONS = [
 ]
 
 
-# winnable_cascade mutations (Phase 11 Target A: 3-tier combat-target
-# precedence cascade extracted from Player._winnable_farm_target). The
-# differential test must kill every reordering of the tiers.
+# winnable_cascade mutations (Phase 11 Target A: the combat-target precedence
+# cascade; two arms since plan C Task 4 deleted the pick arm). The
+# differential test must kill every reordering of the arms.
 WINNABLE_CASCADE_MUTATIONS = [
     # Mutation 1: ignore task_monster (drop tier 1 entirely).
     ("winnable_cascade: skip task tier (drop early-return)",
@@ -4273,44 +4172,11 @@ WINNABLE_CASCADE_MUTATIONS = [
     ("winnable_cascade: invert path winnable check",
      "    if inputs.path_monster is not None and inputs.path_winnable:\n        return inputs.path_monster\n",
      "    if inputs.path_monster is not None and not inputs.path_winnable:\n        return inputs.path_monster\n"),
-    # Mutation 3: swap tier 2 and tier 3 — return pick_winnable first,
-    # demoting the path projection. Violates the documented precedence.
-    ("winnable_cascade: swap path and pick tiers",
-     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
-     "        return inputs.path_monster\n"
-     "    return inputs.pick_winnable\n",
-     "    if inputs.pick_winnable is not None:\n"
-     "        return inputs.pick_winnable\n"
-     "    if inputs.path_monster is not None and inputs.path_winnable:\n"
-     "        return inputs.path_monster\n"
-     "    return None\n"),
-]
-
-
-# combat_picker mutations (P0 2026-06-09: window-preferred picker with the
-# xp>0 liveness fallback, extracted from Player._pick_winnable_monster).
-# The differential test must kill every weakening of the fallback tier.
-COMBAT_PICKER_MUTATIONS = [
-    # Mutation 1: drop the liveness fallback entirely — revert to the
-    # window-only picker (re-introduces the P0 no-combat deadlock).
-    ("combat_picker: drop liveness fallback (window-only picker)",
-     "    if best is not None:\n"
-     "        return best[0]\n"
-     "    for code, level in monsters:\n",
-     "    if best is not None:\n"
-     "        return best[0]\n"
-     "    for code, level in ():\n"),
-    # Mutation 2: invert the xp>0 gate — the fallback targets ONLY zero-xp
-    # monsters (no leveling value) and skips xp-positive ones.
-    ("combat_picker: invert xp_positive gate in fallback",
-     "        if level > max_level or not xp_positive(code) or not is_winnable(code):\n",
-     "        if level > max_level or xp_positive(code) or not is_winnable(code):\n"),
-    # Mutation 3: drop the suicide-guard upper bound from the fallback — an
-    # overleveled winnable monster gets picked, which FightAction's level+2
-    # bound would reject (dead-target → empty-plan cascade).
-    ("combat_picker: drop suicide guard from fallback",
-     "        if level > max_level or not xp_positive(code) or not is_winnable(code):\n",
-     "        if not xp_positive(code) or not is_winnable(code):\n"),
+    # Mutation 3: the unheld path monster is still returned (an XP fight while
+    # a piece of L* is missing).
+    ("winnable_cascade: an unwinnable path monster is the target",
+     "        return inputs.path_monster\n    return None\n",
+     "        return inputs.path_monster\n    return inputs.path_monster\n"),
 ]
 
 
@@ -4464,8 +4330,11 @@ def _execute_parallel(units: list[_Unit], survivors: list[str]) -> None:
     lease: queue.Queue[Path] = queue.Queue()
     # Each `w{k}` stands for `src`, so `tmp` stands for the repo root: a module
     # that finds committed data beside it (`fight_seconds_model.FIGHT_LOGS`,
-    # `commands/plan.py`'s scenarios) climbs to `tmp` and must find `tests` there.
+    # `commands/plan.py`'s scenarios) climbs to `tmp` and must find `tests` there,
+    # and `scenario.BASE_STATS` climbs to `tmp` for `formal/sim`'s base stats.
+    # Both are read only: a formal/sim target runs serially, in place.
     (tmp / "tests").symlink_to(ROOT / "tests", target_is_directory=True)
+    (tmp / "formal").symlink_to(ROOT / "formal", target_is_directory=True)
     try:
         for k in range(n):
             copy_root = tmp / f"w{k}"
@@ -4539,14 +4408,14 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = True or drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = True or rested.winnable("),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True, doors=doors)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = live and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = live and rested.winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n            continue",
      "        if top < 0 or game_data.monster_level(monster) > ceiling:\n            continue"),
@@ -4559,16 +4428,16 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
 # tests/test_ai/test_obtain_model_fighter.py.
 OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
     ("drop_routes: the fighter is ignored",
-     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter)",
-     "    shared = _Rested(state)"),
+     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter, memo)",
+     "    shared = _Rested(state, memo)"),
     ("drop_routes: a per-monster fighter is ignored for the real state",
-     "        return _Rested(fighter(monster)) if callable(fighter) else shared",
+     "        return _Rested(fighter(monster), memo) if callable(fighter) else shared",
      "        return shared"),
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
-     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)",
-     "        return drop_routes(item, self._state, self._gd, self._crossing)"),
+     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter,\n",
+     "        return drop_routes(item, self._state, self._gd, self._crossing, None,\n"),
     ("obtain_model: the fighter's inventory is stock",
      "        bag: dict[str, int] = dict(self._state.inventory)",
      "        bag: dict[str, int] = dict(self._state.inventory) | "
@@ -4654,11 +4523,11 @@ PIECE_POLICY_PRICER_MUTATIONS = [
 # reachability walk's policy (M4).
 SERVED_BY_ITS_ROUTE_WHICH_PIECE_MUTATIONS = [
     ("which-piece: every piece classified behind its crafting gate",
-     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
-     "    if True:\n        return objective.classify_target(piece.code, state)\n"),
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state, now)\n",
+     "    if True:\n        return objective.classify_target(piece.code, state, now)\n"),
     ("which-piece: no piece classified behind its crafting gate",
-     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
-     "    if False:\n        return objective.classify_target(piece.code, state)\n"),
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state, now)\n",
+     "    if False:\n        return objective.classify_target(piece.code, state, now)\n"),
 ]
 SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
     ("gear_objective_result: a GE fill counts as crafted",
@@ -4667,8 +4536,8 @@ SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_ROOT_MUTATIONS = [
     ("root: the alternatives classify every piece behind its crafting gate",
-     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),",
-     "        _which_piece.piece_step(piece.slot, objective.classify_target(piece.code, state),"),
+     "                                _which_piece.piece_target(piece, objective, state, ctx.now),",
+     "                                objective.classify_target(piece.code, state, ctx.now),"),
 ]
 SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS = [
     ("gear_objective: the piece forgets the route that priced it",
@@ -4709,9 +4578,8 @@ CAPACITY_FILL_MUTATIONS = [
      "        if take <= 0:\n            continue\n",
      "        if take < 0:\n            continue\n"),
     ("capacity fill: the routes fill in catalogue order, not unit cost",
-     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free,\n"
-     "                                                  charge),\n",
-     "                   key=lambda index: (0,\n"),
+     "    return sorted(units, key=lambda pair: (pair[1], pair[0]))\n",
+     "    return sorted(units, key=lambda pair: (0, pair[0]))\n"),
     ("capacity fill: a remainder no route serves is free",
      "            return\n    actions[0] += UNOBTAINABLE_PER_UNIT * remaining\n",
      "            return\n    actions[0] += 0 * remaining\n"),
@@ -4725,9 +4593,9 @@ SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
      "    price, route = priced_route(item, qty, options, owned, frozenset(), charge)\n"),
     ("acquisition_cost: each win for gold rounded up on its own (M1)",
      "            actions_per_application=_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records),\n",
+     "                source.code, state, game_data, ctx, ctx.fight_records),\n",
      "            actions_per_application=ceil(_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records)),\n"),
+     "                source.code, state, game_data, ctx, ctx.fight_records)),\n"),
     ("acquisition_cost: an unpriced climb has no route",
      "    for kind in _SKILL_GATE:\n        if _skill_gated(item, model, kind, policy) is not None:\n",
      "    for kind in ():\n        if _skill_gated(item, model, kind, policy) is not None:\n"),
@@ -4760,9 +4628,20 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
      "    return (spendable_pocket(state, game_data, needed) if policy.fight_gold\n"
      "            else state.gold)\n",
      "    return state.gold\n"),
-    ("craft_plan_gen: the gold fight is the walk's monster, not the price's",
-     "        fight = fights.get(gold_monster) if gold_monster is not None else None\n",
-     "        fight = fights.get(route.via)\n"),
+    # RETIRED (plan C Task 9), equivalent since the merge of the ticket-farm fix
+    # (5416e876): "the gold fight is the walk's monster, not the price's"
+    # (`fights.get(gold_monster)` -> `fights.get(route.via)`). The walk now
+    # serves the route that priced each item (`prefer` -> `route_order`, the
+    # PRICED_ROUTE_WALK group pins it), so a GOLD_DROP leg's `route.via` is the
+    # cheapest GOLD_DROP route of gold's `acquisition_options` on the same
+    # state and ctx, ranked by the same per-gold unit cost (a fight has no
+    # inputs, so `owned`, `charge` and the store do not move it), first of
+    # equal costs in options order; `fight_gold_monster` is that same argmin
+    # (`priced_route` over the GOLD_DROP routes). The fight ceiling and reach
+    # gates are `gold_drop_routes`', shared by both, and gold's routes carry
+    # no grey gate, so the walk's grey directive does not split them. Probed:
+    # with fight records surcharging the cheapest monster and with the grey
+    # directive refused, both sides name one monster.
     ("craft_plan_gen: the plan goes on past the gold fight (no re-decide)",
      "                # committed to all of them would not see the objective move.\n"
      "                break\n",
@@ -4780,9 +4659,9 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
 PIECE_GE_ROUTING_MUTATIONS = [
     ("piece GE: a piece's currency step is walked without the piece's routes",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=piece)",
+     "                                           fight_gold=piece, farmed_for=code, now=ctx.now)",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=False)"),
+     "                                           fight_gold=False, farmed_for=code, now=ctx.now)"),
 ]
 PIECE_GE_DECOMPOSE_MUTATIONS = [
     ("piece GE: a piece's walk has no GE fill (D-E kept)",
@@ -4907,9 +4786,10 @@ LEGACY_GATHER_SKILL_MUTATIONS = [
 # tests/test_ai/test_acquisition_cost_wrapper.py.
 GATED_GATHER_MUTATIONS = [
     ("acquisition_cost: a climb's gather ignores the observations",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data, evidence),",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data,\n"
-     "                                                    LearnedDrops.empty()),"),
+     "            actions_per_application=_gather_cost(item, route.via, state, game_data, ctx),",
+     "            actions_per_application=_gather_cost(\n"
+     "                item, route.via, state, game_data,\n"
+     "                replace(ctx, learned_drops=LearnedDrops.empty())),"),
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
@@ -4942,6 +4822,8 @@ GRIND_RUNG_PRODUCE_MUTATIONS = [
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))",
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset())"),
 ]
+# Killed by test_the_book_prices_no_grind_rung: a GE fill route hides a rung's
+# gated drop and, with no gold rate on the pricing context, walls it.
 GRIND_SERVED_PRICE_MUTATIONS = [
     ("skill_grind_target: the grind prices a GE fill its descent never takes",
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",
@@ -4958,7 +4840,7 @@ DECOMPOSE_GAP_MUTATIONS = [
      "            return WithdrawItemAction(code=step.item, quantity=step.amount,",
      "            return None and WithdrawItemAction(code=step.item, quantity=step.amount,"),
     ("craft_plan_gen: a skill gate is never a sub-task",
-     "            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)",
+     "            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data, ctx.now)",
      "            verdicts[key] = False"),
     ("craft_plan_gen: a skill already being ground is opened again inside itself",
      "                or gate.level is None or gate.subject in grinding):",
@@ -4996,6 +4878,94 @@ GAME_DATA_RECYCLE_YIELD_MUTATIONS = [
      "        return recycle_unit_yield(recipe, total)",
      "        if recipe is None:\n            return None\n"
      "        return recycle_unit_yield(recipe, total or 1)"),
+]
+# The server's level caps (`GET /`, plan C Task 7). Killed by
+# tests/test_ai/test_game_data.py (test_max_level_comes_from_the_status_payload,
+# test_a_status_without_max_level_raises).
+GAME_DATA_LEVEL_CAP_MUTATIONS = [
+    ("game_data: the character-level cap is a documented 50",
+     "        return self._max_level\n",
+     "        return 50\n"),
+    ("game_data: the skill-level cap is a documented 50",
+     "        return self._max_skill_level\n",
+     "        return 50\n"),
+    ("game_data: the status page's character-level cap is not kept",
+     "        self._max_level = status.max_level\n",
+     "        self._max_level = 50\n"),
+    ("game_data: the status page's skill-level cap is not kept",
+     "        self._max_skill_level = status.max_skill_level\n",
+     "        self._max_skill_level = 50\n"),
+    ("game_data: a catalogue without a status page reads a character-level cap of 50",
+     "        if self._max_level is None:\n"
+     "            raise ValueError(\"no level cap: the catalogue was built without \"\n"
+     "                             \"the server status page\")\n",
+     "        if self._max_level is None:\n"
+     "            return 50\n"),
+    ("game_data: a catalogue without a status page reads a skill-level cap of 50",
+     "        if self._max_skill_level is None:\n"
+     "            raise ValueError(\"no skill-level cap: the catalogue was built without \"\n"
+     "                             \"the server status page\")\n",
+     "        if self._max_skill_level is None:\n"
+     "            return 50\n"),
+]
+# A derived scenario starts from the live base sheet (plan C Task 7). Killed by
+# tests/test_ai/scenarios/test_scenario_builder.py
+# (test_a_derived_scenario_starts_at_base_initiative_100).
+SCENARIO_BASE_STATS_MUTATIONS = [
+    ("scenario: a derived state starts from zero initiative, not the base sheet's",
+     "    initiative, critical_strike = base_combat_stats()\n",
+     "    initiative, critical_strike = 0, base_combat_stats()[1]\n"),
+    ("scenario: the base sheet's initiative is read off its critical strike",
+     "    return int(combat[\"initiative\"]), int(combat[\"critical_strike\"])\n",
+     "    return int(combat[\"critical_strike\"]), int(combat[\"critical_strike\"])\n"),
+]
+# The wall censuses judge a dropper by the per-monster achievable fighter
+# (plan C Task 7, spec 2026-10-18 §2.3). Killed by
+# tests/test_audit/test_drop_wall_census.py
+# (test_a_dropper_an_achievable_loadout_beats_is_no_wall) and
+# tests/test_audit/test_currency_wall_census.py
+# (test_a_dropper_is_judged_by_the_fighter_not_the_worn_gear).
+DROP_WALL_FIGHTER_MUTATIONS = [
+    ("drop wall: a dropper is judged by the worn gear, not the achievable fighter",
+     "        if any(drop_fight_winnable(fighter(monster), game_data, monster) for monster in live):\n",
+     "        if any(drop_fight_winnable(replace(state, hp=state.max_hp), game_data, monster)\n"
+     "               for monster in live):\n"),
+]
+# The pricer's worn-gear walls the objective beats (review I1), and a cell that
+# is no wall carries no gate price (M4). Killed by
+# tests/test_audit/test_drop_wall_census.py
+# (test_a_worn_wall_the_objective_beats_is_named_by_its_gate,
+# test_a_candidate_with_no_walled_items_is_not_this_censuss_subject).
+DROP_WALL_WORN_ARM_MUTATIONS = [
+    ("drop wall: the pricer's worn-gear walls are never asked",
+     "    behind = tuple(item for item in worn_walled if item not in walled)\n",
+     "    behind: tuple[str, ...] = ()\n"),
+    ("drop wall: a worn wall the gate opens reads as the pricer behind the objective",
+     "            gap = (DropGap.WALL_PRICER_BEHIND_OBJECTIVE if gate_price >= UNOBTAINABLE_PER_UNIT\n",
+     "            gap = (DropGap.WALL_PRICER_BEHIND_OBJECTIVE if True\n"),
+    ("drop wall: a cell that is no wall carries its base as a gate price",
+     "    return (DropGap.NOT_DROP_WALLED.value, base, base, None, None)\n",
+     "    return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)\n"),
+    # Plan C Task 8 (Task 7 re-review): killed by
+    # test_the_unattributed_residual_can_fire_behind_the_objective.
+    ("drop wall: worn walls that cross only together read as no wall",
+     "            attributed = _attribute(candidate, state, game_data, behind, base, ctx)\n"
+     "            if attributed is None:\n"
+     "                return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,\n",
+     "            attributed = _attribute(candidate, state, game_data, behind, base, ctx)\n"
+     "            if attributed is None:\n"
+     "                return (DropGap.NOT_DROP_WALLED.value, base, collective, gate_price,\n"),
+]
+CURRENCY_WALL_FIGHTER_MUTATIONS = [
+    ("currency wall: a dropper is judged by the worn gear, not the achievable fighter",
+     "                     if drop_fight_winnable(fighter(monster), game_data, monster))",
+     "                     if drop_fight_winnable(dataclasses.replace(state, hp=state.max_hp),\n"
+     "                                            game_data, monster))"),
+]
+ACHIEVABLE_FIGHTER_MUTATIONS = [
+    ("achievable fighter: owns only what is held, not the achievable set",
+     "    return _fighters(state, frozenset(layer_of(achievable(state, game_data, ctx))), game_data)\n",
+     "    return _fighters(state, frozenset(), game_data)\n"),
 ]
 # Killed by tests/test_ai/test_learning_store.py (TestFleetRecycleTotals).
 FLEET_RECYCLE_TOTALS_MUTATIONS = [
@@ -5236,6 +5206,12 @@ WALK_GREY_MUTATIONS = [
     ("craft_plan_gen: the directive never licenses a grey drop",
      "            grey_verdicts[item] = grey_farm_allowed(item, state, game_data)",
      "            grey_verdicts[item] = False"),
+]
+# The drop leg fights only the walk's own dropper, which the walk admitted on
+# the same grey directive, so no served plan tells this mutant apart; the
+# broken-agreement raise does. Killed by tests/test_ai/test_craft_plan_gen.py
+# (test_a_walked_grey_dropper_the_directive_refuses_is_a_named_defect).
+DROP_LEG_GREY_MUTATIONS = [
     ("craft_plan_gen: the drop leg fights any grey dropper",
      "                                  allow_grey=grey_ok(step.item))",
      "                                  allow_grey=True)"),
@@ -5313,8 +5289,11 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
      "            if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):",
      "            if target >= bag and model.feasible(code, target, HEAL_PREP_POLICY):"),
     ("grind_heal_prep: an unsuppliable carry leaves the held units in the bank",
-     "        for target in ((carry, min(carry, held)) if makes else (min(carry, held),)):",
-     "        for target in ((carry,) if makes else (min(carry, held),)):"),
+     "        for target in ((food_carry(eaten, room, None), fetched) if makes else (fetched,)):",
+     "        for target in ((food_carry(eaten, room, None),) if makes else (fetched,)):"),
+    ("grind_heal_prep: the fetched carry ignores the held units",
+     "        fetched = food_carry(eaten, room, held)\n",
+     "        fetched = food_carry(eaten, room, None)\n"),
     ("grind_heal_prep: food not worth making is made",
      "        makes = made.get(code, 0) > 0 and may_make_food(code, ctx.role, ctx.fleet_roles, game_data)\n",
      "        makes = may_make_food(code, ctx.role, ctx.fleet_roles, game_data)\n"),
@@ -5326,11 +5305,11 @@ GRIND_HEAL_PREP_POLICY_MUTATIONS = [
      "HEAL_PREP_POLICY: Policy = replace(DECOMPOSE_POLICY, drop_routes=False)",
      "HEAL_PREP_POLICY: Policy = DECOMPOSE_POLICY"),
     ("grind_heal_prep: the carry ignores the bag's room",
-     "        carry = min(carry, room)\n",
-     "        carry = carry\n"),
+     "    for (code, eaten), room in zip(loadout.food, shares, strict=True):",
+     "    for (code, eaten), room in zip(loadout.food, [10 ** 9] * len(shares), strict=True):"),
     ("grind_heal_prep: a new stack needs no free slot",
-     "        room = bag + state.inventory_free if bag or state.inventory_slots_free else 0\n",
-     "        room = bag + state.inventory_free\n"),
+     "                         state.inventory_slots_free, state.inventory_free)\n    for (code, eaten), room",
+     "                         99, state.inventory_free)\n    for (code, eaten), room"),
 ]
 # The committed plan (Phase 2d-L1c). Killed by tests/test_ai/test_craft_plan_gen.py.
 COMMITTED_PLAN_MUTATIONS = [
@@ -5341,10 +5320,40 @@ COMMITTED_PLAN_MUTATIONS = [
      "            if action.is_applicable(sim, game_data):\n"
      "                sim = action.apply(sim, game_data)\n        if legs:"),
     ("craft_plan_gen: a drop fight carries no drop target",
-     "        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))",
-     "        return fight"),
+     "        return dataclasses.replace(fight, drop_target=(step.item, step.amount))\n",
+     "        return fight\n"),
+    # Review I4: a walked dropper the oracle refuses is a named defect.
+    ("craft_plan_gen: a pool without the dropper's fight raises",
+     "        if not droppers:\n            return None\n        fight = select_drop_fight(",
+     "        fight = select_drop_fight("),
+    ("craft_plan_gen: an unservable drop route plans nothing",
+     "        if fight is None:\n            raise UnservableDropRouteError(step.item, route.via)\n",
+     "        if fight is None:\n            return None\n"),
 ]
 # A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
+# Ruling T8b (Task 8b fix round 1): a cached plan's goal and steps are judged at
+# the asking cycle's clock, through one seam. Killed by
+# tests/test_ai/test_plan_or_reuse.py (the player wiring) and
+# tests/test_ai/test_cycle_clock_pins.py (the cache and the goals).
+CYCLE_CLOCK_REUSE_PLAYER_MUTATIONS = [
+    ("player: a cached plan keeps its planning instant",
+     "        if cache is not None:\n"
+     "            cache.on_cycle_clock(self._cycle_now)\n",
+     ""),
+]
+CYCLE_CLOCK_REUSE_CACHE_MUTATIONS = [
+    ("plan cache: the cached goal keeps its planning instant",
+     "        self.selected_goal = self.selected_goal.on_cycle_clock(now)\n",
+     ""),
+    ("plan cache: the cached steps keep their planning instant",
+     "        self.plan = [action.on_cycle_clock(now) for action in self.plan]\n",
+     ""),
+]
+CYCLE_CLOCK_REUSE_SELL_MUTATIONS = [
+    ("sell goal: a cached copy keeps its context's instant",
+     "        rebound._ctx = replace(self._ctx, now=now)\n",
+     ""),
+]
 PLAN_CACHE_TARGET_MUTATIONS = [
     ("plan_cache: a planned fight advances after one win (its drop not awaited)",
      "        return action.drop_target\n",
@@ -5416,6 +5425,338 @@ UPGRADE_DECOMPOSE_MUTATIONS = [
      "                                  store=store)",
      "        return None"),
 ]
+# The ticket farm (live 2026-10-31): the walk serves the route that priced the
+# item, not the fixed kind order. Killed by
+# tests/test_ai/test_priced_route_served.py.
+PRICED_ROUTE_WALK_MUTATIONS = [
+    ("priced walk: a choice among minting routes keeps the kind order",
+     "            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:\n",
+     "            if False:\n"),
+    ("priced walk: the ranking ignores the grey-farm directive the walk admitted by",
+     "                priced = prefer(code, item_policy)\n",
+     "                priced = prefer(code, policy)\n"),
+    ("priced walk: stock is priced like any route that makes copies",
+     "    group = _ORDER_STOCK.get(route.kind, 1)\n",
+     "    group = 1\n"),
+    ("priced walk: a route the pricer does not list goes first",
+     "    return group, (priced.get((route.kind, route.via), inf) if group == 1 else 0)\n",
+     "    return group, (priced.get((route.kind, route.via), 0) if group == 1 else 0)\n"),
+    ("priced walk: a sale is tried with the stock",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}\n",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 0}\n"),
+]
+PRICED_ROUTE_FIGHT_MUTATIONS = [
+    ("priced walk: the drop leg fights whichever dropper kills fewest",
+     "                                  if isinstance(a, FightAction) and a.monster_code == route.via]\n",
+     "                                  if isinstance(a, FightAction)]\n"),
+]
+# Ruling "seconds inside" (2026-10-31): every route option is priced at its
+# actions' measured seconds and converted to planner actions once. Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py and
+# tests/test_ai/test_priced_route_served.py.
+SECONDS_INSIDE_PRICE_MUTATIONS = [
+    ("seconds inside: the seconds are never converted to actions",
+     "    return seconds / ctx.action_seconds_of()\n",
+     "    return seconds\n"),
+    ("seconds inside: every kind's action is one planner action",
+     "    return _in_actions(ctx.seconds_of(kind), ctx)\n",
+     "    return _in_actions(ctx.action_seconds_of(), ctx)\n"),
+    ("seconds inside: a win is fight-equivalents, not its seconds",
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return (per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"),
+    ("seconds inside: a craft is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n"),
+    ("seconds inside: a recycle is priced as a craft",
+     "                           actions_per_application=_kind_actions(LogType.RECYCLING, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"),
+    ("seconds inside: an item withdraw is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.WITHDRAW_ITEM, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n"),
+    ("seconds inside: a GE fill is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.BUY_GE, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"),
+    ("seconds inside: a gather is one action whatever its seconds",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(\n"
+     "        LogType.GATHERING, ctx)\n",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops())\n"),
+]
+SECONDS_INSIDE_KIND_MUTATIONS = [
+    ("seconds inside: a zero cooldown is timed",
+     "        if cooldown > 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n",
+     "        if cooldown >= 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n"),
+]
+# The user's I2 ruling (2026-10-31, "learning DB, then raise") and review I3:
+# each priced kind is timed by the store's recorded cooldowns per action run.
+# Killed by tests/test_ai/test_fight_seconds_model.py.
+STORE_KIND_SECONDS_MUTATIONS = [
+    ("store kinds: a craft is filed as a recycle",
+     "    \"CraftAction\": LogType.CRAFTING,\n",
+     "    \"CraftAction\": LogType.RECYCLING,\n"),
+    ("store kinds: a craft's repr quantity is ignored",
+     "    if kind not in (LogType.CRAFTING, LogType.RECYCLING):\n        return 1\n",
+     "    if True:\n        return 1\n"),
+    ("store kinds: a recorded cycle is one run whatever its quantity",
+     "        out[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))\n",
+     "        out[kind.value] = (total + seconds, runs + cycles)\n"),
+    ("store kinds: the store is never read",
+     "        timed.update(stored)\n",
+     "        pass\n"),
+    # Fix round 3 (re-review N1): the kinds merge per kind; a whole-store
+    # cutover dropped every kind the logs timed once the store held any row.
+    ("store kinds: the store's kinds replace the logs' whole",
+     "        timed.update(stored)\n",
+     "        timed = stored or timed\n"),
+    ("store kinds: the held sums are dropped on every new cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (held[1], {}) if held is not None else (0, {})\n"),
+    ("store kinds: the held sums are read again from the first cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (0, held[2]) if held is not None else (0, {})\n"),
+    ("store kinds: a replaced table keeps its stale sums",
+     "_KIND_SUMS[0][0] is store and _KIND_SUMS[0][1] <= last else None\n",
+     "_KIND_SUMS[0][0] is store else None\n"),
+    ("log kinds: a logged craft is one run per unit made",
+     "        return Fraction(quantity, craft_yield(item))\n",
+     "        return Fraction(quantity)\n"),
+    ("log kinds: a logged recycle is one run",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(quantity)\n",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(1)\n"),
+    ("log kinds: a batched entry's quantity is not read",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), int(entry.content[\"quantity\"])\n",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), 1\n"),
+]
+STORE_COOLDOWNS_QUERY_MUTATIONS = [
+    ("store kinds: a failed cycle times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n"),
+    ("store kinds: a zero cooldown times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) >= 0,\n"),
+    ("store kinds: the read ignores the id window",
+     "                       col(Cycle.id) > after_id, col(Cycle.id) <= through_id)\n",
+     "                       col(Cycle.id) >= 0)\n"),
+]
+UNTIMED_KIND_MUTATIONS = [
+    ("untimed kind: an untimed kind is the mean action",
+     "        if measured is None:\n            raise UntimedActionKindError(kind.value)\n        return measured\n",
+     "        if measured is None:\n            return self.action_seconds_of()\n        return measured\n"),
+]
+# Review I5: the WINNABLE verdict is memoised across one decision. Killed by
+# tests/test_ai/test_obtain_model_fighter.py.
+WINNABLE_MEMO_MUTATIONS = [
+    ("winnable memo: a store never memoises",
+     "        store = self._store\n        if store is None:\n            return None\n",
+     "        store = self._store\n        if True:\n            return None\n"),
+    ("winnable memo: every fighter shares one verdict",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster, id(fighter)),\n",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster),\n"),
+]
+WINNABLE_MEMO_ROUTES_MUTATIONS = [
+    ("winnable memo: the memo is never asked",
+     "        return compute() if self.memo is None else self.memo(self.state, monster, compute)\n",
+     "        return compute()\n"),
+]
+PRICED_ROUTE_KEY_MUTATIONS = [
+    ("priced walk: a sibling's craft is keyed as this character's craft",
+     "    kind = _served_by(option)\n    if kind in",
+     "    kind = SourceKind(option.kind)\n    if kind in"),
+    ("priced walk: a withdraw or a craft is keyed on its venue",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, item\n",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, option.venue\n"),
+    ("priced walk: a recycle or a sale is keyed on its venue",
+     "        (via,) = option.inputs\n        return kind, via\n",
+     "        return kind, option.venue\n"),
+    ("priced walk: the dearer of two options for one route is kept",
+     "        ranks.setdefault(route_key(item, option), unit)\n",
+     "        ranks[route_key(item, option)] = unit\n"),
+]
+PRICED_ROUTE_CORE_MUTATIONS = [
+    ("priced walk: the ranking carries no unit cost",
+     "    return tuple((routes[index], unit)\n",
+     "    return tuple((routes[index], 0)\n"),
+    ("priced walk: the ranking is the options order",
+     "                 for index, unit in _ranked(item, options, memo, free, charges))\n",
+     "                 for index, unit in sorted(_ranked(item, options, memo, free, charges)))\n"),
+]
+# The ticket farm (live 2026-10-31): a leg whose planned drop did not land is
+# no progress, so a dry drop farm reaches the stall exit. Killed by
+# tests/test_ai/test_intention_progress.py and, at the run loop's call site,
+# tests/test_ai/test_player_run.py.
+STEP_DELIVERED_MUTATIONS = [
+    ("stall: an action planned for no drop never delivers",
+     "    if output is None:\n        return True\n",
+     "    if output is None:\n        return False\n"),
+    ("stall: a drop that did not land is delivered",
+     "    return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)\n",
+     "    return cache_holdings(after).get(item, 0) >= cache_holdings(before).get(item, 0)\n"),
+]
+# The E ruling (2026-10-31): a dry drop leg is no progress only past its
+# drop's 99th-percentile dry streak. Killed by
+# tests/test_ai/test_intention_progress.py.
+DRY_STREAK_MUTATIONS = [
+    ("dry streak: a sure drop forgives any dry attempt",
+     "    if chance >= 1:\n        return streak <= 0\n",
+     "    if chance >= 1:\n        return True\n"),
+    ("dry streak: an action planned for no drop is always dry",
+     "    if chance is None:\n        return True\n",
+     "    if chance is None:\n        return False\n"),
+    ("dry streak: a rare drop is forgiven forever",
+     "    return streak <= ceil(log(DRY_STREAK_TAIL) / log(1 - float(chance)))\n",
+     "    return True\n"),
+    ("dry streak: the gather's chance is the fight's",
+     "    if isinstance(action, GatherAction):\n        rate, _low, _high = game_data.gather_drop_row(",
+     "    if False:\n        rate, _low, _high = game_data.gather_drop_row("),
+]
+# Review C1/M1 (fix round 1): the streak is kept per `(source, item)`, only a
+# successful leg planned for a drop moves it, and a zero chance is named.
+# Killed by tests/test_ai/test_intention_progress.py.
+DRY_STREAK_KEY_MUTATIONS = [
+    ("dry streak: a zero chance divides by zero",
+     "    if chance <= 0:\n        raise ImpossibleDropError(",
+     "    if chance < 0:\n        raise ImpossibleDropError("),
+    ("dry streak: a failed leg is progress",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if not ok:\n        return True\n    key = drop_key("),
+    ("dry streak: a failed leg adds to the streak",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if False:\n        return False\n    key = drop_key("),
+    ("dry streak: a leg planned for no drop is no progress",
+     "    if key is None:\n        return True\n    if step_delivered(",
+     "    if key is None:\n        return False\n    if step_delivered(",),
+    ("dry streak: a landed drop leaves its streak",
+     "        streaks[key] = 0\n        return True\n",
+     "        return True\n"),
+    ("dry streak: a dry attempt adds nothing",
+     "    streaks[key] = streaks.get(key, 0) + 1\n",
+     "    streaks[key] = streaks.get(key, 0)\n"),
+    ("dry streak: one streak for every source",
+     "    if isinstance(action, GatherAction):\n        return action.resource_code, output[0]\n",
+     "    if isinstance(action, GatherAction):\n        return \"\", output[0]\n"),
+    ("dry streak: a fight's streak is keyed on no monster",
+     "    return action.monster_code, output[0]\n",
+     "    return \"\", output[0]\n"),
+]
+DRY_STREAK_PLAYER_MUTATIONS = [
+    ("dry streak: the run loop reads every leg as delivered",
+     "                                                     outcome == \"ok\", game_data))\n",
+     "                                                     outcome == \"ok\", game_data) or True)\n"),
+    ("dry streak: the run loop keeps a fresh streak per leg",
+     "                                      leg_progressed(self._dry_streaks, executed_action,\n",
+     "                                      leg_progressed({}, executed_action,\n"),
+]
+# The ticket farm (live 2026-10-31): the fleet's pooled medals are credited in
+# the price, one character farms a shortfall the fleet cannot pay, and its
+# claim asks no buy, no surrender and no reservation.
+FLEET_FARM_PRICE_MUTATIONS = [
+    ("fleet farm: the price credits no pooled medal",
+     "    owned = _fleet_pooled(item, _owned_with_gold(state, pocket), state, game_data, ctx)\n",
+     "    owned = _owned_with_gold(state, pocket)\n"),
+    ("fleet farm: a medal priced to wear is credited with the pool",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings) if code != item else 0\n",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings)\n"),
+    ("fleet farm: the drop work credits no pooled medal",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _owned_with_gold(state, state.gold),"),
+    ("fleet farm: the pool is counted and not added",
+     "            out[code] = out.get(code, 0) + pooled\n",
+     "            out[code] = out.get(code, 0)\n"),
+]
+FLEET_FARM_PLAYER_MUTATIONS = [
+    ("fleet farm: no sibling's farm claim is reported",
+     "        if self._turn_in is None:\n            self._turn_in = self._shortfall_farmer(",
+     "        if False:\n            self._turn_in = self._shortfall_farmer("),
+    ("fleet farm: a payable sink is reported as a farm",
+     "                if turn_in_ready_pure(fleet_total, price):\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n",
+     "                if False:\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n"),
+    ("fleet farm: this character's own farm claim is a stand-down",
+     "                if holder is None or holder == self.character:\n                    continue\n"
+     "                farmed.append(",
+     "                if holder is None:\n                    continue\n"
+     "                farmed.append("),
+    ("fleet farm: a holder surrenders to a claim the fleet cannot pay",
+     "                if not turn_in_ready_pure(fleet_total, price):\n"
+     "                    # A claim the fleet cannot pay yet",
+     "                if False:\n"
+     "                    # A claim the fleet cannot pay yet"),
+    ("fleet farm: a running farm takes no election",
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n",
+     "            if False:\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n"),
+    # Review M3: only the farmed piece's sink is claimed.
+    ("fleet farm: a farm claims every unpaid sink of its currency",
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n",
+     "            if not turn_in_ready_pure(fleet_total, price):\n"),
+    # Review M4: a farmer that cannot buy releases the election once ready.
+    ("fleet farm: a farmer that cannot buy keeps the election",
+     "                    if self._coordination.turn_in_holder(item_code, now) == self.character:\n"
+     "                        self._coordination.release_turn_in(item_code)\n",
+     "                    if False:\n"
+     "                        self._coordination.release_turn_in(item_code)\n"),
+    # Review M2: equal prices go to the sink the fleet is nearest paying.
+    ("fleet farm: equal-price farms tie on the vendor order alone",
+     "        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None\n",
+     "        return max(farmed, key=lambda t: t.price) if farmed else None\n"),
+    ("fleet farm: any goal's run takes the election",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)\n"
+     "                or not is_dual_role(goal.target_item, game_data)):\n",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)):\n"),
+]
+# Review I5: a gear unlock's full-hp deficit is computed once per decision.
+# Killed by tests/test_ai/test_key_door_route.py.
+RESTED_DEFICIT_MUTATIONS = [
+    ("rested deficit: the memo keys on no state",
+     "    pinned = store.cached((\"rested_deficit\", monster, *price_key(rested)),\n",
+     "    pinned = store.cached((\"rested_deficit\", monster),\n"),
+    ("rested deficit: the deficit is asked at the live hp",
+     "    rested = replace(state, hp=state.max_hp)\n    if store is None:\n",
+     "    rested = state\n    if store is None:\n"),
+]
+# Review M6: the trace says whether the claim can buy now. Killed by
+# tests/test_ai/test_trace_coordination_fields.py.
+FLEET_FARM_TRACE_MUTATIONS = [
+    ("fleet farm: the trace drops the claim's readiness",
+     "            \"ready\": self._turn_in.ready,\n",
+     "            \"ready\": True,\n"),
+]
+# Review M3: a currency farm names the sink it buys, through `for_piece`.
+# Killed by tests/test_ai/test_dual_role_currency.py.
+FARMED_FOR_ROUTING_MUTATIONS = [
+    ("fleet farm: a piece's currency farm names no sink",
+     "                                           fight_gold=piece, farmed_for=code, now=ctx.now)",
+     "                                           fight_gold=piece, now=ctx.now)"),
+]
+FARMED_FOR_GOAL_MUTATIONS = [
+    ("fleet farm: for_piece forgets the sink the farm buys",
+     "                                   farmed_for=self.farmed_for, now=self._now)\n",
+     "                                   farmed_for=None, now=self._now)\n"),
+]
+FLEET_FARM_RESERVE_MUTATIONS = [
+    ("fleet farm: a claim short of the price reserves the medal",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None\n"),
+]
+FLEET_FARM_TURNIN_MUTATIONS = [
+    ("fleet farm: a claim short of the price is a turn-in due",
+     "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+     "    return ctx.turn_in is not None or ctx.recall is not None"),
+]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
 WALK_ADAPTER_MUTATIONS = [
@@ -5484,20 +5825,27 @@ GRIND_OBTAINABLE_MUTATIONS = [
      "    return model.feasible(code, model.in_bag(code) + 1, GRIND_POLICY, keep=rung)"),
 ]
 # objective.NEAR_TERM_POLICY, killed by tests/test_ai/test_tiers_objective.py.
-NEAR_TERM_POLICY_MUTATIONS = [
+# `is_suppliable` (its own module since plan C Task 2: the gear objective asks
+# it, and importing it from `progression.objective` closed an import cycle). Killed by
+# the test the near-term group runs, tests/test_ai/test_tiers_objective.py.
+SUPPLIABLE_MUTATIONS = [
+    ("objective: every candidate is suppliable",
+     "    if model.mints(code):\n        return True\n    bank = state.bank_items or {}",
+     "    if True:\n        return True\n    bank = state.bank_items or {}"),
+]
+CLASSIFY_TARGET_MUTATIONS = [
+    # Plan C Task 6: the near-term gear sheet is gone; what survives is the
+    # model and policy `classify_target` asks its target and materials of.
     # Plan B Task 14c: one obtain model answers every candidate of one state.
     # Fix round 1: classify_target asks its target and materials of one model.
     ("objective: classify_target builds a model for the target",
-     "        if model.feasible(code, 1, NEAR_TERM_POLICY):\n"
+     "        if feasible_now(model, code):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)",
-     "        if is_attainable_now(code, state, self._game_data):\n"
+     "        if feasible_now(near_term_model(state, self._game_data), code):\n"
      "            return GearTarget(code=code, attainable=True, blocker=None)"),
     ("objective: classify_target builds a model per material",
-     "            if not model.feasible(material, 1, NEAR_TERM_POLICY):",
-     "            if not is_attainable_now(material, state, self._game_data):"),
-    ("objective: near-term gear builds an obtain model per candidate",
-     "                          if model.feasible(code, 1, NEAR_TERM_POLICY)]",
-     "                          if is_attainable_now(code, state, self._game_data)]"),
+     "            if not feasible_now(model, material):",
+     "            if not feasible_now(near_term_model(state, self._game_data), material):"),
     ("objective: near-term attainability counts GE fills",
      "                          ge_routes=False, task_rewards=True, fight_gold=False, drop_routes=True)",
      "                          ge_routes=True, task_rewards=True, fight_gold=False, drop_routes=True)"),
@@ -5510,9 +5858,6 @@ NEAR_TERM_POLICY_MUTATIONS = [
     ("objective: near-term attainability ignores vendors",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=True,",
      "allow_grey=ATTAINABILITY_ALLOWS_GREY, vendor_routes=False,"),
-    ("objective: every candidate is suppliable",
-     "    if model.mints(code):\n        return True\n    bank = state.bank_items or {}",
-     "    if True:\n        return True\n    bank = state.bank_items or {}"),
     ("objective: near-term attainability asks for a live overworld tile",
      "                          event_vendors=False, spawn_known=True,",
      "                          event_vendors=False, spawn_known=False,"),
@@ -5674,28 +6019,17 @@ DECISION_MUTATIONS = [
 
 # Killed by tests/test_ai/test_decisions_obtain_item.py
 # (test_a_skill_gated_root_raises_the_skill_by_one): the Task-5/PF-2 fix.
-# `CanICraftCurrentTier`'s "no" branch used to return GatherMaterials for the
+# `CanICraftThisAtAll`'s "no" branch used to return GatherMaterials for the
 # step -- gather materials for a craft that cannot run -- which was the only
 # link from a skill-gated gear target to the skill it needs, and it pointed
 # at the sibling. 11,434 LevelSkill(weaponcrafting->N) actions ran, target
 # never once above 10, dead on four characters since 2026-08-16. This mutant
 # restores exactly that regression.
-# The ROOT graph (`ai/decisions/root.py`, wave 3a task 4). One mutant per
-# branch claim: each of the five nodes' pivots, the blocker/skill read order,
-# the empty-slot rung rule and the slot tiebreak. Killed by
+# The ROOT graph (`ai/decisions/root.py`, wave 3a task 4): the blocker/skill
+# read order and each arm of `IsThisTargetBlocked`, and the orphan skill rule.
+# Plan C Task 3 deleted the tier walk's nodes and their mutants. Killed by
 # tests/test_ai/test_decisions_root.py.
 ROOT_DECISION_MUTATIONS = [
-    # Re-anchored 2026-10-03 (Phase 3-2): the pivot reads the SERVED targets,
-    # and a comment now sits between the test and its return.
-    ("root: IsMyGearBehindMyTier's emptiness test is inverted -- a character"
-     " WITH gear targets is sent to the combat question",
-     "        if not served:\n",
-     "        if served:\n"),
-    # Re-anchored 2026-10-04 (Phase 4-2b-ii): the aged head is gone, so the
-    # head is the ranking's first entry and the siblings are the rest.
-    ("root: WhichSlotIsFurthestBehind picks the LEAST-behind slot",
-     "        (slot, target), *siblings = ranked\n",
-     "        *siblings, (slot, target) = ranked\n"),
     # The mask this graph exists to avoid: a skill-gated target also carries
     # `blocker=None`, so hoisting the attainable arm reports it as buildable
     # and the character chases a craft it cannot perform. Same shape as the
@@ -5716,35 +6050,6 @@ ROOT_DECISION_MUTATIONS = [
      "        return ObtainItem(code=self.target.blocker,\n"
      "                          quantity=recipe[self.target.blocker])\n",
      "        return ObtainItem(code=self.target.blocker, quantity=1)\n"),
-    # Anchored WITH its consequent: `IsAFightBlockingMe` (wave 4) tests the
-    # same fact one node earlier, so the bare line matches twice.
-    ("root: IsThereACombatTarget's combat test is inverted",
-     "        if ctx.combat_monster is not None:\n"
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n",
-     "        if ctx.combat_monster is None:\n"
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n"),
-    ("root: CanIClearMyTier swaps the finished ladder and the honest wall",
-     "        if next_uncleared_tier(state, game_data, history) is None:\n"
-     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
-     "        return None\n",
-     "        if next_uncleared_tier(state, game_data, history) is not None:\n"
-     "            return ReachCharLevel(level=milestone_pure(state.level))\n"
-     "        return None\n"),
-    ("root: an empty slot counts as the ladder's FIRST rung, losing"
-     " empty-slot dominance",
-     "    worn_rung = 0 if worn is None else _target_rung(game_data, worn)\n",
-     "    worn_rung = (tier_of_level(game_data, 0) if worn is None\n"
-     "                 else _target_rung(game_data, worn))\n"),
-    ("root: equal gaps break alphabetically instead of on the schema's slot"
-     " order",
-     "            EQUIPMENT_SLOTS.index(slot))\n",
-     "            ord(slot[0]))\n"),
-    # Fix-round-1 finding 1: the middle key was never the one that decided
-    # over the original fixture (every tied gap was a tied rung too), so this
-    # mutant used to survive. `_gd_two_ways_behind` exists to exercise it.
-    ("root: equal gaps prefer the LOWER-rung target",
-     "            -_target_rung(game_data, target.code),\n",
-     "            _target_rung(game_data, target.code),\n"),
     # Fix-round-1 finding 3: the arm spec 5.3 was SILENT on was the one arm
     # of IsThisTargetBlocked with no anchor. Deleting it drops a self-blocked
     # target through to the recipe lookup, which raises.
@@ -5757,13 +6062,6 @@ ROOT_DECISION_MUTATIONS = [
      "            # root is the item itself and the step graph owns the rest.\n"
      "            return ObtainItem(code=self.target.code, quantity=1, slot=self.slot)\n",
      ""),
-    ("root: a gear target missing from game data silently defaults to rung 1"
-     " instead of failing",
-     "    stats = game_data.item_stats(code)\n"
-     "    if stats is None:\n",
-     "    stats = game_data.item_stats(code)\n"
-     "    if stats is None:\n"
-     "        return 1\n"),
     # THE STANDALONE SKILL ROOT (`_orphan_skill_roots`). USER 2026-10-08
     # "Only when demanded": a skill climbs only when the goal-action DAG demands
     # it. The demand rule, the open-rung conjunct and the ordering get their
@@ -5779,7 +6077,7 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and _skill_grindable.skill_is_grindable(\n"
-     "            skill, state.skills.get(skill, 1) + 1, state, game_data)]\n",
+     "            skill, state.skills.get(skill, 1) + 1, state, game_data, ctx.now)]\n",
      "        ]\n"),
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
@@ -5790,16 +6088,8 @@ ROOT_DECISION_MUTATIONS = [
     # `test_the_orphan_roots_sit_behind_the_trunk` still witnesses the order.
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
-     "                                RootWalk(step_decline=step_decline, now=walk.now),\n",
+     "                                RootWalk(step_decline=step_decline),\n",
      "                                walk,\n"),
-    # THE FLIP (task 6). Spec 5.3 named `tier_of_level`, the highest rung AT OR
-    # BELOW the level -- a root the character has already satisfied, which
-    # empties `objective_needs` and switches the arbiter's PURSUE_TASK worth
-    # gate off. This mutant restores exactly that.
-    ("root: the combat arm names the rung the character is already on"
-     " (tier_of_level) instead of the next one up",
-     "            return ReachCharLevel(level=_next_rung_above(game_data, state.level))\n",
-     "            return ReachCharLevel(level=tier_of_level(game_data, state.level))\n"),
     # `RootResolution.alternatives` construction. Both conjuncts are load
     # bearing and each gets its own mutant: without `alt != root` the chosen
     # root reappears as its own alternative (so the arbiter retries the pair
@@ -5951,14 +6241,14 @@ OBTAIN_ITEM_DECISION_MUTATIONS = [
     # (12/12 checked have a monster-drop recipe input), so the skill gate was
     # unreachable through the ORIGINAL, unhoisted call order. This second
     # mutant reverts the HOIST itself: `IsThisAnIntermediateOnAChain.resolve`
-    # goes straight to the monster-drop check instead of `CanICraftCurrentTier`
+    # goes straight to the monster-drop check instead of `CanICraftThisAtAll`
     # first, restoring the pre-PF-2 order that made the rewire above dead
     # code. Killed by tests/test_ai/test_decisions_obtain_item.py.
     ("obtain_item: the skill-gate hoist is reverted -- intermediate-on-chain"
      " goes straight to the monster-drop check instead of the craftability"
      " check first",
      "                if root_slots:\n"
-     "                    return CanICraftCurrentTier(\n"
+     "                    return CanICraftThisAtAll(\n"
      "                        self.step, self.root, root_stats, root_slots)\n",
      "                if root_slots:\n"
      "                    return DoesTheRecipeNeedAMonsterDrop(\n"
@@ -6602,7 +6892,7 @@ WEAPON_RULER_MUTATIONS = [
 # double-counting failure mode the unification has to exclude.
 GEAR_VALUE_PARTITION_MUTATIONS = [
     ("gear_components: leak the efficiency slice INTO the combat term (utility "
-     "counted twice by pursuit_value, and cross-slot dominance broken)",
+     "counted twice by the economics layer)",
      "        return (armor_score_combat(stats, dict(purpose.monster_attack),\n"
      "                                   dict(purpose.monster_resistance),\n"
      "                                   dict(purpose.player_attack)),\n"
@@ -6628,27 +6918,6 @@ RECIPE_PRODUCIBLE_MUTATIONS = [
 ]
 
 
-# Progression-tree cores (2026-07-06): unit-killed group (OBJECTIVE_NOW
-# precedent) bound to tests/test_ai/test_progression_tree_core.py.
-# SPLIT IN WAVE 3b (re-derived deletion list §4/§5, §6.4): eleven mutants were
-# retired with their subjects — one over `branch_pick_pure`, one over
-# `focus_aging_order`'s tail, one over `_gear_pref_key`, four over
-# `focus_aging_pick`'s fast-path guard and four over `_scaled_weights`. §6.4
-# named only the last eight; the other three anchored on the same deleted code
-# and would have failed `--check-anchors`. What is left guards what the
-# resolution walk actually calls: `milestone_pure` and `potion_type_weight`.
-# Phase 4-2b-ii retired five more with `falloff` and `dhondt_step`.
-PROGRESSION_TREE_MUTATIONS = [
-    ("tree: milestone off-by-a-band (current band, not next)",
-     "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
-     "    return min(TRUNK_CAP, (level // BAND) * BAND)"),
-    ("tree: health weight demoted below boost",
-     '    "hp_restore": Fraction(1),',
-     '    "hp_restore": Fraction(1, 8),'),
-    ("tree: unknown potion family weighs like health",
-     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
-     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
-]
 
 # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group bound to
 # tests/test_ai/test_gear_objective_core.py; the same semantics are proven in
@@ -6684,8 +6953,8 @@ GEAR_OBJECTIVE_CORE_MUTATIONS = [
 # dropping the filter is an equivalent mutant; the held arm beside it is.
 GEAR_OBJECTIVE_MUTATIONS = [
     ("gear objective: a carried piece is missing (one pick from the worn state)",
-     "        own = _target(state, game_data, code)[1]\n",
-     "        own = fight_loadout(state, game_data, code)\n"),
+     "    own = _target(state, game_data, monster)[1]\n    pieces: list[GearPiece] = []\n",
+     "    own = fight_loadout(state, game_data, monster)\n    pieces: list[GearPiece] = []\n"),
     # A worn boost is not in the sheet's totals; left on, the no-potion fight
     # took it off and subtracted it (the novice's earth boost on `cow`).
     ("gear objective: the bare fighter keeps its potions worn",
@@ -6701,8 +6970,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
     # `perfect_pearl` that adds no XP): a piece is missing only if it adds to
     # `R`, measured on `L*` with its slot holding the owned item.
     ("gear objective: a piece that adds nothing to R is missing",
-     "        pieces_of[code] = [piece for piece in gained if piece[2] > 0]",
-     "        pieces_of[code] = [piece for piece in gained if True]"),
+     "        if gain > 0:\n",
+     "        if True:\n"),
     ("gear objective: a piece's gain is measured on a bare fighter",
      "    return rate - _rate(_without(state, target, game_data, at), game_data, monster, food,\n",
      "    return rate - _rate(_wearing(target, dict.fromkeys(_GEAR_SLOTS), game_data), game_data,"
@@ -6722,8 +6991,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        if at in ITEM_TYPE_TO_SLOTS.get(_stats(item, game_data).type_, []):\n",
      "        if True:\n"),
     ("gear objective: the gain vacates the placement slot, not the L* slot",
-     "                   _gain(state, target, game_data, code, food, loop, best[0], at))\n",
-     "                   _gain(state, target, game_data, code, food, loop, best[0], slot))\n"),
+     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, at, per)\n",
+     "        gain = _gain(state, fighter, game_data, monster, food, loop, rate, slot, per)\n"),
     ("gear objective: a bare total below zero is accepted",
      "        if value < 0:\n            raise ValueError(f\"{state.character}: bare {stat}",
      "        if False:\n            raise ValueError(f\"{state.character}: bare {stat}"),
@@ -6750,8 +7019,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        and stats.level <= state.level",
      "        and True"),
     ("gear objective: worn gear with no supplier is not achievable",
-     "        and (code in held or is_suppliable(code, state, game_data)))",
-     "        and is_suppliable(code, state, game_data))"),
+     "        and (code in held or is_suppliable(code, state, game_data, now)))",
+     "        and is_suppliable(code, state, game_data, now))"),
     ("gear objective: one copy of a ring",
      "RING_COPIES = 2",
      "RING_COPIES = 1"),
@@ -6759,11 +7028,11 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "    best = max((rate, game_data.monster_levels[code]) for code, rate in rated)",
      "    best = min((rate, game_data.monster_levels[code]) for code, rate in rated)"),
     ("gear objective: an equal rate ignores the monster level",
-     "    tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]",
-     "    tied = [code for code, rate in rated if rate == best[0]]"),
+     "            for code, rate in rated if (rate, game_data.monster_levels[code]) == best]",
+     "            for code, rate in rated if rate == best[0]]"),
     ("gear objective: an equal rate and level goes to the dearer pieces",
-     "    monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),",
-     "    monster = max(tied, key=lambda code: sum((price for price, _ in prices[code]),"),
+     "    return min(tied, key=lambda objective: sum((piece.price for piece in objective.missing),",
+     "    return max(tied, key=lambda objective: sum((piece.price for piece in objective.missing),"),
     ("gear objective: m* may be a fight the gates refuse in its L*",
      "        if not drop_fight_winnable(targets[code][0], game_data, code):",
      "        if False:"),
@@ -6815,7 +7084,7 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "    if False:\n        raise RuntimeError("),
     ("gear objective: the keep's carry leaves the bag",
      "    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))",
-     "    loop = LoopInputs(ctx.timing(), ctx.drops(), 0)"),
+     "    loop = LoopInputs(ctx.timing(), ctx.drops(), type(carried_keep(state, game_data, ctx))(0, 0))"),
     ("gear objective: a bag cap below its worn bag is accepted",
      "              (\"haste\", state.haste), (\"inventory_max\", state.inventory_max)]",
      "              (\"haste\", state.haste)]"),
@@ -6968,8 +7237,12 @@ TOOL_OBJECTIVE_MUTATIONS = [
      "        if held:\n            return None\n        if model.feasible",
      "        if held and False:\n            return None\n        if model.feasible"),
     ("tool_objective: the tool step is skipped (the climb is never preceded)",
-     "    tool = tool_target(climb.skill, state, game_data, ctx, now)\n",
+     "    tool = ctx.objective_tools.get(climb.skill)\n",
      "    tool = None\n"),
+    # Ruling C1-R: the tool is the climbed skill's own, never another's.
+    ("tool_objective: any of the cycle's tools is fetched for any climb",
+     "    tool = ctx.objective_tools.get(climb.skill)\n",
+     "    tool = next(iter(ctx.objective_tools.values()), None)\n"),
     ("tool_objective: an unachievable tool is targeted",
      "        if model.feasible(code, 1, PIECE_POLICY):\n",
      "        if True:\n"),
@@ -7044,11 +7317,13 @@ DROP_TOOL_WALK_MUTATIONS = [
 ]
 DROP_TOOL_ALTERNATIVES_MUTATIONS = [
     ("root: a missing piece's alternative ignores the prospecting item",
-     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
-     "                                RootWalk(step_decline=step_decline, now=walk.now),\n"
+     "        _which_piece.piece_step(piece.slot,\n"
+     "                                _which_piece.piece_target(piece, objective, state, ctx.now),\n"
+     "                                RootWalk(step_decline=step_decline),\n"
      "                                state, game_data, ctx, history)\n",
-     "        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
-     "                            RootWalk(step_decline=step_decline, now=walk.now)\n"
+     "        IsThisTargetBlocked(piece.slot,\n"
+     "                            _which_piece.piece_target(piece, objective, state, ctx.now),\n"
+     "                            RootWalk(step_decline=step_decline)\n"
      "                            ).resolve(state, game_data, ctx, history)\n"),
 ]
 DROP_TOOL_WORK_MUTATIONS = [
@@ -7056,8 +7331,9 @@ DROP_TOOL_WORK_MUTATIONS = [
      "                 for code, route, units in legs if route.kind in _DROP_WORK)",
      "                 for code, route, units in legs)"),
     ("drop work: the bag is not credited",
-     "    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),",
-     "    legs = route_legs(item, qty, options, {},"),
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "                      {},"),
     ("drop work: a farm leg is priced as a gather",
      "        if leg.kind is SourceKind.DROP:\n            rate, min_q",
      "        if False:\n            rate, min_q"),
@@ -7180,14 +7456,14 @@ TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
      "            return tool_first(\n"
      "                ReachSkillLevel(skill=self.target.blocking_skill, level=current + 1),\n"
-     "                state, game_data, ctx, self.walk.now, self.walk.step_decline)\n",
+     "                ctx, self.walk.step_decline)\n",
      "            return ReachSkillLevel(skill=self.target.blocking_skill,\n"
      "                                   level=current + 1)\n"),
 ]
 TOOL_OBJECTIVE_FLEET_MUTATIONS = [
     ("which_piece_is_next: a fleet piece's climb ignores the tool",
      "        return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),\n"
-     "                          state, game_data, ctx, walk.now, walk.step_decline)\n",
+     "                          ctx, walk.step_decline)\n",
      "        return ReachSkillLevel(skill=piece.skill, level=current + 1)\n"),
 ]
 FLEET_PIECE_WALK_MUTATIONS = [
@@ -7391,35 +7667,6 @@ SYNERGY_CORE_MUTATIONS = [
      "    return sum(top, Fraction(0))"),
 ]
 
-# The root walk's step-decline filter (Phase 3-2, `decisions/root.py`): a gear
-# target whose step cannot be served never heads the walk, is named, and is
-# offered after the served siblings. Unit-killed by
-# tests/test_ai/test_decisions_root.py (since Task 5 of the global gear
-# objective: `test_the_tier_sheet_never_lets_a_declined_target_head_it`, on
-# the pre-objective subtree's own node). Replaced FALLBACK_ORDER_MUTATIONS,
-# whose one mutant anchored `promoted_from` in the deleted promotion.
-STEP_DECLINE_MUTATIONS = [
-    ("root: a declined gear target may still head the walk",
-     "                  if self.walk.serves(slot, target, state, game_data, ctx, history)}",
-     "                  if self.walk.serves(slot, target, state, game_data, ctx, history) or True}"),
-    # Global gear objective Task 5 retired the two `declined_targets`
-    # ordering mutants with the slot walk's place as the entry: the
-    # alternatives are every missing `L*` piece in the objective's own order,
-    # declined or not (`WHICH_PIECE_ROOT_MUTATIONS` drops them all).
-    ("root: the decline's reason is not recorded",
-     "        self.declined[repr(root)] = reason\n",
-     "        pass\n"),
-]
-
-# The fight arm's half of the same filter. Killed by
-# tests/test_ai/test_decisions_root.py
-# (`test_the_fight_arm_falls_through_on_a_declined_target`: the arm must fall
-# through rather than divert).
-STEP_DECLINE_FIGHT_ARM_MUTATIONS = [
-    ("root: the fight arm heads with a declined target",
-     "        if not self.walk.serves(slot, gear, state, game_data, ctx, history):\n",
-     "        if False:\n"),
-]
 
 # WAVE 3a DELETED `BRANCH_OBJECTIVE_ROOT_MUTATIONS` (four mutants over the
 # unified objective's grip on ROOT selection: the justifying filter, its
@@ -7435,7 +7682,7 @@ STEP_DECLINE_FIGHT_ARM_MUTATIONS = [
 # the role-owned-skills group. Every one anchored a line in a file that no longer
 # exists, or in `player.py`'s `_role_owned_skills`, whose only reader was
 # `_role_map`. `SYNERGY_CORE_MUTATIONS` and `MEMO_ENRICH_MUTATIONS` STAY:
-# `tiers/synergy_core` and the enriched requirement multiset both have live
+# `progression/synergy_core` and the enriched requirement multiset both have live
 # non-ranking consumers.
 
 # RequirementGraphMemo.requirement_multiset_for — the enriched (item + skill +
@@ -7662,18 +7909,6 @@ GATHERING_PASSIVE_MUTATIONS = [
      "            if False:\n                continue"),
 ]
 
-# equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
-# profile_for is now a CONSTANT COMBAT for every root and adequacy (skill-level
-# roots — the only former utility-axis pursuit — grind planner-natively via the
-# LevelSkill action). Killed by formal/diff/test_equipment_profile_diff.py, which
-# pins every (root, adequacy) case against Lean profileFor's constant COMBAT.
-EQUIPMENT_PROFILE_MUTATIONS = [
-    # flip the constant selector to UTILITY: every pursuit wrongly selects the
-    # utility profile. Caught by every (root, adequacy) case in the diff test.
-    ("profiles: constant selector flipped to utility",
-     "    return ProfileKind.COMBAT",
-     "    return ProfileKind.UTILITY"),
-]
 
 # currency_turnin.py::turn_in_ready_pure — Task 9 (fleet-currency-turn-in epic
 # formal/mutation debt). The threshold is the vendor's PRICE, not a margin: at
@@ -7737,25 +7972,6 @@ COMBAT_DEFICIT_TIEBREAK_MUTATIONS = [
      "        if best is None or score >= best_score:"),
 ]
 
-# `deficit_upgrade_target` must honour `closes`, not merely `chain`. Reading
-# `chain` commits the guard to gear that provably cannot win the fight — 648 of
-# 895 losing (scenario, monster) pairs on the committed bundle. Killed by
-# tests/test_ai/test_combat_deficit.py. OWN run_group (unit-killed mutant).
-COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS = [
-    ("deficit_upgrade_target: futile chain committed to as if it closed the gap",
-     "    if deficit is None or not deficit.closes:",
-     "    if deficit is None or not deficit.chain:"),
-    # The bound is load-bearing in the OTHER direction: at max_chain=1 a fight
-    # that two items would close reads as unclosable, so honouring `closes`
-    # would silently narrow the walk's fight arm instead of correcting it.
-    ("deficit_upgrade_target: walk bounded at one step, so multi-item chains vanish",
-     "                             candidates=candidates, actions_of=actions_of, secure=True)",
-     "                             candidates=candidates, max_chain=1, actions_of=actions_of, secure=True)"),
-    ("deficit_upgrade_target: routes at the feasibility bar",
-     "                             candidates=candidates, actions_of=actions_of, secure=True)",
-     "                             candidates=candidates, actions_of=actions_of)"),
-]
-
 # The ONE-LEVEL PLANNING HORIZON (USER 2026-08-25): "cancel tasks that we can't
 # meet through gear upgrade, or (level-up by exactly 1 level and gear upgrade)."
 # One mutation per verdict, all killed by tests/test_ai/test_task_horizon.py.
@@ -7777,9 +7993,9 @@ ROUTE_PRICE_MUTATIONS = [
     ("route: an unpriceable skill climb reads FREE instead of walled",
      "            return UNOBTAINABLE_PER_UNIT\n        return skill_grind_cycles(",
      "            return 0\n        return skill_grind_cycles("),
-    ("route: a BLOCKED level path reads free instead of walled",
-     "        if plan.blocked:\n            return UNOBTAINABLE_PER_UNIT",
-     "        if plan.blocked:\n            return 0"),
+    ("route: a level-up reads FREE instead of having no acquisition price",
+     "        # resolve a level-up.\n        return UNOBTAINABLE_PER_UNIT",
+     "        # resolve a level-up.\n        return 0"),
     # The fleet fallback must be reached only in the ABSENCE of own evidence:
     # `rate or fleet` would let a stuck character borrow a healthy one's rate.
     ("route: the skill rate falls back on a FALSY own rate, not a missing one",
@@ -7791,61 +8007,112 @@ ROUTE_PRICE_MUTATIONS = [
      "    return not obtain_sources(code, state, game_data, ctx)"),
 ]
 
-ROOT_FIGHT_ARM_MUTATIONS = [
-    # The standing arm, re-broadened one layer down from where RegearEdge used
-    # to hold it (RegearEdge itself was deleted in Phase 4-3b). Killed by test_decisions_root.py's re-homed
-    # `test_a_futile_deficit_does_not_take_the_fight_arm` /
-    # `test_a_level_up_verdict_does_not_take_the_fight_arm`: both verdicts would
-    # take the fight arm, which is the 981-cycle freeze's shape.
-    ("root: the fight arm re-broadens to any horizon verdict",
-     "        if horizon is None or horizon.verdict != HORIZON_GEAR:",
-     "        if horizon is None:"),
-    # The winnable-alternative conjunct. USER 2026-08-22: "not being able to win
-    # against a pig is fine. but that shouldn't block us from fighting other,
-    # winnable monsters."
-    ("root: the fight arm ignores a winnable alternative",
-     "        if (ctx.combat_monster is not None and not ctx.combat_propped\n"
-     "                and not ctx.combat_risky):\n"
-     "            return IsMyGearBehindMyTier(self.objective, self.walk)\n"
-     "        horizon = resolve_task_horizon(state, game_data)\n",
-     "        horizon = resolve_task_horizon(state, game_data)\n"),
-    # The honest wall: an empty deficit chain must fall through to the tier arm,
-    # not commit to whatever the walk last held.
-    ("root: an empty deficit chain commits instead of falling through",
-     "        if target is None:\n"
-     "            return IsMyGearBehindMyTier(self.objective, self.walk)\n",
-     "        if target is None:\n"
-     "            return WhichSlotIsFurthestBehind({}, self.walk)\n"),
+# The task root's gear arm (plan C Task 2, Review Focus 1): an unwinnable held
+# task roots the first missing piece of `L*` of its monster, in its slot.
+# Killed by tests/test_ai/scenarios/test_held_task.py.
+ROOT_TASK_GEAR_MUTATIONS = [
+    ("root: the task's gear is read in XP, not task progress",
+     "                               task_rate).missing[0]\n",
+     "                               lambda rate: rate.xp_per_second).missing[0]\n"),
+    ("root: an unwinnable task's gear arm never roots",
+     "    if horizon is None or horizon.verdict != HORIZON_GEAR:\n        return None\n",
+     "    if True:\n        return None\n"),
+    ("root: the task's gear piece loses its slot",
+     "    return ObtainItem(first.code, 1, slot=first.slot)",
+     "    return ObtainItem(first.code, 1)"),
+    ("root: the task's gear names the last piece, not the first",
+     "                               task_rate).missing[0]\n",
+     "                               task_rate).missing[-1]\n"),
 ]
-
+# `gear_objective_for`: `L*` of a pinned monster, the same pieces as the
+# argmax's (plan C Task 2). Killed by tests/test_ai/test_gear_objective.py.
+GEAR_OBJECTIVE_FOR_MUTATIONS = [
+    ("gear objective for: the pinned monster's pieces are gained against no rate",
+     "        rate = _rate(target[0], game_data, monster, food, loop, per)\n        return _objective(",
+     "        rate = Fraction(0)\n        return _objective("),
+]
+# Ruling C2-perf: the horizon reads `L*` without pricing it, and reads the
+# achievable set once per episode. Killed by tests/test_ai/test_task_horizon.py.
+GEAR_HORIZON_READ_MUTATIONS = [
+    # Ruling C2-R2: one entry per purpose.
+    ("gear objective for: the memo key drops the purpose",
+     '    return _pinned(f"gear_objective_for:{per.__name__}", monster, state, game_data, ctx,',
+     '    return _pinned("gear_objective_for", monster, state, game_data, ctx,'),
+    # Ruling C2-grey: a pinned task monster's R is its task progress a second.
+    ("task purpose: a task's progress is counted in XP",
+     "    return rate.kills_per_second\n",
+     "    return rate.xp_per_second\n"),
+    ("gear closes: the task horizon reads R in XP",
+     "    rate = _rate(fighter, game_data, monster, food, loop, task_rate)\n",
+     "    rate = _rate(fighter, game_data, monster, food, loop, xp_rate)\n"),
+    ("gear closes: a missing L* that still loses closes it",
+     "    if not secure_win(fighter, game_data, monster):\n        return False\n    own =",
+     "    if False:\n        return False\n    own ="),
+    ("gear closes: an unheld piece that adds nothing to R closes it",
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at, task_rate) > 0\n",
+     "    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at, task_rate) >= 0\n"),
+    ("episode memo: an answer is served to another state",
+     "        if held_data is game_data and held_ctx is ctx and held_state == key_state:\n",
+     "        if held_data is game_data and held_ctx is ctx:\n"),
+    ("episode memo: an answer is served to another context",
+     "        if held_data is game_data and held_ctx is ctx and held_state == key_state:\n",
+     "        if held_data is game_data and held_state == key_state:\n"),
+    ("episode memo: nothing is memoised",
+     "    value = compute()\n    answers.append((key_state, game_data, ctx, value))\n",
+     "    value = compute()\n"),
+    # Ruling C2-R m4: a task the keep can see is its own key.
+    ("episode memo: a task on an item code is cleared",
+     "    if state.task_code is not None and game_data.item_stats(state.task_code) is not None:\n"
+     "        return state\n",
+     "    if False:\n        return state\n"),
+    ("episode memo: a task-worth probe is a different key",
+     "        return state\n    return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)",
+     "        return state\n    return state"),
+]
 TASK_HORIZON_MUTATIONS = [
     ("horizon: a task the gate fights still waits for a level",
      "    if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):\n",
      "    if False:\n"),
     ("task_horizon: the gear arm never fires",
-     "    target = deficit_upgrade_target(state, game_data)",
-     "    target = None"),
-    # THE HALF-MODELLED SHORTCUT the design forbids. `combat_deficit._pool`
-    # filters `stats.level <= state.level`, so bumping the level alone widens the
-    # candidate pool and looks like a complete +1 evaluation. Measured over the
-    # ten corpus LEVEL_UP pairs, the +5 Max HP grant flips 10 of 10 and the pool
-    # widening flips 0 of 10 — this mutation deletes the middle clause entirely.
+     "            and gear_closes_for(monster, state, game_data, ctx, history)):\n",
+     "            and False):\n"),
+    # A monster with no reachable tile has no `L*` (its walk back is unpriced).
+    ("task_horizon: an unlocated monster is asked for its L*",
+     "    if (game_data.monster_spawn_known(monster)\n",
+     "    if (True\n"),
+    # THE HALF-MODELLED SHORTCUTS the design forbids: `L*` one level up is
+    # picked from the gear the next level admits AND worn by the grown body.
+    # Each half has a witness only it flips (`l15_midband` v pig: the body;
+    # `l19_band_edge` v skeleton: the pool).
     ("task_horizon: level+1 widens the POOL but leaves the body unchanged",
      "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
      "    return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)",
      "    return dataclasses.replace(state, level=level)"),
-    # `combat_deficit` returns None when the fight is ALREADY won, so the None arm
-    # is "the level alone wins it, nothing to acquire" — the cheapest instance of
-    # the rule. Reading it as out-of-reach cancels a task one HP grant from being
-    # workable.
-    ("task_horizon: the level-alone win reads as out of reach",
-     "    if at_next is None or at_next.closes:",
-     "    if at_next is not None and at_next.closes:"),
+    ("task_horizon: level+1 grows the body but leaves the pool unchanged",
+     "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
+     "    return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)",
+     "    max_hp = projected_max_hp(state.max_hp, state.level, level)\n"
+     "    return dataclasses.replace(state, max_hp=max_hp, hp=max_hp)"),
+    # Ruling C2-one-model: the level-up arm reads `L*` one level up, the gear
+    # the next level admits worn by the grown body.
+    ("task_horizon: the level-up arm reads L* at the current level",
+     "    fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)\n",
+     "    fighter = gear_fighter_for(monster, state, game_data, ctx, history)\n"),
+    ("task_horizon: the level-up arm never fires",
+     "    if drop_fight_winnable(fighter, game_data, monster):\n"
+     "        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n",
+     "    if False:\n        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)\n"),
+    # Ruling C2-R m3: the level-up arm reads the potion-aware gate.
+    ("task_horizon: the level-up arm reads the bare odds",
+     "    if drop_fight_winnable(fighter, game_data, monster):\n",
+     "    if predict_win(fighter, game_data, monster):\n"),
 ]
 
 # The horizon's consumer on the LATCH (`REGEAR_EDGE_HORIZON_MUTATIONS`) was
-# retired in Phase 4-3b with `RegearEdge` and the GEAR_REVIEW guard it fed; the
-# fight-arm half lives on in ROOT_FIGHT_ARM_MUTATIONS.
+# retired in Phase 4-3b with `RegearEdge` and the GEAR_REVIEW guard it fed; its
+# fight-arm half (ROOT_FIGHT_ARM_MUTATIONS) went with the wave-4 fight arm in
+# plan C Task 2. The horizon's gear verdict is served by the task root
+# (ROOT_TASK_GEAR_MUTATIONS).
 CATALOGUE_SCOPE_PURGE_MUTATIONS = [
     ("catalogue_scope: a catalogue's sub-cache outlives the catalogue",
      "            weakref.finalize(game_data, self._caches.pop, key, None)",
@@ -7867,9 +8134,9 @@ TASK_WORTH_INPUT_MUTATIONS = [
     ("short items: the bank is not counted",
      "    stock.update(state.bank_items or {})\n",
      "    pass\n"),
-    ("short items: worn gear still needs its closure",
-     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]\n",
-     "    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets]\n"),
+    ("short items: the missing L* pieces need no closure",
+     "    stack = [(code, 1) for code in objective_codes(ctx)]\n",
+     "    stack = []\n"),
     ("task worth: fight gold is not counted in the task's rate",
      "        return (reward + remaining * fight_gold) / (remaining * per_kill)\n",
      "        return reward / (remaining * per_kill)\n"),
@@ -7910,9 +8177,6 @@ POOL_DRAW_MUTATIONS = [
      "task_worth_for(task.code, master, task.min_quantity,"),
 ]
 DRAW_CONTEXT_MUTATIONS = [
-    ("draw ctx: the DAG's XP demand never reaches the context",
-     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n",
-     ""),
     ("draw ctx: an offline scenario draws",
      "        if not self._draws_enabled:\n            return ctx\n",
      ""),
@@ -7921,6 +8185,14 @@ DRAW_CONTEXT_MUTATIONS = [
      "        return ctx"),
 ]
 XP_DEMAND_MUTATIONS = [
+    # Ruling C2-m3 (spec §2.5): a fleet piece's craft skill is demand.
+    ("xp demand: a fleet piece demands nothing",
+     "        roots.extend(ReachSkillLevel(skill=piece.skill, level=piece.level)\n"
+     "                     for piece in ctx.fleet_pieces)\n",
+     "        pass\n"),
+    ("xp demand: fleet pieces are demand without a gear objective",
+     "    if ctx.gear_objective is not None:\n        roots.extend(ReachSkillLevel(",
+     "    if True:\n        roots.extend(ReachSkillLevel("),
     ("xp demand: gather skills are not demanded",
      "    skills.update(gather_demand(roots, state, game_data, ctx))\n",
      "    pass\n"),
@@ -7933,9 +8205,49 @@ XP_DEMAND_MUTATIONS = [
     ("xp demand: gear above the character demands no level",
      "            if stats is not None and stats.level > state.level:\n",
      "            if False:\n"),
-    ("xp demand: worn targets are still demanded",
-     "for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)",
-     "for code in sorted(ctx.target_gear | ctx.near_term_targets))"),
+    ("xp demand: the missing L* pieces are not roots",
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n",
+     "    pass\n"),
+]
+# The one source of the codes the gear objective still builds toward (plan C
+# Task 1): the skill demand, a task's short drops and the grind's `wanted`
+# read it. Killed by tests/test_ai/test_xp_demand.py.
+OBJECTIVE_CODES_MUTATIONS = [
+    ("objective codes: the missing L* pieces are dropped",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
+     "    return tools\n"),
+    ("objective codes: the L* loadout stands in for its missing pieces",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
+     "    return frozenset(ctx.gear_objective.loadout.values()) | tools\n"),
+    ("objective codes: the T* tools are dropped beside L*",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing) | tools\n",
+     "    return frozenset(piece.code for piece in ctx.gear_objective.missing)\n"),
+    ("objective codes: the T* tools are dropped without an objective",
+     "        return tools\n",
+     "        return frozenset()\n"),
+]
+# The tools of the demanded skills by one fixed point (ruling C1-a). Killed by
+# tests/test_ai/test_objective_demand.py.
+OBJECTIVE_DEMAND_MUTATIONS = [
+    ("fixed point: one pass, the tools' own skills never join",
+     "        if _named(tools) == found:\n",
+     "        if True:\n"),
+    ("fixed point: the tools are not roots",
+     "        ctx = replace(ctx, objective_tools=found)\n",
+     "        ctx = replace(ctx, objective_tools=frozenset())\n"),
+    ("fixed point: a skill's tool is looked up every pass",
+     "        fresh = sorted(skills - tools.keys())\n",
+     "        fresh = sorted(skills)\n"),
+    ("fixed point: the demand found is not returned",
+     "            return replace(ctx, skill_demand=skills, level_demanded=level)\n",
+     "            return ctx\n"),
+]
+# The grind's `wanted` credit reads the objective's missing pieces (plan C
+# Review Focus 2). Killed by tests/test_ai/test_skill_grind_target.py.
+GRIND_WANTED_MUTATIONS = [
+    ("grind wanted: a missing L* piece is not wanted",
+     "        c, wanted=(c.code in wanted or c.code == supply))\n",
+     "        c, wanted=(c.code == supply))\n"),
 ]
 TASK_XP_DEMANDED_MUTATIONS = [
     ("task xp: character XP counts without level demand",
@@ -7988,8 +8300,8 @@ CARRY_GOAL_MUTATIONS = [
 ]
 CARRY_PREP_MUTATIONS = [
     ("carry: heal prep emits a plain gather (bank satisfies it)",
-     "                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)\n",
-     "                return GatherMaterialsGoal(target_item=code, needed={code: target})\n"),
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True,\n",
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target},\n"),
 ]
 FIGHT_STEP_PREP_MUTATIONS = [
     ("fight steps: the grind never preps",
@@ -8106,22 +8418,67 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
-     "    return per_kill\n"),
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return _in_actions(per_kill * fight, ctx)\n"),
     ("loss risk: the routes drop the context's records",
-     "                                                  ctx.drops(), ctx.fight_records),\n",
-     "                                                  ctx.drops(), ()),\n"),
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ctx.fight_records),\n",
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ()),\n"),
     ("loss risk: the surcharge reads any monster's record",
      "        if monster == monster_code:\n",
      "        if True:\n"),
 ]
 LOSS_RISK_GRIND_MUTATIONS = [
     ("loss risk: the grind rungs are priced without the records",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,\n",
-     "    pricing_ctx = replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=(),\n"),
+     "    return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,\n",
+     "    return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=(),\n"),
     ("loss risk: the grind memo ignores the records",
      "        fight_records,\n        tuple(sorted(state.win_thresholds.items())),\n",
      "        (),\n        tuple(sorted(state.win_thresholds.items())),\n"),
+]
+# A full `_beats` tie is broken by a semantic order, not the API catalogue's
+# (plan C Task 8, Task 7 review M1). Killed by tests/test_ai/test_skill_grind_target.py
+# (test_a_full_tie_goes_to_the_higher_objective_gain_in_either_catalogue_order,
+# test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order).
+# Task 8 review M3: the candidate memo keys the seconds the rungs are priced
+# with. Killed by tests/test_ai/test_skill_grind_target.py
+# (test_the_memo_key_notices_changed_fight_and_action_seconds).
+GRIND_MEMO_SECONDS_MUTATIONS = [
+    ("grind memo: the seconds are not keyed",
+     "        learned_drops,\n        seconds,\n",
+     "        learned_drops,\n        (None, None),\n"),
+    ("grind memo: the builder keys no seconds",
+     "                     (ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds))\n",
+     "                     (None, None, None))\n"),
+]
+GRIND_TIEBREAK_MUTATIONS = [
+    ("grind tiebreak: candidates meet the core in catalogue order",
+     "        skill, level, semantic_order(skill, level, candidates, state, game_data, ctx))\n",
+     "        skill, level, candidates)\n"),
+    ("grind tiebreak: the objective gain is ignored",
+     "    ordered = sorted(top, key=lambda c: (-gains[c.code], fights.get(c.code, Fraction(0))))\n",
+     "    ordered = sorted(top, key=lambda c: fights.get(c.code, Fraction(0)))\n"),
+    ("grind tiebreak: more fights first",
+     "    ordered = sorted(top, key=lambda c: (-gains[c.code], fights.get(c.code, Fraction(0))))\n",
+     "    ordered = sorted(top, key=lambda c: (-gains[c.code], -fights.get(c.code, Fraction(0))))\n"),
+    ("grind tiebreak: a tied rung's fights are never counted",
+     "              if len(contested) > 1 else {})\n",
+     "              if False else {})\n"),
+    # Review I1: the walk is paid only by the eligible rungs tied at the top.
+    ("grind tiebreak: every candidate pays a fight walk",
+     "    fights = ({c.code: chain_fight_actions(c.code, state, game_data, ctx) for c in contested}\n",
+     "    fights = ({c.code: chain_fight_actions(c.code, state, game_data, ctx) for c in candidates}\n"),
+    ("grind tiebreak: ineligible rungs are looked at for the tie",
+     "    eligible = [c for c in candidates if _eligible(c, skill, current_level)]\n",
+     "    eligible = list(candidates)\n"),
+    ("grind tiebreak: gathers count as fights",
+     "    fights = tuple(leg for leg in work if leg.kind is SourceKind.DROP)\n",
+     "    fights = tuple(work)\n"),
+    ("grind tiebreak: the fight count ignores the rung's produce rule",
+     "                     produce=frozenset({code}))\n    fights = tuple(",
+     "                     produce=frozenset())\n    fights = tuple("),
 ]
 WIN_THRESHOLD_GRIND_MUTATIONS = [
     ("win threshold: the grind memo ignores the thresholds",
@@ -8174,15 +8531,15 @@ CONSUMABLE_FLOOR_MUTATIONS = [
 ]
 CONSUMABLE_DEMAND_MUTATIONS = [
     ("floor demand: the shortfall seeds a DAG root again",
-     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
-     "    return roots\n",
-     "                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)\n"
-     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"
-     "    return roots\n"),
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n",
+     "    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))\n"
+     "    roots.extend(ObtainItem(code, qty) for code, qty in ctx.supply_shortfall)\n"),
 ]
 SKILL_DEMAND_ORDER_MUTATIONS = [
     ("skill demand: the loadout is chosen without it",
-     "        ctx = replace(ctx, skill_demand=skills, level_demanded=level)\n"
+     "        ctx = objective_demand(\n"
+     "            self._last_decision.chosen_root if self._last_decision is not None else None,\n"
+     "            self.state, self.game_data, ctx)\n"
      "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n",
      "        ctx = replace(ctx, loadout=self._party_fight_loadout()\n"),
 ]
@@ -8368,7 +8725,7 @@ CENSUS_CROSSING_MUTATIONS = [
      "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach) + tasks\n",
      "    sources = fights + gathers + _vendor_sources(leaf, state, game_data, reach)\n"),
     ("census: a vendor past a crossing is reached",
-     "    return [game_data.npc_region(npc) in reach\n",
+     "    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)\n",
      "    return [True\n"),
     ("census: an absent vendor is a source",
      "            if _present_vendor(npc, game_data)\n            and _currency_directly_attainable(",
@@ -8394,9 +8751,16 @@ CENSUS_FIDELITY_MUTATIONS = [
      "                and resource in game_data.all_resource_locations):\n"
      "            return True\n"
      "    return any(drop == leaf and resource in game_data.all_resource_locations\n"),
-    ("census: the loadout is one bare pick, not a fixed point",
-     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n",
-     "            gear.update(upgrades)  # strict per-slot improvements: terminates\n            break\n"),
+    # Plan C Task 6: the census loadout is `L*` (`census_gear`).
+    ("census: the geared cell's L* is chosen without the armory",
+     "                          inventory=_armory(char_level, game_data) if geared else {},\n",
+     "                          inventory={},\n"),
+    ("census: the census loadout is chosen without its events live",
+     "        game_data.active_event_codes = set(events)\n        try:\n",
+     "        try:\n"),
+    ("census: the census gear's skills stay at 1",
+     "                          skills={name: char_level for name in SKILL_NAMES},\n",
+     "                          skills={},\n"),
     ("census: a live event monster is not a present dropper",
      "            or (game_data.is_event_monster(m) and _event_live(content.get(m), game_data))]\n",
      "            ]\n"),
@@ -8426,43 +8790,6 @@ DROP_LOADOUT_GATE_MUTATIONS = [
     ("drop gate: bare stats only",
      "                  or wins_with_a_loadout(rested, game_data, monster)))\n",
      "                  or False))\n"),
-]
-# The party boss XP loop (docs/PLAN_group_fights.md increment 3). OWN
-# run_groups: unit-killed by tests/test_ai/test_party_loop.py and
-# tests/test_ai/test_band_target.py.
-PARTY_LOOP_MUTATIONS = [
-    ("party loop: the XP reads the character's own level",
-     "    xp = game_data.xp_per_kill(monster, sum(levels) // len(levels), state.wisdom)\n",
-     "    xp = game_data.xp_per_kill(monster, state.level, state.wisdom)\n"),
-    ("party loop: a grey party loop is a loop",
-     "    if xp <= 0:\n        return None\n",
-     "    if xp < 0:\n        return None\n"),
-    ("party loop: the fight counts rounds, not actor turns",
-     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns * (len(levels) + 1))\n",
-     "    fight = Fraction(SECONDS_PER_TURN * outcome.turns)\n"),
-    ("party loop: a raid boss is farmed for XP",
-     "PARTY_XP_TYPES = frozenset({\"boss\"})\n",
-     "PARTY_XP_TYPES = frozenset({\"boss\", \"raid_boss\"})\n"),
-    ("party loop: an unpayable drink runs",
-     "    if consumed is None:\n        return None\n    me = cards[0]",
-     "    if consumed is None:\n        consumed = Fraction(0)\n    me = cards[0]"),
-]
-BAND_PARTY_MUTATIONS = [
-    ("band: no party candidates",
-     "    for code in party_candidates(state, game_data):\n",
-     "    for code in []:\n"),
-    ("band: a party pick drops its joiners",
-     "            scored.append((code, party.rate.xp_per_second, party.joiners))\n",
-     "            scored.append((code, party.rate.xp_per_second, ()))\n"),
-    ("band: party bosses above the ceiling",
-     "            if kind in PARTY_XP_TYPES and game_data.monster_levels[code] <= ceiling\n",
-     "            if kind in PARTY_XP_TYPES\n"),
-    ("band: party bosses that do not spawn",
-     "<= ceiling\n            and game_data.monster_locations(code)]\n",
-     "<= ceiling\n            ]\n"),
-    ("band: party candidates without a party",
-     "    if not state.party:\n        return []\n",
-     "    if False:\n        return []\n"),
 ]
 # Party cards and leases (docs/PLAN_group_fights.md increment 4a). OWN
 # run_groups: unit-killed by tests/test_ai/test_party_coordination.py.
@@ -8755,11 +9082,22 @@ PARTY_LOADOUT_PLAYER_MUTATIONS = [
 # levelling. Killed by tests/test_ai/test_dual_role_currency.py.
 PIECE_PASSIVE_CURRENCY_MUTATIONS = [
     ("passive currency: an L* piece's medals are capped by the tickets held",
-     "                if funded is not None and not piece:\n",
+     "                if funded is not None and not farmed:\n",
      "                if funded is not None:\n"),
     ("passive currency: an L* medal worn for itself waits on the tickets held",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if _passively_funded(code, state, game_data) == 0:\n"),
+    # The ticket farm (live 2026-10-31): a piece's currency is farmed only
+    # while the piece leads the objective's own order.
+    ("passive currency: a piece behind a better one farms its tickets",
+     "        farmed = piece and _piece_leads(code, state, ctx)\n",
+     "        farmed = piece\n"),
+    ("passive currency: a piece awaiting delivery holds the farm back",
+     "    return all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n",
+     "    return all(False for piece in objective.missing[:at])\n"),
+    ("passive currency: the leading piece is never recognised",
+     "    return all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n",
+     "    return False and all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n"),
     ("passive currency: every equippable is an L* piece",
      "        piece = is_missing_piece(code, ctx)\n",
      "        piece = True\n"),
@@ -8783,8 +9121,8 @@ PIECE_GREY_GOAL_MUTATIONS = [
      "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
      "                            or self.piece_material\n"),
     ("piece grey: for_piece leaves the goal unmarked",
-     "                                   fight_gold=self.fight_gold, piece_material=True)",
-     "                                   fight_gold=self.fight_gold, piece_material=False)"),
+     "                                   fight_gold=self.fight_gold, piece_material=True,\n",
+     "                                   fight_gold=self.fight_gold, piece_material=False,\n"),
 ]
 PIECE_GREY_SEAM_MUTATIONS = [
     ("piece grey: a piece's gather is never marked",
@@ -8836,6 +9174,140 @@ GATHER_REACH_MUTATIONS = [
      "            known = self._gd.resource_spawn_known(resource) and content_reached(\n"
      "                resource, tiles, self._gd, self._reach())\n"),
 ]
+# Task 8a (Ruling C-3): a vendor route asks the one reach authority, as a
+# fight or a gather does. Killed by tests/test_ai/test_vendor_reach.py.
+VENDOR_REACH_GATE_MUTATIONS = [
+    ("vendor reach: every vendor is reached",
+     "    known = content_reached(npc, tiles, game_data, reach)\n",
+     "    known = True\n"),
+    ("vendor reach: a vendor past a door names no door",
+     "    doors = () if known else doors_to(npc, tiles, crossing, game_data)\n",
+     "    doors = ()\n"),
+    ("vendor reach: an event vendor stands on its catalogue spawn, not its read",
+     "    if live:\n        return live\n",
+     "    if False:\n        return live\n"),
+    ("vendor reach: a permanent vendor's own tile is not read",
+     "        return [tile]\n",
+     "        return []\n"),
+    ("vendor reach: a tile a live event takes still holds its vendor",
+     "                or (*tile, \"overworld\") in game_data.world.taken_tiles()):\n",
+     "                ):\n"),
+    ("vendor reach: an off-overworld vendor's tile is read as overworld",
+     "        if (tile is None or npc in game_data.world.npc_layers\n",
+     "        if (tile is None\n"),
+    ("vendor reach: an event vendor with no read stands nowhere",
+     "    return [] if tile is None else [tile]\n",
+     "    return []\n"),
+    ("vendor reach: every vendor is reached for a selection site",
+     "    return vendor_gate(npc, game_data, reachable_regions_now(state, game_data), state).satisfied\n",
+     "    return True\n"),
+]
+# Task 8a I-3, M-3: an event NPC's actions read the tile its live event reads.
+# Killed by tests/test_ai/test_vendor_reach.py.
+VENDOR_REACH_LOCATION_MUTATIONS = [
+    ("location: a read of an ended event moves its NPC",
+     "        if event is None or event not in self.active_event_codes:\n",
+     "        if event is None:\n"),
+    ("location: an event NPC's actions walk to its catalogue spawn, not its read",
+     "        live = self.event_npc_tiles(npc_code)\n        if live:\n            return live[0]\n",
+     "        live = self.event_npc_tiles(npc_code)\n        if False:\n            return live[0]\n"),
+    ("location: an event NPC read on the island travels in the main overworld",
+     "            return self.region_of(live[0][0], live[0][1], \"overworld\")\n",
+     "            return \"overworld\"\n"),
+]
+# Task 8a I-1: a sale is priced at the route's own buyer.
+VENDOR_REACH_SOURCE_MUTATIONS = [
+    ("obtain_sources: a SELL source forgets its buyer",
+     "    return [Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)\n",
+     "    return [Source(route.kind, route.via, route.yield_per, route.capacity)\n"),
+]
+# Task 8a I-4: the selection and emission sites ask `vendor_reached`.
+VENDOR_REACH_CURRENCY_MUTATIONS = [
+    ("currency demand: an unreached vendor grants affordability",
+     "            and vendor_reached(npc, state, game_data)\n",
+     "            and True\n"),
+]
+VENDOR_REACH_GATHERING_MUTATIONS = [
+    ("gathering: an unreached vendor raises currency demand",
+     "                    and vendor_reached(npc, state, game_data)]\n",
+     "                    and True]\n"),
+    ("gathering: an unreached intermediate vendor is emitted",
+     "                        continue\n"
+     "                    if not vendor_reached(npc_code, state, game_data):\n"
+     "                        continue\n"
+     "                    batch",
+     "                        continue\n"
+     "                    if False:\n"
+     "                        continue\n"
+     "                    batch"),
+    ("gathering: an unreached buy-only vendor is emitted",
+     "                for npc_code, price, currency in game_data.npc_purchases(item):\n"
+     "                    if not vendor_reached(npc_code, state, game_data):\n",
+     "                for npc_code, price, currency in game_data.npc_purchases(item):\n"
+     "                    if False:\n"),
+    ("gathering: an unreached craft-vs-buy seller is offered",
+     "                       if vendor_reached(npc, state, game_data)]\n",
+     "                       if True]\n"),
+]
+VENDOR_REACH_SELL_GOAL_MUTATIONS = [
+    ("sell goal: the bank arm sells at an unreached buyer",
+     "            if loc is None or not vendor_reached(npc_code, landed, game_data):\n",
+     "            if loc is None:\n"),
+    ("sell goal: the bag arm sells at an unreached buyer",
+     "                if loc is None or not vendor_reached(npc_code, state, game_data):\n",
+     "                if loc is None:\n"),
+    ("sell goal: an unreached merchant's window earns the bonus",
+     "                if not vendor_reached(npc_code, state, game_data):\n"
+     "                    continue\n"
+     "                if event_npc_tradeable(",
+     "                if False:\n                    continue\n                if event_npc_tradeable("),
+]
+VENDOR_REACH_ACCUMULATION_MUTATIONS = [
+    ("sell rungs: an unreached buyer makes a held item tradeable now",
+     "                    or not vendor_reached(npc_code, state, game_data)):\n",
+     "                    or False):\n"),
+]
+VENDOR_REACH_SHED_MUTATIONS = [
+    ("shed: an unreached buyer is the sale venue",
+     "    buyers = [(npc, pay) for npc, pay in game_data.npcs_buying_item(code)\n"
+     "              if vendor_reached(npc, state, game_data)]\n",
+     "    buyers = [(npc, pay) for npc, pay in game_data.npcs_buying_item(code)\n              if True]\n"),
+]
+VENDOR_REACH_LIQUIDATION_MUTATIONS = [
+    ("liquidation: an unreached buyer's price is the NPC floor",
+     "    buyers = [(npc, price) for npc, price in game_data.npcs_buying_item(item)\n"
+     "              if vendor_reached(npc, state, game_data)]\n",
+     "    buyers = [(npc, price) for npc, price in game_data.npcs_buying_item(item)\n              if True]\n"),
+]
+VENDOR_REACH_MODEL_MUTATIONS = [
+    ("obtain_model: a buy asks no reach",
+     "                Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"
+     "                vendor_gate(npc, self._gd, self._reach(), self._crossing),\n",
+     "                Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"),
+    ("obtain_model: a sale asks no reach",
+     "                    Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"
+     "                    vendor_gate(npc, self._gd, self._reach(), self._crossing),\n",
+     "                    Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"),
+]
+VENDOR_REACH_PRICE_MUTATIONS = [
+    ("sale: priced at the best buyer, not the route's own",
+     "        npc_code = source.agent\n",
+     "        npc_code = game_data.npcs_buying_item(source.code)[0][0]\n"),
+    ("sale: a door route forgets its buyer",
+     "        source = Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)\n",
+     "        source = Source(route.kind, route.via, route.yield_per, route.capacity)\n"),
+    ("reentry: a buy adds nothing to the bag",
+     "        units = route.yield_per if route.kind is SourceKind.BUY else 0\n",
+     "        units = 0\n"),
+    ("reentry: a sale adds its gold to the bag",
+     "        units = route.yield_per if route.kind is SourceKind.BUY else 0\n",
+     "        units = route.yield_per\n"),
+]
+VENDOR_REACH_CENSUS_MUTATIONS = [
+    ("census: a vendor is reached by its catalogue region",
+     "    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)\n",
+     "    return [game_data.npc_region(npc) in reach\n"),
+]
 # Task 14e (M-3): a key door is a route through its key. Killed by
 # tests/test_ai/test_key_door_route.py.
 KEY_DOOR_SHORTFALL_MUTATIONS = [
@@ -8863,8 +9335,9 @@ FEE_SHORTFALL_MUTATIONS = [
 KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: the walk's crossings are asked of its spendable pocket",
      "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,\n"
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "        model = ObtainModel(walked, game_data, ctx, ctx.now)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n"
+     "                            store=store)\n",
+     "        model = ObtainModel(walked, game_data, ctx, ctx.now, store=store)\n"),
     ("door: the model's reach is its pocket's",
      "        self._crossing = state if crossing is None else crossing\n",
      "        self._crossing = state\n"),
@@ -8873,8 +9346,8 @@ KEY_DOOR_CROSSING_MUTATIONS = [
      "    bag = (state.gold if code == GOLD_CODE\n"),
     # Round 5 (b): the walk's pocket is the spendable pocket of its account.
     ("door: the walk's pocket is the whole account",
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "                            spend=None)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n",
+     "                            spend=None,\n"),
 ]
 KEY_DOOR_FEE_GUARD_MUTATIONS = [
     ("door: a fee is paid past the reserve",
@@ -8957,11 +9430,11 @@ KEY_DOOR_ROUTE_STORE_MUTATIONS = [
      "    options, charge = _gold_priced(\n"
      "        acquisition_options(item, state, game_data, ctx, store, policy=policy),\n"
      "        state, game_data, ctx)\n"
-     "    _price, route = priced_route(",
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n",
      "    options, charge = _gold_priced(\n"
      "        acquisition_options(item, state, game_data, ctx, None, policy=policy),\n"
      "        state, game_data, ctx)\n"
-     "    _price, route = priced_route("),
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n"),
 ]
 # Final review I-2: both production callers hand the walk the cycle's store.
 KEY_DOOR_STORE_ARBITER_MUTATIONS = [
@@ -8979,9 +9452,9 @@ KEY_DOOR_STORE_PLAYER_MUTATIONS = [
 # window). `ctx.now.now(...)` is the wall clock, reached without an import.
 CYCLE_CLOCK_SOURCES_MUTATIONS = [
     ("cycle clock: the sources read the wall clock",
-     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),",
+     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing,\n",
      "    return _sources(ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo),"
-     " crossing=crossing),"),
+     " crossing=crossing,\n"),
 ]
 CYCLE_CLOCK_WALK_MUTATIONS = [
     ("cycle clock: the walk reads the wall clock",
@@ -8997,6 +9470,14 @@ CYCLE_CLOCK_PLAYER_MUTATIONS = [
     ("cycle clock: the cycle is never stamped (ruling FR-IA)",
      "        self._cycle_now = datetime.now(tz=timezone.utc)\n\n    def _timed(",
      "        pass\n\n    def _timed("),
+    # Ruling C-1 (plan C Task 4): the band candidate's context and the
+    # consumable price went with the band; the stamp is pinned on `_timed` and
+    # the role board's pricing.
+    ("cycle clock: role-demand pricing keeps the import instant (ruling C-1)",
+     "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=self._cycle_learned_drops()))\n",
+     "        ctx = (replace(NO_PROFILE_CONTEXT,\n"
+     "                                  learned_drops=self._cycle_learned_drops()))\n"),
 ]
 # Ruling T14e-m6: doors at any depth. Killed by
 # tests/test_ai/test_key_door_route.py.
@@ -9027,12 +9508,13 @@ KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
      "                                crossing=cross)\n            for code, units in leg)\n",
      "                                crossing=at)\n            for code, units in leg)\n"),
     ("chain: a priced route's model crosses from its pocket",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)\n",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now)\n"),
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross, store=store)\n",
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, store=store)\n"),
     ("chain: a priced route's sources cross from its pocket",
      "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
-     "                                      crossing=cross)\n",
-     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy)\n"),
+     "                                      crossing=cross, store=store)\n",
+     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
+     "                                      store=store)\n"),
 ]
 KEY_DOOR_CHAIN_WALK_MUTATIONS = [
     ("chain: every leg is walked by the origin's model",
@@ -9044,8 +9526,8 @@ KEY_DOOR_CHAIN_WALK_MUTATIONS = [
      "                        for at, cross in leg_states(self._account, self._crossing, door,\n",
      "                        for at, cross in leg_states(self._state, self._crossing, door,\n"),
     ("chain: a later leg's pocket is its whole account",
-     "                                    crossing=cross, spend=self._spend)\n",
-     "                                    crossing=cross, spend=None)\n"),
+     "                                    crossing=cross, spend=self._spend, store=self._store)\n",
+     "                                    crossing=cross, spend=None, store=self._store)\n"),
 ]
 KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
     ("chain: the executor opens the merged door's first code",
@@ -9087,8 +9569,8 @@ KEY_DOOR_GATE_MUTATIONS = [
      "    doors = () if known else monster_doors(monster, crossing, game_data)\n",
      "    doors = ()\n"),
     ("door: winnability is not asked past a door",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = (live or known) and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = (live or known) and rested.winnable("),
 ]
 KEY_DOOR_WALK_MUTATIONS = [
     ("door: a gather past a door names no door",
@@ -9137,9 +9619,6 @@ KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: a climb is rated without a store",
      "    climb = _climb_actions(gate.subject, gate.level, state, store) if store is not None else None\n",
      "    climb = _climb_actions(gate.subject, gate.level, state, store)  # type: ignore[arg-type]\n"),
-    ("door price: every priced route is a door route",
-     "    if route is None or not route.unlock.startswith(\"door:\"):\n",
-     "    if route is None:\n"),
     ("door price: the gear chain re-prices the door",
      "                            gated_drop=False, policy=policy, opening=opening,\n"
      "                            crossing=crossing)\n",
@@ -9151,8 +9630,8 @@ KEY_DOOR_COMPANION_MUTATIONS = [
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN or gate.kind in companions\n",
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN\n"),
     ("door: the walk ignores the priced route",
-     "                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)\n",
-     "                candidates.sort(key=lambda pair: True)\n"),
+     "                candidates.sort(key=lambda pair: _walk_order(pair[0], priced))\n",
+     "                candidates.sort(key=lambda pair: 0)\n"),
 ]
 KEY_DOOR_EXECUTOR_MUTATIONS = [
     ("door executor: a door gate is ground as a skill gate",
@@ -9258,7 +9737,7 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
      "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
      "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
     ("passive: an item bought with tickets farms them",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if False:\n"),
 ]
 SERVER_LAG_MUTATIONS = [
@@ -9386,23 +9865,27 @@ NPC_REGION_FACTORY_MUTATIONS = [
     ("npc region: the factory's buys travel in the overworld",
      "                npc_location=npc_loc,\n"
      "                travel_region=game_data.npc_region(npc_code),\n"
+     "                now=now,\n"
      "            ))\n"
      "\n"
      "    # NPC sell actions",
-     "                npc_location=npc_loc,\n            ))\n\n    # NPC sell actions"),
+     "                npc_location=npc_loc,\n                now=now,\n            ))\n\n    # NPC sell actions"),
     ("npc region: the factory's sells travel in the overworld",
      "                npc_location=npc_loc,\n"
      "                travel_region=game_data.npc_region(npc_code),\n"
+     "                now=now,\n"
      "            ))\n"
      "\n"
      "    # P5b",
-     "                npc_location=npc_loc,\n            ))\n\n    # P5b"),
+     "                npc_location=npc_loc,\n                now=now,\n            ))\n\n    # P5b"),
 ]
 NPC_REGION_GOAL_MUTATIONS = [
     ("npc region: a goal's craft-vs-buy offer travels in the overworld",
      "                                       quantity=qty,\n"
-     "                                       travel_region=game_data.npc_region(npc_code)))\n",
-     "                                       quantity=qty))\n"),
+     "                                       travel_region=game_data.npc_region(npc_code),\n"
+     "                                       now=self._now))\n",
+     "                                       quantity=qty,\n"
+     "                                       now=self._now))\n"),
 ]
 GREY_CURRENCY_MUTATIONS = [
     ("grey farm: a currency serves only its own consumers",
@@ -9411,6 +9894,80 @@ GREY_CURRENCY_MUTATIONS = [
     ("grey farm: a currency nothing consumes is not farmable",
      "        return bool(bought)\n",
      "        return False\n"),
+]
+# The census loadout's own mechanics (plan C Task 6 fix round 1, I-1/I-2).
+# Killed by tests/test_audit/test_census_gear.py.
+CENSUS_GEAR_MUTATIONS = [
+    ("census gear: a seeded table is not installed",
+     "    for key, gear in table.items():\n        _CENSUS_GEAR.remember(memo, key, dict(gear))\n",
+     "    for key, gear in table.items():\n        pass\n"),
+    ("census gear: a rung does not wear the rung below",
+     "        worn = census_gear(below, events, geared, game_data) if below is not None else {}\n",
+     "        worn = {}\n"),
+    ("census gear: a level with no objective keeps nothing",
+     "dict(objective.loadout) if objective is not None else worn)\n",
+     "dict(objective.loadout) if objective is not None else {})\n"),
+    ("census gear: the ladder's floor is level 0",
+     "    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n",
+     "    return max(0, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n"),
+    ("census gear: the ladder steps from the level itself",
+     "    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)\n",
+     "    return max(1, level // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP - 1)\n"),
+    ("census gear: level 1 has a rung below",
+     "    if level <= 1:\n        return None\n",
+     "    if level < 1:\n        return None\n"),
+    ("census gear: the memo forgets geared",
+     "    key = (char_level, events, geared)\n    if key not in memo:\n",
+     "    key = (char_level, events, False)\n    if key not in memo:\n"),
+    ("census gear: the memo forgets the events",
+     "    key = (char_level, events, geared)\n    if key not in memo:\n",
+     "    key = (char_level, frozenset(), geared)\n    if key not in memo:\n"),
+]
+# The reachability-claims census indexes module constants (plan C Task 6,
+# ruling C6-2‴): the register's one claim is about one. Killed by
+# tests/test_audit/test_reachability_claims.py (the real sweep finds 0 claims).
+REACHABILITY_CONSTANT_MUTATIONS = [
+    ("reachability claims: module constants are not indexed",
+     "    found: list[Definition] = _constants(tree, module)\n",
+     "    found: list[Definition] = []\n"),
+    ("reachability claims: a same-named constant elsewhere reads it",
+     "    if ref.kind == \"name\":\n        return module == owner_module\n    return ref.origin == owner_module\n",
+     "    return True\n"),
+    ("reachability claims: a stored name reads it",
+     "        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):\n",
+     "        if isinstance(node, ast.Name):\n"),
+    # Plan C Task 8 (Task 6 re-review m2): killed by
+    # test_a_constant_read_through_its_dotted_module_is_a_false_claim.
+    ("reachability claims: a dotted module read has no origin",
+     "        base = _dotted_origin(node.value, aliases)\n"
+     "        return None if base is None else f\"{base}.{node.attr}\"\n",
+     "        return None\n"),
+]
+# The vocabulary gate (plan C Task 8, spec 2026-10-18 §5 item 4). Killed by
+# tests/test_audit/test_vocabulary_gate.py.
+VOCABULARY_GATE_MUTATIONS = [
+    ("vocabulary gate: comments are read as identifiers",
+     "            if token.type == tokenize.NAME and names_the_concept(token.string)]\n",
+     "            if token.type in (tokenize.NAME, tokenize.COMMENT, tokenize.STRING)\n"
+     "            and names_the_concept(token.string)]\n"),
+    ("vocabulary gate: camelCase humps are not split",
+     "        found.extend(p.lower() for p in re.findall(r\"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\\d+\", segment))\n",
+     "        found.append(segment.lower())\n"),
+    ("vocabulary gate: an inflected part is not the word",
+     "INFLECTIONS = (\"\", \"s\", \"es\", \"ed\", \"ing\", \"er\", \"ers\")\n",
+     "INFLECTIONS = (\"\",)\n"),
+    ("vocabulary gate: a prefixed part is not the word",
+     "PREFIXES = (\"\", \"sub\", \"super\", \"multi\", \"inter\", \"intra\", \"mid\", \"pre\", \"next\", \"top\")\n",
+     "PREFIXES = (\"\",)\n"),
+    ("vocabulary gate: a part only has to end with the word",
+     "    return any(part == f\"{prefix}{word}{ending}\"\n",
+     "    return any(part.endswith(f\"{word}{ending}\")\n"),
+    ("vocabulary gate: an allowed name passes in any module",
+     "    return tuple(hit for hit in hits if hit.module not in homes.get(hit.name, ()))\n",
+     "    return tuple(hit for hit in hits if hit.name not in homes)\n"),
+    ("vocabulary gate: an orphan allowance passes",
+     "    return not self.violations and not self.orphans\n",
+     "    return not self.violations\n"),
 ]
 CENSUS_CURRENCY_GREY_MUTATIONS = [
     ("census: a grey currency dropper is attainable regardless of policy",
@@ -9440,7 +9997,7 @@ FIGHT_NEED_MUTATIONS = [
 # The fight step carries the potions the CRAFT_POTIONS ladder cannot brew (2026-10-10).
 POTION_PREP_MUTATIONS = [
     ("potion prep: a potion the ladder brews is carried twice",
-     "                and not ladder_supplies(code, needed, state, game_data)\n",
+     "                and not ladder_supplies(code, needed, state, game_data, ctx.now)\n",
      "\n"),
     ("potion prep: the worn units are carried again",
      "        needed = potion_carry(used) - equipped_potion_qty(state, code)\n",
@@ -9468,14 +10025,14 @@ FIGHT_STEP_POTION_MUTATIONS = [
 ]
 LADDER_SUPPLIES_MUTATIONS = [
     ("ladder supplies: every potion is the ladder's",
-     "    return _sized(code, deficit, state, game_data) is not None\n",
+     "    return _sized(code, deficit, state, game_data, now) is not None\n",
      "    return True\n"),
     ("prep supplies: greys are never admitted",
      "                      grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible\n",
      "                      grey_ok=lambda item: False).feasible\n"),
     ("potion stockable: a held potion is not stockable",
-     "    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)\n",
-     "    return (ladder_supplies(code, 1, state, game_data)\n"),
+     "    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data, ctx.now)\n",
+     "    return (ladder_supplies(code, 1, state, game_data, ctx.now)\n"),
     ("potion stockable: the prep never stocks",
      "            or prep_supplies(code, 1, state, game_data, ctx))\n",
      "            or False)\n"),
@@ -9540,11 +10097,6 @@ DECOMPOSE_EVENT_VENDOR_MUTATIONS = [
     ("decompose policy: a live event vendor is refused",
      "                           event_vendors=True)\n",
      "                           event_vendors=False)\n"),
-]
-BEST_GEAR_MUTATIONS = [
-    ("best gear: a fixed-supply item is worn",
-     "            for slot, _value, code in _slot_assignments(type_, slots, suppliable):\n",
-     "            for slot, _value, code in _slot_assignments(type_, slots, ranked):\n"),
 ]
 REGION_BRIDGE_MUTATIONS = [
     ("region bridge: decompose emits legs in another region unbridged",
@@ -9629,6 +10181,37 @@ CHOSEN_LOADOUT_MUTATIONS = [
     ("chosen_loadout: the carry horizon is half the measured run",
      "CARRY_HORIZON_FIGHTS = 20\n",
      "CARRY_HORIZON_FIGHTS = 10\n"),
+    # Task 8c (ruling C2-food): the food carry is the least of (a) the horizon,
+    # (b) the bag's room and (c) the held stock, the room read off the one slot
+    # and quantity model.
+    ("chosen_loadout: (a) the food carry ignores the horizon",
+     "    carry = min(eaten_per_fight * CARRY_HORIZON_FIGHTS, room)\n",
+     "    carry = room\n"),
+    ("chosen_loadout: (b) the food carry ignores the bag's room",
+     "    carry = min(eaten_per_fight * CARRY_HORIZON_FIGHTS, room)\n",
+     "    carry = eaten_per_fight * CARRY_HORIZON_FIGHTS\n"),
+    ("chosen_loadout: (c) the food carry ignores the held stock",
+     "    return carry if stock is None else min(carry, stock)\n",
+     "    return carry\n"),
+    ("chosen_loadout: a new food stack needs no free slot",
+     "    admits_new = has_room(new_stacks, 0, slots_free, qty)\n",
+     "    admits_new = True\n"),
+    ("chosen_loadout: the food room forgets the units held",
+     "    qty = sum(bag for _, bag in foods) + max(0, qty_free)\n",
+     "    qty = max(0, qty_free)\n"),
+    # Fix round 1: the joint allocation itself.
+    ("chosen_loadout: every food takes the whole room (no joint allocation)",
+     "    return tuple(eaten * qty // total if yes else 0\n",
+     "    return tuple(qty if yes else 0\n"),
+    ("chosen_loadout: the room is shared equally, not by what a fight eats",
+     "    return tuple(eaten * qty // total if yes else 0\n",
+     "    return tuple(qty // sum(admitted) if yes else 0\n"),
+    ("chosen_loadout: a new stack is admitted without its slot when the stacks do not all fit",
+     "    admitted = [eaten > 0 and (bag > 0 or admits_new) for eaten, bag in foods]\n",
+     "    admitted = [eaten > 0 for eaten, bag in foods]\n"),
+    ("chosen_loadout: an uneaten food takes a share",
+     "    admitted = [eaten > 0 and (bag > 0 or admits_new) for eaten, bag in foods]\n",
+     "    admitted = [(bag > 0 or admits_new) for eaten, bag in foods]\n"),
 ]
 LOADOUT_PLAYER_MUTATIONS = [
     ("player: the chosen loadout never reaches the context",
@@ -9760,7 +10343,7 @@ _ALL_SRCS = [
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
-    TIER_PROGRESS_SRC, COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
+    COMBAT_TARGETS_SRC, WIN_THRESHOLD_CORE_SRC,
     ROLE_SELECTION_SRC,
     FOOD_PRODUCER_SRC,
     SKILL_CREDIT_SRC,
@@ -9772,6 +10355,7 @@ _ALL_SRCS = [
     BAG_CLEAR_CORE_SRC, BAG_CLEAR_SRC,
     FIGHT_SECONDS_CORE_SRC, FIGHT_SECONDS_MODEL_SRC, DROP_CHANCE_CORE_SRC, DROP_OBSERVATIONS_SRC,
     LEARNED_DROPS_SRC, DROP_FIGHT_SELECTION_SRC,
+    OBJECTIVE_CODES_SRC, OBJECTIVE_DEMAND_SRC, SUPPLIABLE_SRC,
     REFUSAL_FACT_SRC, STRATEGY_DRIVER_SRC, TASK_WORTH_SRC, DECISION_SRC, OBTAIN_ITEM_DECISION_SRC,
     ROOT_DECISION_SRC, GATHER_DEMAND_SRC, TUI_APP_SRC,
     OBTAIN_ITEM_ROUTING_SRC, COOLDOWN_WAIT_SRC, EQUIP_VALUE_SRC,
@@ -9811,11 +10395,9 @@ _ALL_SRCS = [
     GATHERING_APPLY_SRC,
     MONSTER_CATALOG_SRC,
     WINNABLE_CASCADE_SRC,
-    COMBAT_PICKER_SRC,
     COMBAT_DEFICIT_SRC,
     TASK_HORIZON_SRC,
     CATALOGUE_SCOPE_SRC,
-    PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
     # Phase-18 — value-range theorems for the remaining goals.
@@ -9836,14 +10418,13 @@ _ALL_SRCS = [
     GATHER_STEP_TARGET_SRC,
     # Gather-batching epic — closure rebatcher.
     INTERMEDIATE_BATCH_SRC,
-    # #16 — efficiency-weighted strategic_value scorer.
-    STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
     # Decision-architecture Phase 1 — unified obtain model route selection.
     OBTAIN_MODEL_READY_SRC, OBTAIN_MODEL_POLICY_SRC, OBTAIN_MODEL_SRC,
     ACQUISITION_COST_SRC,
     OBTAIN_MODEL_DROP_SRC,
+    VENDOR_REACH_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
@@ -9856,8 +10437,6 @@ _ALL_SRCS = [
     DECOMPOSE_CORE_SRC,
     # Gear taxonomy: proved gear-classification core.
     GEAR_TAXONOMY_CORE_SRC,
-    # Progression-tree cores (2026-07-06): unit-killed group.
-    PROGRESSION_TREE_SRC,
     # Gear objective core (spec 2026-10-18 §2.3/§2.4): unit-killed group.
     GEAR_OBJECTIVE_CORE_SRC,
     # Fleet climb core (spec 2026-10-18 §2.5): unit-killed group.
@@ -9867,53 +10446,10 @@ _ALL_SRCS = [
     FLEET_PIECES_SRC,
     # Gear objective adapter (spec 2026-10-18 §2.1-§2.4): unit-killed group.
     GEAR_OBJECTIVE_SRC,
-    # Equipment-profile selector (2026-07-08): differential-killed group.
-    EQUIPMENT_PROFILE_SRC,
     # Task 7 (role-driven supply): coordination-store asymmetric-demand reader.
     COORDINATION_STORE_SRC,
     # ai/supply_claim_and_batch Task 4: the batch-milestone commitment target.
     SUPPLY_BATCH_TARGET_SRC,
-]
-
-
-# Phase 12 Target A: cheapest_path_to_level greedy contract. Mutants test
-# (a) the +1 beatability margin, (b) strict-> tie-break, (c) the
-# `best_xp_per_cycle <= 0` blocked branch, (d) the is_winnable beatability
-# filter. The diff test must kill all four.
-CHEAPEST_PATH_MUTATIONS = [
-    # Mutation 1: shrink the beatability bound from `lvl <= sim_level + 1` to
-    # `lvl <= sim_level`. test_plus_one_boundary_beatable now blocks (Python)
-    # but Lean still picks the +1 monster — divergence.
-    ("cheapest_path: drop the +1 beatability margin",
-     "            if 1 <= lvl <= sim_level + 1",
-     "            if 1 <= lvl <= sim_level"),
-    # Mutation 2: invert tie-break — use `>=` so the LAST tying monster wins.
-    # test_tie_first_wins flips (Python now picks beta, Lean still alpha).
-    ("cheapest_path: tie-break inversion (> -> >=)",
-     "            if xp_per_cycle > best_xp_per_cycle:",
-     "            if xp_per_cycle >= best_xp_per_cycle:"),
-    # Mutation 3: invert the comparison sign so the WORST monster wins
-    # (pick the minimum xp_per_cycle instead of maximum). Caught by
-    # test_strict_greater_replaces and test_greedy_picks_higher_xp_per_kill.
-    ("cheapest_path: invert greedy direction (> -> <)",
-     "            if xp_per_cycle > best_xp_per_cycle:",
-     "            if xp_per_cycle < best_xp_per_cycle:"),
-    # Mutation 4: drop the is_winnable beatability filter so unwinnable monsters
-    # are included as candidates. test_winnable_false_skips_to_winnable fires:
-    # Python picks the unwinnable 'hard' monster while Lean (still filtering via
-    # winnable=0) picks 'easy' — divergence kills this mutant.
-    ("cheapest_path: drop is_winnable beatability filter",
-     "            and is_winnable(rung, game_data, code, store)",
-     ""),
-    # Mutation 5: freeze the body the walk consults, reverting S-015. The rung
-    # state stops growing, so the beatability predicate is asked whether TODAY'S
-    # character can beat a monster it will not meet until it is many levels
-    # stronger, and the walk under-reports how far it can climb.
-    ("cheapest_path: freeze the rung body (revert S-015 growth)",
-     "        rung = replace(rested, level=sim_level,\n"
-     "                       max_hp=projected_max_hp(state.max_hp, state.level, sim_level),\n"
-     "                       hp=projected_max_hp(state.max_hp, state.level, sim_level))",
-     "        rung = rested"),
 ]
 
 
@@ -10073,8 +10609,12 @@ INVENTORY_KEEP_MUTATIONS = [
      "            return max(0, potion_carry(used) - equipped_potion_qty(state, code))",
      "            return potion_carry(used)"),
     ("inventory_keep: a chosen food keeps one recovery, not its carry",
-     "            return food_carry(eaten)",
+     "            return food_carry(eaten, share, None)",
      "            return eaten"),
+    # Task 8c (ruling C2-food): the keep's carry is what this bag can hold.
+    ("inventory_keep: the food keep ignores the bag's room",
+     "            return food_carry(eaten, share, None)",
+     "            return food_carry(eaten, 10 ** 9, None)"),
     # keep_in_bag combines its reasons by SUM -- over-protects whenever two
     # reasons are live (the cap exceeds every single demand). Killed by
     # test_keep_in_bag_combines_by_MAX_not_sum (COMMITTED_RECIPE 36 +
@@ -10633,18 +11173,23 @@ KEEP_VALUATION_ADAPTER_MUTATIONS = [
     # nothing can ever craft with. Killed by
     # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
     ("keep_valuation: consumer reachability ignored (unreachable recipes count)",
-     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph, cap):",
      "        if ingredients.get(code, 0) > 0:"),
     # Ignore WHICH recipe consumes the code: any recipe at all grants the demand,
     # so an item consumed by nothing keeps its neighbours' demand. Killed by
     # test_demand_is_zero_when_no_recipe_consumes_the_item_at_all.
     ("keep_valuation: consumer scan ignores the ingredient list",
-     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):",
-     "        if consumer_reachable(consumer, graph):"),
+     "        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph, cap):",
+     "        if consumer_reachable(consumer, graph, cap):"),
     # Widen the progression cap to infinity: nothing is ever unreachable. Killed by
     # test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder.
+    # A documented 50 in place of the server's skill cap. Killed by
+    # test_the_keep_valuation_reads_the_loaded_skill_cap.
+    ("keep_valuation: the skill cap is a documented 50, not the loaded one",
+     "    cap = game_data.max_skill_level\n",
+     "    cap = 50\n"),
     ("keep_valuation: progression cap ignored (every gate is attainable)",
-     "    return gate is None or gate[1] <= MAX_ATTAINABLE_SKILL_LEVEL",
+     "    return gate is None or gate[1] <= max_skill_level",
      "    return True"),
     # An unvisited bank (`bank_items is None`) reads as holding the WORLD, so
     # nothing is ever deposit-eligible before the first bank visit. Killed by
@@ -10756,33 +11301,6 @@ POTION_PROVISION_QTY_MUTATIONS = [
      "    if not utility_slot_filled or held_heal_qty <= 0 or potion_hp_restore <= 0:"),
 ]
 
-# potion_baseline mutations -- old strings matched to current potion_baseline.py
-# text. Each perturbs a clamp boundary or the floored linear ramp so the Python
-# baseline diverges from the Lean `potionBaseline` oracle. Killed by
-# formal/diff/test_potion_baseline_diff.py (the (5,5,45,100) curve over level 1..60).
-#
-# RETIRED (provably EQUIVALENT mutants -- the linear ramp is EXACT at both
-# endpoints, so the two boundary clamps are redundant at the boundary value and
-# flipping their comparator changes nothing observable for any in-domain input):
-#   * "low-clamp compare flip (<= -> <)": differs only at level == low_level, where
-#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(level-low_level)//.. ==
-#     low_qty + 0 == low_qty -- identical to the clamp's return. Verified 0 divergences
-#     over level 1..60 on the (5,5,45,100) curve.
-#   * "high-clamp compare flip (>= -> >)": differs only at level == high_level, where
-#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(high_level-low_level)//
-#     (high_level-low_level) == low_qty + (high_qty-low_qty) == high_qty exactly (the
-#     division is exact, span/span == 1) -- identical to the clamp's return. Verified
-#     0 divergences over level 1..60 on the (5,5,45,100) curve.
-# The two kept mutants below both perturb the ramp ARITHMETIC, which the differential
-# pins exactly across the whole interior of the curve.
-POTION_BASELINE_MUTATIONS = [
-    ("potion_baseline: drop the low_qty offset",
-     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
-     "    return (high_qty - low_qty) * (level - low_level) // (high_level - low_level)"),
-    ("potion_baseline: span sign flip (level-low_level -> low_level-level)",
-     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
-     "    return low_qty + (high_qty - low_qty) * (low_level - level) // (high_level - low_level)"),
-]
 
 # max_batch_from_held mutations -- old strings matched to current
 # max_batch_from_held.py text. Each perturbs the min-floor / floor-div / yield
@@ -11388,7 +11906,7 @@ TELEPORT_COST_MUTATIONS = [
 
 # O5.4 Brick 5 — ladder firing-predicate mutations. These perturb the NUMERIC
 # thresholds / comparators / structural conjuncts of the guard- and means-tier
-# `_fires` predicates (tiers/guards.py + tiers/means.py). They are killed by
+# `_fires` predicates (progression/guards.py + progression/means.py). They are killed by
 # formal/diff/test_ladder_fires_diff.py, which binds the Lean
 # `Formal.Liveness.ProductionLadder.fires`/`productionLadder` (via the
 # `ladder_fires` oracle) to these SAME `_fires` predicates through the
@@ -11560,9 +12078,9 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     (
         "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
         "        return (used_fraction(state) < SELL_PRESSURE_FRACTION\n"
-        "                and sellable_tradeable_now(state, game_data))",
+        "                and sellable_tradeable_now(state, game_data, ctx.now))",
         "        return (used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
-        "                and sellable_tradeable_now(state, game_data))",
+        "                and sellable_tradeable_now(state, game_data, ctx.now))",
     ),
     (
         # The guard delegates to the proven should_expand_bank core
@@ -11624,13 +12142,13 @@ FLEET_WORK_MUTATIONS = [
     ),
     (
         "fleet_work/turn_in_due: the buyer's turn_in field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
         "    return ctx.recall is not None",
     ),
     (
         "fleet_work/turn_in_due: the holder's recall field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
-        "    return ctx.turn_in is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready)",
     ),
 ]
 
@@ -11653,6 +12171,9 @@ WHICH_PIECE_MUTATIONS = [
     ("which-piece: the trunk is offered at the level cap (F12)",
      "    if state.level >= game_data.max_character_level:\n",
      "    if False:\n"),
+    ("which-piece: the trunk stops at a documented 50, not the loaded cap",
+     "    if state.level >= game_data.max_character_level:\n",
+     "    if state.level >= 50:\n"),
     ("which-piece: the trunk stops one level below the cap (F12)",
      "    if state.level >= game_data.max_character_level:\n",
      "    if state.level + 1 >= game_data.max_character_level:\n"),
@@ -11676,7 +12197,53 @@ WHICH_PIECE_MUTATIONS = [
      "        if target is None:\n"
      "            return ReachCharLevel(level=state.level + 1)\n"),
 ]
+# Ruling C4-b: the gear objective's two halves (Formal/Liveness/
+# GearTierLeveling.lean), bound to production by
+# formal/diff/test_gear_objective_arming_diff.py.
+GEAR_ARMING_WHICH_PIECE_MUTATIONS = [
+    ("arming: a held objective is walked as if pieces were missing",
+     "        if target.held and not fleet:\n",
+     "        if False and target.held and not fleet:\n"),
+    ("arming: the first served piece is passed over",
+     "                return piece_step(piece.slot, gear, self.walk, state, game_data, ctx, history)\n",
+     "                continue\n"),
+]
+# Ruling C4-R2: the production link `GearTierLeveling.ObjectiveCovers`,
+# killed by formal/diff/test_gear_objective_link_diff.py.
+GEAR_OBJECTIVE_LINK_MUTATIONS = [
+    ("link: a winning candidate gives no objective",
+     "    if not rated or max(rate for _, rate in rated) <= 0:\n",
+     "    if True:\n"),
+]
+# Retired from this group: "an objective is named with no winning candidate"
+# (dropping the `max(rate) <= 0` clause) is EQUIVALENT for the link — it differs
+# only when a candidate wins with R = 0, where it names an objective on a winning
+# `m*`, which `ObjectiveCovers` allows. It lives in GEAR_OBJECTIVE_R_ZERO below,
+# killed by the unit test of that branch (ruling C4-R2 item 2).
+GEAR_OBJECTIVE_R_ZERO_MUTATIONS = [
+    ("gear objective: every candidate rating zero still names an objective",
+     "    if not rated or max(rate for _, rate in rated) <= 0:\n        return None\n",
+     "    if not rated:\n        return None\n"),
+]
+# Ruling C4-R I3: the E-tower's `loadoutAdequate := held`, `gearGap :=
+# len(missing)`, killed by formal/diff/test_gear_objective_e_binding_diff.py.
+GEAR_E_BINDING_MUTATIONS = [
+    ("e-binding: one missing piece still reads as held",
+     "        return objective_held(frozenset(piece.slot for piece in self.missing))\n",
+     "        return objective_held(frozenset(piece.slot for piece in self.missing[1:]))\n"),
+]
+GEAR_ARMING_TARGET_MUTATIONS = [
+    ("arming: an unheld m* is the grind target",
+     "        path_winnable=objective is not None and objective.held and not fleet_waiting,\n",
+     "        path_winnable=objective is not None and (objective.held or True) and not fleet_waiting,\n"),
+]
 WHICH_PIECE_ROOT_MUTATIONS = [
+    # `RootWalk.serves` names a declined piece's reason (Phase 3-2's step
+    # decline; its old group, STEP_DECLINE, went with the tier walk in plan C
+    # Task 3).
+    ("root: the decline's reason is not recorded",
+     "        self.declined[repr(root)] = reason\n",
+     "        pass\n"),
     ("root/resolve_root: the trunk is offered while a piece is missing",
      "    if target is not None and target.held and not fleet and trunk is not None:\n",
      "    if target is not None and not fleet and trunk is not None:\n"),
@@ -11758,7 +12325,7 @@ SKILL_CLIMB_MUTATIONS = [
      "        return ClimbGap.SKILL_CATALOGUE_EMPTY\n",
      "        return ClimbGap.WALL_SKILL_TOPPED\n"),
     ("skill climb: the verdict ignores production's predicate",
-     "            open_climb = skill_is_grindable(skill, level + 1, state, game_data)\n",
+     "            open_climb = skill_is_grindable(skill, level + 1, state, game_data, _OFFLINE_CONTEXT.now)\n",
      "            open_climb = True\n"),
 ]
 
@@ -12303,83 +12870,6 @@ TASK_WORTH_CORE_MUTATIONS = [
 ]
 
 
-# The band target ranks by XP per action, upkeep included (USER 2026-10-07).
-# Killed by tests/test_ai/test_fight_upkeep.py.
-FIGHT_UPKEEP_CORE_MUTATIONS = [
-    ("upkeep: consumables are not priced",
-     "        (qty * price_of(code) for code, qty in upkeep.consumed_per_kill.items()),\n",
-     "        (qty * 0 for code, qty in upkeep.consumed_per_kill.items()),\n"),
-    ("upkeep: the actions per kill are not charged",
-     "    actions = upkeep.actions_per_kill + sum(\n",
-     "    actions = 1 + sum(\n"),
-]
-FIGHT_UPKEEP_STORE_MUTATIONS = [
-    ("upkeep store: a lost fight's consumables are not counted",
-     "        for r in fights:\n            consumed.update(",
-     "        for r in fights:\n            if r.outcome != \"ok\":\n"
-     "                continue\n            consumed.update("),
-    ("upkeep store: actions per kill counts only fights",
-     "            actions_per_kill=Fraction(len(rows), kills),\n",
-     "            actions_per_kill=Fraction(len(fights), kills),\n"),
-    ("upkeep store: no warmup",
-     "        if kills < WARMUP_MIN_SAMPLES:\n            return None\n        consumed",
-     "        if kills < 1:\n            return None\n        consumed"),
-]
-BAND_UPKEEP_MUTATIONS = [
-    ("band: the measured upkeep is ignored",
-     "    upkeep = history.fight_upkeep(code) if history is not None else None\n",
-     "    upkeep = None\n"),
-    ("band: a measured action is not counted in fight seconds",
-     "        return xp_per_action(xp_per_kill, upkeep, price_of) / FIGHT_SECONDS\n",
-     "        return xp_per_action(xp_per_kill, upkeep, price_of)\n"),
-]
-# The loadout picks the monster (USER 2026-10-10). Killed by
-# tests/test_ai/test_band_target.py.
-BAND_LOADOUT_MUTATIONS = [
-    ("band: a potion-propped monster is no candidate",
-     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
-     "        if not bare and (True or (\n"),
-    ("band: the potion arm ignores the measured threshold",
-     "        if not bare and (not _odds_clear(loadout(), win_threshold(rested, code)) or (\n",
-     "        if not bare and (not _odds_clear(loadout(), Fraction(4, 5)) or (\n"),
-    ("band: the potion arm reads the closed form again",
-     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
-     "    return best.rate.runnable and best.rate.win"),
-    ("band: a loop with no room clears the odds",
-     "    return best.rate.runnable and odds_clear(best.rate.p_win, threshold)",
-     "    return odds_clear(best.rate.p_win, threshold)"),
-    ("band: the bare fight drinks the worn potions",
-     "        bare = is_winnable(unpotioned(rested), game_data, code, history)\n",
-     "        bare = is_winnable(rested, game_data, code, history)\n"),
-    ("band: the learned-loss veto does not refuse a propped fight",
-     "                history is not None and loss_vetoed(rested, game_data, code, history))):\n",
-     "                False)):\n"),
-    ("band: a propped monster counts as a bare fight",
-     "        bare_fight = bare_fight or bare\n",
-     "        bare_fight = True\n"),
-    ("band: the model ranks at the full kill's XP over the fight alone",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / best().rate.fight_seconds\n"),
-    ("band: the model ranks without the win odds",
-     "    return best().rate.xp_per_second\n",
-     "    return Fraction(xp_per_kill) / (best().rate.fight_seconds + best().rate.recovery_seconds\n"
-     "                                    + best().rate.consumed_seconds)\n"),
-]
-# The grind target's risk (USER 2026-10-15). Killed by
-# tests/test_ai/test_player.py.
-BAND_PICK_MUTATIONS = [
-    # Re-anchored Task 5 (ruling W): the step moved to
-    # `ai/gear_objective_context.attach_gear_objective`.
-    ("ctx: a risky target is never marked",
-     "        combat_risky=(combat_monster is not None\n",
-     "        combat_risky=(False\n"),
-    ("ctx: risk is asked at the current hp",
-     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
-     "                      and not secure_win(unpotioned(state),\n"),
-    ("ctx: risk drinks the worn potions",
-     "                      and not secure_win(unpotioned(replace(state, hp=state.max_hp)),\n",
-     "                      and not secure_win(replace(state, hp=state.max_hp),\n"),
-]
 # One gear objective per cycle names the grind target (spec 2026-10-18 §2.4,
 # §6.2). Killed by tests/test_ai/test_player_gear_objective.py.
 # Task 5 (ruling W) moved the step into the shared
@@ -12400,14 +12890,11 @@ GEAR_OBJECTIVE_CTX_MUTATIONS = [
      "            ctx.gear_keep if combat_monster == task_monster\n",
      "            ctx.gear_keep if True\n"),
     ("ctx: the new target's keep is built for the task's monster",
-     "            else gear_keep_for(state, game_data, history, combat_monster,\n",
-     "            else gear_keep_for(state, game_data, history, task_monster,\n"),
-    ("ctx: the new target's keep drops the in-flight upgrades",
-     "                               ctx.near_term_targets),\n",
-     "                               frozenset()),\n"),
+     "            else gear_keep_for(state, game_data, history, combat_monster),\n",
+     "            else gear_keep_for(state, game_data, history, task_monster),\n"),
     ("ctx: the L* pieces leave the keep (ruling AM)",
-     "            objective),\n",
-     "            None),\n"),
+     "            objective))\n",
+     "            None))\n"),
     ("log line: a held objective reads as a missing piece (F8)",
      "    if objective.held:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n",
      "    if False:\n        return f\"Gear objective: target {objective.monster}; L* held\"\n"),
@@ -12429,47 +12916,21 @@ GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS = [
      "            combat_monster=task_monster,\n",
      "            combat_monster=None,\n"),
 ]
-# The gear decisions judge bare gear (USER 2026-10-10). Killed by
-# tests/test_ai/test_decisions_root.py.
-# Spec 2026-10-15-fight-gates-odds §3: the deficit is a fight below
-# max(θ, SECURE_WIN), not below θ. Killed by tests/test_ai/test_combat_deficit.py.
-COMBAT_DEFICIT_SECURE_MUTATIONS = [
-    ("deficit: the routing walk asks predict_win",
-     "    clears = secure_win if secure else predict_win\n",
-     "    clears = predict_win\n"),
-    ("deficit: the feasibility walk asks secure_win",
-     "    clears = secure_win if secure else predict_win\n",
-     "    clears = secure_win\n"),
-    ("deficit: the routing walk drinks the worn potions",
-     "    if secure:\n        state = unpotioned(state)\n",
-     "    if False:\n        state = unpotioned(state)\n"),
+# Spec 2026-10-15-fight-gates-odds §3: the held task's gear deficit is a fight
+# below max(θ, SECURE_WIN) on bare gear; the walk's own bar is the gate's, θ,
+# and at a margin stall it ranks on the bare odds. Killed by
+# tests/test_ai/test_combat_deficit.py. (The `secure` routing walk went with
+# `deficit_upgrade_target`, plan C Task 2.)
+COMBAT_DEFICIT_BARE_MUTATIONS = [
+    ("deficit: the walk asks secure_win",
+     "    if predict_win(state, game_data, monster):\n        return None\n    baseline",
+     "    if secure_win(state, game_data, monster):\n        return None\n    baseline"),
     ("has_combat_deficit: the worn potions secure the fight",
      "    return not secure_win(unpotioned(dataclasses.replace(state, hp=state.max_hp)),\n",
      "    return not secure_win(dataclasses.replace(state, hp=state.max_hp),\n"),
     ("deficit: no odds step at a margin stall",
      "            step = _best_step(pool, bare_now, actions_of,\n",
      "            step = None and _best_step(pool, bare_now, actions_of,\n"),
-]
-PROPPED_GEAR_MUTATIONS = [
-    ("root: a potion-propped target hides the fight's gear",
-     "        if (ctx.combat_monster is not None and not ctx.combat_propped\n",
-     "        if (ctx.combat_monster is not None\n"),
-    # Spec 2026-10-15-fight-gates-odds §3 (USER: below 75% we probably need
-    # better gear).
-    ("root: a risky target hides the fight's gear",
-     "                and not ctx.combat_risky):\n",
-     "                ):\n"),
-]
-CONSUMABLE_PRICE_MUTATIONS = [
-    ("price: held copies are priced as already owned",
-     "            inventory={c: q for c, q in state.inventory.items() if c != code},\n",
-     "            inventory=dict(state.inventory),\n"),
-    ("price: worn copies are priced as already owned",
-     "            equipment={slot: (None if worn == code else worn)\n",
-     "            equipment={slot: worn\n"),
-    ("price: the batch price is not divided by the batch",
-     "        return Fraction(actions, batch)\n",
-     "        return Fraction(actions)\n"),
 ]
 
 
@@ -12532,9 +12993,10 @@ TASK_ACCEPT_MUTATIONS = [
     ("accept: the no-immediate-redraw gate is dropped",
      "    return not state.task_code and ctx.draw_owed\n",
      "    return not state.task_code\n"),
-    ("accept: target gear defers the draw again",
+    ("accept: a missing L* piece defers the draw again",
      "    return not state.task_code and ctx.draw_owed\n",
-     "    return not state.task_code and ctx.draw_owed and not ctx.target_gear\n"),
+     "    return (not state.task_code and ctx.draw_owed\n"
+     "            and (ctx.gear_objective is None or ctx.gear_objective.held))\n"),
 ]
 
 
@@ -12582,7 +13044,7 @@ TASK_STEP_MUTATIONS = [
      "            if ctx.draw_master is not None:\n",
      "            if False:\n"),
     ("step: an items task is never worked (c-2 pursue fold)",
-     "            return _pursue_goal(state, game_data)\n",
+     "            return _pursue_goal(state, game_data, ctx.now)\n",
      "            return None\n"),
     ("step: an owed draw is never taken (c-2 accept fold)",
      "        if step.task_code is None and accept_due(state, ctx):\n",
@@ -12773,69 +13235,6 @@ REST_COOLDOWN_MUTATIONS = [
     ("rest_cooldown: drop the full-bar clamp",
      "    missing = min(max(0, missing_hp), max_hp)",
      "    missing = max(0, missing_hp)"),
-]
-
-
-# The sample level a measurement is restated FROM. SEPARATE GROUP, unit-killed:
-# the Lean side models the ratio, not the aggregation that picks the level to take
-# it at, so no differential can see either mutant.
-OBSERVED_RATE_MUTATIONS = [
-    # Restore the built-in, which is half-to-EVEN. Ties then resolve on the parity
-    # of the mean rather than against the character, so a two-cycle observation at
-    # adjacent levels can round UP across the grey step, find a zero award at the
-    # sample level, and stop the walk.
-    # Killed by test_a_tie_resolves_DOWNWARD.
-    ("observed_rate_core: half-to-even instead of ties-down",
-     "    doubled = 2 * sum(real) - len(real)\n"
-     "    return -(-doubled // (2 * len(real)))",
-     "    return round(sum(real) / len(real))"),
-    # Send ties UP instead. The direction that manufactures reach, which is the
-    # one thing this module refuses to do.
-    # Killed by test_a_tie_resolves_DOWNWARD.
-    ("observed_rate_core: ties resolve UPWARD",
-     "    doubled = 2 * sum(real) - len(real)",
-     "    doubled = 2 * sum(real) + len(real)"),
-    # Let a below-one level into the mean. A recorded 0 is the absence of a
-    # reading, and the published award divides the monster's level by the
-    # character's -- so a zero that survives into the mean reaches a level at which
-    # the award is not defined at all.
-    # Killed by test_a_level_below_one_is_not_a_level.
-    ("observed_rate_core: admit levels below one into the mean",
-     "    real = [level for level in levels if level >= 1]",
-     "    real = list(levels)"),
-    # Truncate rather than round. A mean of 16.9 becomes 16, which is not a
-    # tiebreak at all -- it under-states the sample level everywhere, not just on
-    # the boundary this rule exists for.
-    # Killed by test_a_non_tie_rounds_to_the_nearest.
-    ("observed_rate_core: floor the mean instead of rounding it",
-     "    return -(-doubled // (2 * len(real)))",
-     "    return sum(real) // len(real)"),
-]
-
-
-# The loadout-change cost. SEPARATE GROUP, unit-killed. Both mutants restore a
-# GUESSED server rule that the OpenAPI schema contradicts -- the class of error
-# this module was rewritten to remove, and one no differential can catch because
-# the Lean side models neither rule.
-EQUIP_ACTIONS_MUTATIONS = [
-    # Restore the slot count. A swap becomes ONE movement instead of two, on the
-    # assumption the server equips into an occupied slot -- which it refuses
-    # (`491: The equipment slot is not empty`). Under-charges every upgrade a
-    # character makes after its first.
-    # Killed by test_a_swap_costs_two_because_the_server_refuses_an_occupied_slot.
-    ("equip_actions_core: count differing SLOTS, not item movements",
-     "        (1 if (worn.get(slot) or None) is not None else 0)\n"
-     "        + (1 if (target.get(slot) or None) is not None else 0)\n"
-     "        for slot in set(worn) | set(target)",
-     "        1\n"
-     "        for slot in set(worn) | set(target)"),
-    # Charge a whole Fight per item instead of the published three seconds. Prices
-    # a bare character's first loadout at sixteen fights.
-    # Killed by test_cost_is_the_published_three_seconds_per_item and
-    # test_outfitting_a_bare_character_is_not_sixteen_fights.
-    ("equip_actions_core: one whole action per item, not the published 3s",
-     "    return items_moved(worn, target) * EQUIP_SECONDS_PER_ITEM / float(fight_seconds)",
-     "    return float(items_moved(worn, target))"),
 ]
 
 
@@ -13383,7 +13782,7 @@ TASK_EXCHANGE_GOAL_MUTATIONS = [
 
 TASK_CANCEL_GOAL_MUTATIONS = [
     # Anchor refreshed 2026-08-25: the goal no longer re-derives the cancel REASON
-    # (`task_decision == PIVOT`) — `tiers/means._fires` is the sole producer of it,
+    # (`task_decision == PIVOT`) — `progression/means._fires` is the sole producer of it,
     # and re-deriving only its third arm made the goal report 0.0 for the two other
     # arms, on three of three offline cells where it is actually SELECTED. What
     # survives here is the scalar the arbiter records as `goal_rank`.
@@ -13502,8 +13901,8 @@ CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS = [
 # tests/test_ai/test_tiers_guards.py, player arms by tests/test_ai/test_fight_monster.py.
 POTION_FIGHT_AHEAD_GUARD_MUTATIONS = [
     ("guards(CRAFT_POTIONS): stock the loadout without a fight ahead",
-     "guard_loadout(ctx.loadout, ctx.fight_monster))",
-     "ctx.loadout)"),
+     "guard_loadout(ctx.loadout, ctx.fight_monster),\n",
+     "ctx.loadout,\n"),
 ]
 POTION_FIGHT_AHEAD_PLAYER_MUTATIONS = [
     ("player: the fight is forgotten when an interrupt replaces the plan cache",
@@ -13783,8 +14182,8 @@ POCKET_GOLD_ROUTE_MUTATIONS = [
 
 POCKET_GOLD_PRICE_MUTATIONS = [
     ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
-     "                               actions_per_application=Fraction(1),\n",
-     "                               actions_per_application=1,\n"),
+     "                               actions_per_application=_kind_actions(LogType.WITHDRAW_GOLD, ctx),\n",
+     "                               actions_per_application=ceil(_kind_actions(LogType.WITHDRAW_GOLD, ctx)),\n"),
     # S-046: spent gold costs the time to earn it again.
     ("acquisition_cost: banked gold is free to spend (S-046)",
      "    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route\n",
@@ -13838,11 +14237,21 @@ POCKET_GOLD_CLAIM_MUTATIONS = [
      "                action, WithdrawItemAction):\n"
      "            self._coordination.release_bank_stock()\n"),
     ("player: a sibling's gold claim is not netted from the plan's bank",
-     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
-     "        return replace(state, bank_gold=state.bank_gold)\n"),
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold)\n"),
     ("player: a claim past the bank leaves negative gold",
-     "        return replace(state, bank_gold=max(0, state.bank_gold - claimed))\n",
-     "        return replace(state, bank_gold=state.bank_gold - claimed)\n"),
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold - gold)\n"),
+    # The ticket farm (live 2026-10-31): a sibling's ITEM claim is netted too.
+    ("player: a sibling's item claim is not netted from the plan's bank",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held) > 0})\n"),
+    ("player: a code claimed whole stays in the bank at nothing",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held - max(0, claims.get(code, 0))) >= 0})\n"),
+    ("player: an unread bank's items are invented",
+     "        items = (None if state.bank_items is None else\n",
+     "        items = ({} if state.bank_items is None else\n"),
     ("player: the decision plans against the bank as read",
      "            decision = self._strategy.decide(\n"
      "                planned, game_data,\n"
@@ -13948,8 +14357,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_combat.py", survivors)
     run_group(FIGHT_ODDS_CORE_SRC, ODDS_CLEAR_MUTATIONS,
               "tests/test_ai/test_fight_odds_core.py", survivors)
-    run_group(TIER_PROGRESS_SRC, TIER_CLEARED_BARE_MUTATIONS,
-              "tests/test_ai/test_tier_progress.py", survivors)
     run_group(COMBAT_TARGETS_SRC, COMBAT_TARGETS_KEY_MUTATIONS,
               "tests/test_ai/test_combat_targets.py", survivors)
     run_group(WIN_THRESHOLD_CORE_SRC, LIVENESS_THETA_MUTATIONS,
@@ -14114,10 +14521,12 @@ def _collect_all_groups() -> None:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, SKILL_GRIND_TARGET_MUTATIONS,
               "tests/test_ai/scenarios/test_grind_deep_chain.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_TIEBREAK_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_MEMO_SECONDS_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(SKILL_GRINDABLE_SRC, SKILL_GRINDABLE_MUTATIONS,
               "tests/test_ai/test_skill_grindable.py", survivors)
-    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
-              "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
@@ -14218,8 +14627,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_max_batch_from_held_diff.py", survivors)
     run_group(OPTIMAL_BUY_MIX_SRC, OPTIMAL_BUY_MIX_MUTATIONS,
               "formal/diff/test_optimal_buy_mix_diff.py", survivors)
-    run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
-              "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, EXPANSION_FIRES_MUTATIONS,
@@ -14248,10 +14655,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_rest_cooldown_core.py", survivors)
     run_group(FIGHT_LOOP_COST_SRC, FIGHT_LOOP_COST_MUTATIONS,
               "tests/test_ai/test_fight_loop_cost.py", survivors)
-    run_group(EQUIP_ACTIONS_CORE_SRC, EQUIP_ACTIONS_MUTATIONS,
-              "tests/test_ai/test_equip_actions_core.py", survivors)
-    run_group(OBSERVED_RATE_CORE_SRC, OBSERVED_RATE_MUTATIONS,
-              "tests/test_ai/test_observed_rate_core.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
     run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,
@@ -14306,6 +14709,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_fleet_objective.py", survivors)
     run_group(CURRENCY_WALL_SRC, CURRENCY_WALL_ALT_MUTATIONS,
               "tests/test_audit/test_currency_wall_census.py", survivors)
+    run_group(WHICH_PIECE_SRC, GEAR_ARMING_WHICH_PIECE_MUTATIONS,
+              "formal/diff/test_gear_objective_arming_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_ARMING_TARGET_MUTATIONS,
+              "formal/diff/test_gear_objective_arming_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_LINK_MUTATIONS,
+              "formal/diff/test_gear_objective_link_diff.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_R_ZERO_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
+    run_group(GEAR_OBJECTIVE_RESULT_SRC, GEAR_E_BINDING_MUTATIONS,
+              "formal/diff/test_gear_objective_e_binding_diff.py", survivors)
     run_group(WHICH_PIECE_SRC, WHICH_PIECE_MUTATIONS,
               "tests/test_ai/test_decisions_which_piece.py", survivors)
     run_group(TUI_APP_SRC, TUI_FATAL_ERROR_MUTATIONS,
@@ -14380,10 +14793,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_game_data_accessors_diff.py", survivors)
     run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
               "formal/diff/test_winnable_cascade_diff.py", survivors)
-    run_group(COMBAT_PICKER_SRC, COMBAT_PICKER_MUTATIONS,
-              "formal/diff/test_combat_picker_diff.py", survivors)
-    run_group(PROJECTIONS_SRC, CHEAPEST_PATH_MUTATIONS,
-              "formal/diff/test_cheapest_path_diff.py", survivors)
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     run_group(PURSUE_TASK_GOAL_SRC, PURSUE_TASK_MUTATIONS,
               "formal/diff/test_goal_value_band_safety_diff.py", survivors)
@@ -14548,6 +14957,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(PLAN_CACHE_SRC, PLAN_CACHE_TARGET_MUTATIONS,
               "tests/test_ai/test_plan_cache.py", survivors)
+    run_group(PLAYER_SRC, CYCLE_CLOCK_REUSE_PLAYER_MUTATIONS,
+              "tests/test_ai/test_plan_or_reuse.py", survivors)
+    run_group(PLAN_CACHE_SRC, CYCLE_CLOCK_REUSE_CACHE_MUTATIONS,
+              "tests/test_ai/test_cycle_clock_pins.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, CYCLE_CLOCK_REUSE_SELL_MUTATIONS,
+              "tests/test_ai/test_cycle_clock_pins.py", survivors)
     run_group(SHOULD_REPLAN_SRC, REFRESH_ONLY_MUTATIONS,
               "tests/test_ai/test_should_replan.py", survivors)
     run_group(PLAYER_SRC, PLAYER_COMMITMENT_MUTATIONS,
@@ -14558,6 +14973,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, WALK_GREY_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, DROP_LEG_GREY_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_GREY_EXEMPT_MUTATIONS,
               "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, WALK_GREY_POLICY_MUTATIONS,
@@ -14574,6 +14991,18 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_recycle_yield.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, GAME_DATA_RECYCLE_YIELD_MUTATIONS,
               "tests/test_ai/test_recycle_yield.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, GAME_DATA_LEVEL_CAP_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
+    run_group(SCENARIO_SRC, SCENARIO_BASE_STATS_MUTATIONS,
+              "tests/test_ai/scenarios/test_scenario_builder.py", survivors)
+    run_group(DROP_WALL_CENSUS_SRC, DROP_WALL_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
+    run_group(DROP_WALL_CENSUS_SRC, DROP_WALL_WORN_ARM_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
+    run_group(CURRENCY_WALL_CENSUS_SRC, CURRENCY_WALL_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_currency_wall_census.py", survivors)
+    run_group(GEAR_OBJECTIVE_FIGHTER_SRC, ACHIEVABLE_FIGHTER_MUTATIONS,
+              "tests/test_audit/test_drop_wall_census.py", survivors)
     run_group(LEARNING_STORE_SRC, FLEET_RECYCLE_TOTALS_MUTATIONS,
               "tests/test_ai/test_learning_store.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_ACTION_LEARNED_MUTATIONS,
@@ -14618,6 +15047,44 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_grind_cycle_census.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(ACQUISITION_COST_SRC, FLEET_FARM_PRICE_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(ACQUISITION_COST_SRC, RESTED_DEFICIT_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_TRACE_MUTATIONS,
+              "tests/test_ai/test_trace_coordination_fields.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, FARMED_FOR_ROUTING_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(GATHERING_GOAL_SRC, FARMED_FOR_GOAL_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FLEET_FARM_RESERVE_MUTATIONS,
+              "tests/test_ai/test_turn_in_no_livelock.py", survivors)
+    run_group(FLEET_WORK_SRC, FLEET_FARM_TURNIN_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, PRICED_ROUTE_WALK_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PRICED_ROUTE_FIGHT_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_SRC, SECONDS_INSIDE_PRICE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, SECONDS_INSIDE_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, STORE_KIND_SECONDS_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(LEARNING_STORE_SRC, STORE_COOLDOWNS_QUERY_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(SELECTION_CONTEXT_SRC, UNTIMED_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WINNABLE_MEMO_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, WINNABLE_MEMO_ROUTES_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, PRICED_ROUTE_CORE_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,
               "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_BATCH_MUTATIONS,
@@ -14626,7 +15093,9 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(SKILL_GRIND_TARGET_SRC, GRIND_OBTAINABLE_MUTATIONS,
               "tests/test_ai/test_skill_grind_target.py", survivors)
-    run_group(OBJECTIVE_SRC, NEAR_TERM_POLICY_MUTATIONS,
+    run_group(OBJECTIVE_SRC, CLASSIFY_TARGET_MUTATIONS,
+              "tests/test_ai/test_tiers_objective.py", survivors)
+    run_group(SUPPLIABLE_SRC, SUPPLIABLE_MUTATIONS,
               "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, STEP_POLICY_MUTATIONS,
               "tests/test_ai/test_producible_gatherable_currency.py", survivors)
@@ -14751,24 +15220,10 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(TASK_WORTH_CORE_SRC, TASK_WORTH_CORE_MUTATIONS,
               "tests/test_ai/test_task_worth_core.py", survivors)
-    run_group(FIGHT_UPKEEP_CORE_SRC, FIGHT_UPKEEP_CORE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(LEARNING_STORE_SRC, FIGHT_UPKEEP_STORE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(BAND_TARGET_SRC, BAND_UPKEEP_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
-    run_group(BAND_TARGET_SRC, BAND_LOADOUT_MUTATIONS,
-              "tests/test_ai/test_band_target.py", survivors)
-    run_group(GEAR_OBJECTIVE_CONTEXT_SRC, BAND_PICK_MUTATIONS,
-              "tests/test_ai/test_player.py", survivors)
     run_group(GEAR_OBJECTIVE_CONTEXT_SRC, GEAR_OBJECTIVE_CTX_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
     run_group(PLAYER_SRC, GEAR_OBJECTIVE_CTX_PLAYER_MUTATIONS,
               "tests/test_ai/test_player_gear_objective.py", survivors)
-    run_group(ROOT_DECISION_SRC, PROPPED_GEAR_MUTATIONS,
-              "tests/test_ai/test_decisions_root.py", survivors)
-    run_group(PLAYER_SRC, CONSUMABLE_PRICE_MUTATIONS,
-              "tests/test_ai/test_fight_upkeep.py", survivors)
     run_group(TASK_ACCEPT_SRC, TASK_ACCEPT_MUTATIONS,
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(PLAYER_SRC, EXCHANGE_COST_FLEET_MUTATIONS,
@@ -14805,8 +15260,6 @@ def _collect_all_groups() -> None:
               "formal/diff/test_xp_value_diff.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,
               "tests/test_ai/test_potion_supply.py", survivors)
-    run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
-              "tests/test_ai/test_progression_tree_core.py", survivors)
     run_group(GEAR_OBJECTIVE_CORE_SRC, GEAR_OBJECTIVE_CORE_MUTATIONS,
               "tests/test_ai/test_gear_objective_core.py", survivors)
     run_group(FLEET_CLIMB_CORE_SRC, FLEET_CLIMB_CORE_MUTATIONS,
@@ -14883,22 +15336,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_gear_objective.py", survivors)
     run_group(SYNERGY_CORE_SRC, SYNERGY_CORE_MUTATIONS,
               "tests/test_ai/test_synergy_core.py", survivors)
-    # Task 5 moved both kill-tests: `resolve_root` enters at
-    # `WhichPieceIsNext`, so the pre-objective subtree's declines are driven
-    # from its own nodes in test_decisions_root.py until Plan C deletes it.
-    run_group(ROOT_DECISION_SRC, STEP_DECLINE_MUTATIONS,
-              "tests/test_ai/test_decisions_root.py", survivors)
-    run_group(ROOT_DECISION_SRC, STEP_DECLINE_FIGHT_ARM_MUTATIONS,
-              "tests/test_ai/test_decisions_root.py", survivors)
-    # Equip-loop closure (2026-08-04): four unit-killed groups, each on its own
-    # run_group so a survivor names the exact authority that stopped deferring.
+    # Equip-loop closure (2026-08-04): the slot-occupancy dominance rule.
     run_group(SLOT_OCCUPANCY_SRC, SLOT_OCCUPANCY_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(SLOT_OCCUPANCY_SRC, OCCUPANCY_PREDICATE_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(PROGRESSION_TREE_IMPURE_SRC, TREE_OCCUPANCY_MUTATIONS,
-              "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(OBJECTIVE_SRC, OBJECTIVE_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(REGION_EDGES_SRC, REGION_CROSSING_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
@@ -14908,6 +15347,30 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_piece_policy.py", survivors)
     run_group(OBTAIN_MODEL_SRC, GATHER_REACH_MUTATIONS,
               "tests/test_ai/test_piece_policy.py", survivors)
+    run_group(VENDOR_REACH_SRC, VENDOR_REACH_GATE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, VENDOR_REACH_MODEL_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(ACQUISITION_COST_SRC, VENDOR_REACH_PRICE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, VENDOR_REACH_CENSUS_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(LOCATION_CATALOG_SRC, VENDOR_REACH_LOCATION_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(OBTAIN_SOURCES_SRC, VENDOR_REACH_SOURCE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(CURRENCY_DEMAND_SRC, VENDOR_REACH_CURRENCY_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(GATHERING_GOAL_SRC, VENDOR_REACH_GATHERING_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, VENDOR_REACH_SELL_GOAL_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(ACCUMULATION_SELL_SRC, VENDOR_REACH_ACCUMULATION_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(SHED_ACTIONS_SRC, VENDOR_REACH_SHED_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(LIQUIDATION_VENUE_SRC, VENDOR_REACH_LIQUIDATION_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
     run_group(TRANSITION_SRC, KEY_DOOR_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)
     run_group(REGION_EDGES_SRC, KEY_DOOR_REACH_MUTATIONS,
@@ -14982,12 +15445,16 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, UPGRADE_GOAL_OCCUPANCY_MUTATIONS,
               "tests/test_ai/test_equip_loop_closure.py", survivors)
-    run_group(PURSUIT_VALUE_SRC, PURSUIT_DOMINANCE_MUTATIONS,
-              "tests/test_ai/test_pursuit_value.py", survivors)
-    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_BOUND_MUTATIONS,
-              "tests/test_ai/test_tiers_strategic_value.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(PLAYER_SRC, DRY_STREAK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, STEP_DELIVERED_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_KEY_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, TURN_ROTATION_DIFF_MUTATIONS,
@@ -15008,8 +15475,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_strategy_driver.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_PASSIVE_MUTATIONS,
               "tests/test_ai/test_craft_vs_buy_wiring.py", survivors)
-    run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
-              "formal/diff/test_equipment_profile_diff.py", survivors)
     # Task 9 — fleet-currency-turn-in epic formal/mutation debt. Each in its
     # own group, each killed by a NAMED existing test (no new tests written).
     run_group(CURRENCY_TURNIN_SRC, CURRENCY_TURNIN_READY_MUTATIONS,
@@ -15020,16 +15485,18 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_dual_role_currency.py", survivors)
     run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_TIEBREAK_MUTATIONS,
               "tests/test_ai/test_combat_deficit_ceiling_tie.py", survivors)
-    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_FUTILE_TARGET_MUTATIONS,
-              "tests/test_ai/test_combat_deficit.py", survivors)
-    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_SECURE_MUTATIONS,
+    run_group(COMBAT_DEFICIT_SRC, COMBAT_DEFICIT_BARE_MUTATIONS,
               "tests/test_ai/test_combat_deficit.py", survivors)
     run_group(TASK_HORIZON_SRC, TASK_HORIZON_MUTATIONS,
               "tests/test_ai/test_task_horizon.py", survivors)
     run_group(ROUTE_SRC, ROUTE_PRICE_MUTATIONS,
               "tests/test_ai/test_decisions_route.py", survivors)
-    run_group(ROOT_DECISION_SRC, ROOT_FIGHT_ARM_MUTATIONS,
-              "tests/test_ai/test_decisions_root.py", survivors)
+    run_group(ROOT_DECISION_SRC, ROOT_TASK_GEAR_MUTATIONS,
+              "tests/test_ai/scenarios/test_held_task.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_HORIZON_READ_MUTATIONS,
+              "tests/test_ai/test_task_horizon.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, GEAR_OBJECTIVE_FOR_MUTATIONS,
+              "tests/test_ai/test_gear_objective.py", survivors)
     run_group(CATALOGUE_SCOPE_SRC, CATALOGUE_SCOPE_PURGE_MUTATIONS,
               "tests/test_ai/test_catalogue_scope.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_WORTH_INPUT_MUTATIONS,
@@ -15042,6 +15509,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_draw_owed.py", survivors)
     run_group(XP_DEMAND_SRC, XP_DEMAND_MUTATIONS,
               "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(OBJECTIVE_CODES_SRC, OBJECTIVE_CODES_MUTATIONS,
+              "tests/test_ai/test_xp_demand.py", survivors)
+    run_group(OBJECTIVE_DEMAND_SRC, OBJECTIVE_DEMAND_MUTATIONS,
+              "tests/test_ai/test_objective_demand.py", survivors)
+    run_group(SKILL_GRIND_TARGET_SRC, GRIND_WANTED_MUTATIONS,
+              "tests/test_ai/test_skill_grind_target.py", survivors)
     run_group(TASK_WORTH_SRC, TASK_XP_DEMANDED_MUTATIONS,
               "tests/test_ai/test_task_worth.py", survivors)
     run_group(CONSUMABLE_FLOOR_CORE_SRC, CONSUMABLE_FLOOR_CORE_MUTATIONS,
@@ -15122,8 +15595,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_party_win.py", survivors)
     run_group(PARTY_WIN_SRC, PARTY_WIN_MUTATIONS,
               "tests/test_ai/test_party_win.py", survivors)
-    run_group(PARTY_LOOP_SRC, PARTY_LOOP_MUTATIONS,
-              "tests/test_ai/test_party_loop.py", survivors)
     run_group(PARTY_COORD_SRC, PARTY_LEASE_STORE_MUTATIONS,
               "tests/test_ai/test_party_coordination.py", survivors)
     run_group(HOLD_FOR_PARTY_SRC, PARTY_HOLD_ACTION_MUTATIONS,
@@ -15182,8 +15653,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_player_run.py", survivors)
     run_group(PLAYER_SRC, LOST_FIGHTS_PLAN_MUTATIONS,
               "tests/test_ai/test_plan_command.py", survivors)
-    run_group(BAND_TARGET_PARTY_SRC, BAND_PARTY_MUTATIONS,
-              "tests/test_ai/test_band_target.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_PARTY_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_PARTY_STATE_MUTATIONS,
@@ -15200,8 +15669,6 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_reach_currency_goal.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, DECOMPOSE_EVENT_VENDOR_MUTATIONS,
               "tests/test_ai/test_obtain_model.py", survivors)
-    run_group(OBJECTIVE_SRC, BEST_GEAR_MUTATIONS,
-              "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(GRIND_HEAL_PREP_SRC, POTION_PREP_MUTATIONS,
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, FIGHT_STEP_POTION_MUTATIONS,
@@ -15222,6 +15689,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grey_farm.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, CENSUS_CURRENCY_GREY_MUTATIONS,
               "tests/test_audit/test_craft_completeness.py", survivors)
+    run_group(CRAFT_COMPLETENESS_SRC, CENSUS_GEAR_MUTATIONS,
+              "tests/test_audit/test_census_gear.py", survivors)
+    run_group(REACHABILITY_CLAIMS_SRC, REACHABILITY_CONSTANT_MUTATIONS,
+              "tests/test_audit/test_reachability_claims.py", survivors)
+    run_group(VOCABULARY_GATE_SRC, VOCABULARY_GATE_MUTATIONS,
+              "tests/test_audit/test_vocabulary_gate.py", survivors)
     run_group(CRAFT_CONDITIONS_SRC, CONDITIONS_MUTATIONS,
               "tests/test_audit/test_craft_conditions.py", survivors)
     run_group(CRAFT_CENSUS_SRC, FIGHT_NEED_MUTATIONS,

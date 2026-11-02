@@ -28,12 +28,14 @@ price that FALLS was paying an unobtainable charge for one of them. One pricer,
 no rival walk, and the detector is pinned by positive controls in
 `test_drop_wall_census.py` rather than by inspection.
 
-THE GRANT SET IS THE NEGATION OF `ObtainModel._drop`'s OWN CONJUNCTS — some monster
-drops the item, at least one dropper stands on a tile in `all_monster_locations`,
-and none of those is `is_winnable` at restorable hp. Reading the same three facts
-production reads is what keeps the census and the pricer from disagreeing about
-why a route is absent, exactly as the currency census reads them for its own
-walls.
+THE GRANT SET IS WHAT NO ACHIEVABLE LOADOUT CAN FIGHT FOR — some monster drops
+the item, at least one dropper stands on a tile in `all_monster_locations`, and
+none of those is beaten by the per-monster achievable fighter
+(`gear_objective.achievable_fighter`) under the WINNABLE gate's verdict
+(`drop_fight_winnable`). The objective judges a dropper so (spec 2026-10-18
+§2.3: achievability is a fixed point, not current gear), and so does the
+currency census for its own walls. A dropper the worn gear loses to but an
+achievable loadout beats is the objective's next piece, not a wall.
 
 EACH CELL IS PRICED IN THE WORLD ITS SCENARIO DECLARES. `ScenarioCharacter`
 carries `ge_market` and `unlocked_achievements` and `plan.py` forwards both, so a
@@ -56,22 +58,40 @@ only the gated price makes the census's own subject vanish as the fix lands: it
 did exactly that on contact, dropping 9 walls to 7 and reporting the fix as a
 broken census. A census that stops seeing its subject when the subject is being
 handled is not a census, it is a thermometer that melts.
+
+TWO JUDGEMENTS OF A DROPPER, AND THE CENSUS KEEPS BOTH (plan C Task 7). The
+objective judges a dropper by the per-monster achievable fighter (spec
+2026-10-18 §2.3, `gear_objective.achievable_fighter`); the pricer's
+`obtain_sources` still judges it by the WORN gear, and its gate
+(`_gated_drop_option`) opens a drop only through `_gear_unlock`'s greedy
+`combat_deficit` chain, which §2.3 names as what the fixed point replaces. A
+dropper the achievable fighter beats is therefore no objective wall, yet the
+pricer may still price it unobtainable. Those cells are named, not dropped:
+`WALL_PRICER_BEHIND_OBJECTIVE` when the gate-on pricer still cannot price
+them, `WALL_GATE_OPENS_WORN_WALL` when its gate can. Measured against the
+worn-gear grant set, so the census still sees every wall the pricer charges
+for, whoever's fault it is.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
-from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.drop_evidence import DropEvidence, drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.objective_demand import objective_demand
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -79,8 +99,6 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
@@ -129,11 +147,28 @@ class DropGap(Enum):
     judgement — most of the grid."""
 
     NOT_DROP_WALLED = "not_drop_walled"
-    """Priced unobtainable, and granting every unwinnable-dropper item leaves it
-    exactly as unobtainable. The wall is real but it is somebody else's — a gold
-    price, a skill gate, an item with no producer at all. This census says so
-    rather than staying silent, because a cell it cannot classify and a cell that
-    is not its subject must not read the same."""
+    """Priced unobtainable, and granting every item whose droppers lose to the
+    worn gear (the pricer's own drop judgement) leaves it exactly as
+    unobtainable. The wall is real but it is somebody else's — a gold price, a
+    skill gate, an item with no producer at all. This census says so rather
+    than staying silent, because a cell it cannot classify and a cell that is
+    not its subject must not read the same."""
+
+    WALL_PRICER_BEHIND_OBJECTIVE = "wall_pricer_behind_objective"
+    """Priced unobtainable, crosses when an item is granted whose droppers the
+    WORN gear loses to but the per-monster achievable fighter beats, and the
+    gate-on price is still unobtainable.
+
+    No objective wall (§2.3: some achievable loadout beats the dropper), but a
+    wall the pricer still charges: `obtain_sources` judges the worn gear and the
+    gate's `_gear_unlock` is the greedy `combat_deficit` chain, not the fixed
+    point. A pricer residual named here, not a census residual: the cell is
+    explained, and it lists where `_gear_unlock` lags the objective."""
+
+    WALL_GATE_OPENS_WORN_WALL = "wall_gate_opens_worn_wall"
+    """As `WALL_PRICER_BEHIND_OBJECTIVE`, but the gate-on price is finite: the
+    pricer's gate already opens the drop the worn gear loses. The wall the gate
+    opens that the census keeps counting with the gate off."""
 
     WALL_DROPPER_UNWINNABLE_CLOSES = "wall_dropper_unwinnable_closes"
     """Priced unobtainable, crosses when the item is granted, every live dropper
@@ -173,8 +208,9 @@ class DropGap(Enum):
 
 
 RESIDUALS = frozenset({DropGap.DROP_WALL_UNATTRIBUTED.value})
-"""The class that must reach 0. Both `WALL_*` classes are EXPLAINED — the
-catalogue, not the graph, is why the route is absent — and `OBTAINABLE`,
+"""The class that must reach 0. Every `WALL_*` class is EXPLAINED — the
+catalogue, or the pricer's lag behind the objective (`WALL_PRICER_BEHIND_
+OBJECTIVE`), is why the route is absent — and `OBTAINABLE`,
 `NOT_DROP_WALLED` and `ROOT_UNRESOLVED` are not judgements about this census's
 subject at all."""
 
@@ -193,8 +229,8 @@ class DropResult:
 
     base_price: int
     granted_price: int
-    gate_price: int
-    """The same candidate priced WITH `_gated_drop_option` — the "beat the
+    gate_price: int | None
+    """None on a cell that is no wall. Otherwise the same candidate priced WITH `_gated_drop_option` — the "beat the
     monster once you own the gear" route.
 
     THE CENSUS MEASURES THE STRUCTURAL WALL AND THE FIX SEPARATELY, and it has
@@ -233,19 +269,21 @@ def declared_world(scenario: ScenarioCharacter, bundle: Path,
     return cache[key]
 
 
-def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, ...]:
-    """Items whose ONLY drop route `ObtainModel._drop` withholds on winnability.
+def unwinnable_drop_items(state: WorldState, game_data: GameData,
+                          fighter: Callable[[str], WorldState]) -> tuple[str, ...]:
+    """Items whose every live dropper the achievable fighter cannot beat.
 
-    The three conjuncts, in the order that source reads them: some monster drops
-    it, at least one of those stands on a tile `factory.py` builds a `FightAction`
-    from, and none of those is winnable at RESTORABLE hp.
+    Three conjuncts: some monster drops it, at least one of those stands on a
+    tile `factory.py` builds a `FightAction` from, and none of those is beaten
+    by `fighter(monster)` under the WINNABLE gate's own verdict
+    (`drop_fight_winnable`).
 
-    Restorable, not current: route EXISTENCE is not an hp question. Being at 20%
-    hp is a reason to Rest — an action the planner has — while a fight the
-    character cannot win when full is a route that does not exist. This is the
-    same reading `ObtainModel._drop` takes, and taking a different one here would
-    make the census disagree with the pricer about its own subject."""
-    rested = replace(state, hp=state.max_hp)
+    `fighter` is `gear_objective.achievable_fighter`: the character owning the
+    whole achievable set and wearing each monster's own `L*`, at max HP. That
+    is how the objective judges a dropper (spec 2026-10-18 §2.3, a fixed
+    point, not current gear), so a dropper some achievable loadout beats is no
+    wall here, whatever the scenario wears. Max HP for the reason it always
+    was: route EXISTENCE is not an hp question."""
     walled: list[str] = []
     for item in game_data.items.stats:
         live = [monster for monster, _rate, _min_q, _max_q
@@ -253,10 +291,21 @@ def unwinnable_drop_items(state: WorldState, game_data: GameData) -> tuple[str, 
                 if game_data.all_monster_locations.get(monster)]
         if not live:
             continue
-        if any(is_winnable(rested, game_data, monster) for monster in live):
+        if any(drop_fight_winnable(fighter(monster), game_data, monster) for monster in live):
             continue
         walled.append(item)
     return tuple(walled)
+
+
+def worn_fighter(state: WorldState) -> Callable[[str], WorldState]:
+    """The pricer's fighter for every monster: the worn gear at max HP, as
+    `obtain_sources` judges a drop."""
+    rested = replace(state, hp=state.max_hp)
+
+    def fighter(_monster: str) -> WorldState:
+        return rested
+
+    return fighter
 
 
 def _granted(state: WorldState, items: tuple[str, ...]) -> WorldState:
@@ -268,9 +317,16 @@ def _granted(state: WorldState, items: tuple[str, ...]) -> WorldState:
 
 
 def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
-             walled: tuple[str, ...], ctx: SelectionContext
-             ) -> tuple[str, int, int, int, DropEvidence | None]:
-    """`(gap, base_price, granted_price, evidence)` for one candidate.
+             walled: tuple[str, ...], worn_walled: tuple[str, ...], ctx: SelectionContext
+             ) -> tuple[str, int, int, int | None, DropEvidence | None]:
+    """`(gap, base_price, granted_price, gate_price, evidence)` for one
+    candidate, priced on the cycle's context `ctx` (`run_census`). `walled` is
+    the objective's grant set (droppers the achievable fighter loses to),
+    `worn_walled` the pricer's (droppers the worn gear loses to). The
+    objective's walls are asked first; a candidate they do not cross is asked
+    again over the pricer's extra walls, which names the
+    `WALL_PRICER_BEHIND_OBJECTIVE` / `WALL_GATE_OPENS_WORN_WALL` arms.
+    `gate_price` is None on a cell that is no wall.
 
     THE ORDER OF THE TWO PROBES IS LOAD-BEARING. The collective grant is asked
     FIRST and the per-item attribution only on a candidate that crossed: pricing
@@ -282,26 +338,54 @@ def classify(candidate: MetaGoal, state: WorldState, game_data: GameData,
     base = route_price(candidate, state, game_data, ctx, None,
                        gated_drop=False)
     if base < UNOBTAINABLE_PER_UNIT:
-        return (DropGap.OBTAINABLE.value, base, base, base, None)
-    if not walled:
-        return (DropGap.NOT_DROP_WALLED.value, base, base, base, None)
-    collective = route_price(candidate, _granted(state, walled), game_data,
-                             ctx, None, gated_drop=False)
-    if collective >= base:
-        return (DropGap.NOT_DROP_WALLED.value, base, collective, base, None)
-    gate_price = route_price(candidate, state, game_data, ctx,
-                             None, gated_drop=True)
-    for item in walled:
+        return (DropGap.OBTAINABLE.value, base, base, None, None)
+    if walled:
+        collective = route_price(candidate, _granted(state, walled), game_data,
+                                 ctx, None, gated_drop=False)
+        if collective < base:
+            gate_price = _gate_price(candidate, state, game_data, ctx)
+            attributed = _attribute(candidate, state, game_data, walled, base, ctx)
+            if attributed is None:
+                return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,
+                        None)
+            single, evidence = attributed
+            gap = (DropGap.WALL_DROPPER_UNWINNABLE_CLOSES if evidence.closes
+                   else DropGap.WALL_DROPPER_OUT_OF_REACH)
+            return (gap.value, base, single, gate_price, evidence)
+    behind = tuple(item for item in worn_walled if item not in walled)
+    if behind:
+        collective = route_price(candidate, _granted(state, behind), game_data,
+                                 ctx, None, gated_drop=False)
+        if collective < base:
+            gate_price = _gate_price(candidate, state, game_data, ctx)
+            attributed = _attribute(candidate, state, game_data, behind, base, ctx)
+            if attributed is None:
+                return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,
+                        None)
+            single, evidence = attributed
+            gap = (DropGap.WALL_PRICER_BEHIND_OBJECTIVE if gate_price >= UNOBTAINABLE_PER_UNIT
+                   else DropGap.WALL_GATE_OPENS_WORN_WALL)
+            return (gap.value, base, single, gate_price, evidence)
+    return (DropGap.NOT_DROP_WALLED.value, base, base, None, None)
+
+
+def _gate_price(candidate: MetaGoal, state: WorldState, game_data: GameData,
+                ctx: SelectionContext) -> int:
+    """The candidate priced WITH `_gated_drop_option` (`DropResult.gate_price`)."""
+    return route_price(candidate, state, game_data, ctx, None, gated_drop=True)
+
+
+def _attribute(candidate: MetaGoal, state: WorldState, game_data: GameData,
+               items: tuple[str, ...], base: int,
+               ctx: SelectionContext) -> tuple[int, DropEvidence] | None:
+    """The first of `items` whose grant alone lowers the price below `base`,
+    as `(that price, its drop evidence)`, or None when no single one does."""
+    for item in items:
         single = route_price(candidate, _granted(state, (item,)), game_data,
                              ctx, None, gated_drop=False)
-        if single >= base:
-            continue
-        evidence = drop_evidence(item, state, game_data)
-        gap = (DropGap.WALL_DROPPER_UNWINNABLE_CLOSES if evidence.closes
-               else DropGap.WALL_DROPPER_OUT_OF_REACH)
-        return (gap.value, base, single, gate_price, evidence)
-    return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,
-            None)
+        if single < base:
+            return single, drop_evidence(item, state, game_data)
+    return None
 
 
 def run_census(bundle: Path) -> list[DropResult]:
@@ -317,23 +401,27 @@ def run_census(bundle: Path) -> list[DropResult]:
     for name, scenario in SCENARIOS.items():
         game_data = declared_world(scenario, bundle, cache)
         state = scenario_state(scenario, game_data)
-        # The walk's context carries the cycle's gear objective, attached by
-        # the one function the player uses (ruling W). The prices are taken on
-        # it too: spent gold costs the time the cycle earns it in (S-046).
+        # The walk's context carries the cycle's gear objective and its skill
+        # demand and tools, attached by the functions the player uses (ruling
+        # W, C1-a). The prices are taken on the objective's context too: spent
+        # gold costs the time the cycle earns it in (S-046).
         ctx = attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None)
         resolution = resolve_root(state, game_data,
-                                  CharacterObjective.from_game_data(game_data), ctx, None)
+                                  CharacterObjective.from_game_data(game_data),
+                                  objective_demand(None, state, game_data, ctx), None)
         if resolution.root is None:
             results.append(DropResult(
                 scenario=name, candidate="-", is_resolved_root=True,
-                base_price=0, granted_price=0, gate_price=0,
+                base_price=0, granted_price=0, gate_price=None,
                 gap=DropGap.ROOT_UNRESOLVED.value, evidence=None))
             continue
-        walled = unwinnable_drop_items(state, game_data)
+        walled = unwinnable_drop_items(
+            state, game_data, achievable_fighter(state, game_data, _OFFLINE_CONTEXT))
+        worn_walled = unwinnable_drop_items(state, game_data, worn_fighter(state))
         candidates = (resolution.root, *resolution.alternatives)
         for index, candidate in enumerate(candidates):
             gap, base, granted, gate_price, evidence = classify(
-                candidate, state, game_data, walled, ctx)
+                candidate, state, game_data, walled, worn_walled, ctx)
             results.append(DropResult(
                 scenario=name, candidate=repr(candidate),
                 is_resolved_root=index == 0, base_price=base,
@@ -371,7 +459,7 @@ def summary_line(results: list[DropResult]) -> str:
     on_alternatives = sum(1 for r in results
                           if r.gap.startswith("wall_") and not r.is_resolved_root)
     opened = sum(1 for r in results if r.gap.startswith("wall_")
-                 and r.gate_price < UNOBTAINABLE_PER_UNIT)
+                 and r.gate_price is not None and r.gate_price < UNOBTAINABLE_PER_UNIT)
     return (f"{len(results)} candidate cells over {len(SCENARIOS)} scenarios; "
             f"gate opens {opened} of {walls} walls (store-less); "
             f"obtainable {count(DropGap.OBTAINABLE)}; "
@@ -379,6 +467,8 @@ def summary_line(results: list[DropResult]) -> str:
             f"walled {walls} ({on_alternatives} on ALTERNATIVES); "
             f"closes {count(DropGap.WALL_DROPPER_UNWINNABLE_CLOSES)}; "
             f"out_of_reach {count(DropGap.WALL_DROPPER_OUT_OF_REACH)}; "
+            f"pricer_behind_objective {count(DropGap.WALL_PRICER_BEHIND_OBJECTIVE)}; "
+            f"gate_opens_worn_wall {count(DropGap.WALL_GATE_OPENS_WORN_WALL)}; "
             f"drop_wall_unattributed {count(DropGap.DROP_WALL_UNATTRIBUTED)}; "
             f"root_unresolved {count(DropGap.ROOT_UNRESOLVED)}")
 
@@ -443,7 +533,8 @@ def render_matrix(results: list[DropResult]) -> str:
             lines.append(
                 f"| {result.scenario} | {result.candidate} | {root_col} "
                 f"| {verdict} | {result.base_price} | {result.granted_price} "
-                f"| {result.gate_price} | - | - | - | - | - |")
+                f"| {'-' if result.gate_price is None else result.gate_price} "
+                f"| - | - | - | - | - |")
             continue
         lines.append(
             f"| {result.scenario} | {result.candidate} | {root_col} "

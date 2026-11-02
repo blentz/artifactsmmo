@@ -17,16 +17,14 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
 
     - decision header (ts, cycle, goal, action, outcome);
     - planner internals (nodes/depth/plan_len/timeout) + task progress, vitals,
-      cooldown, position, path-next, projected cycles, path-blocked;
+      cooldown, position;
     - every planner attempt (goals_tried) with its own nodes/depth/plan_len;
     - the full goal-rank ranking (priority > 0).
     """
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     outcome_color = {"ok": "green", "no_plan": "yellow"}.get(snap.outcome, "red")
     task = f"{snap.task_progress}/{snap.task_total}" if snap.task_code else "-"
-    proj = f"{snap.projected_cycles_to_max:.0f}" if snap.projected_cycles_to_max is not None else "?"
     timeout = "yes" if snap.planner_timed_out else "no"
-    blocked = "yes" if snap.path_blocked else "no"
 
     lines = [
         f"[dim]{ts}[/dim] c{snap.cycle_index:>3} "
@@ -35,7 +33,7 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
         f"  [dim]planner[/dim] nodes={snap.planner_nodes} depth={snap.planner_depth} "
         f"plan_len={snap.plan_len} timeout={timeout} "
         f"| task {task} hp {snap.hp}/{snap.max_hp} cd {snap.cooldown_remaining:.1f} "
-        f"pos {position_text(snap)} next {snap.path_next_action or '?'} proj {proj} blocked={blocked}",
+        f"pos {position_text(snap)}",
     ]
     if snap.goals_tried:
         attempts = "  ".join(

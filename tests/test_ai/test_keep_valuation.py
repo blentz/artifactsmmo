@@ -19,6 +19,7 @@ what `bank_drain` was licensing for withdrawal.
 """
 
 import pytest
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
@@ -27,7 +28,6 @@ from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.keep_valuation import (
-    MAX_ATTAINABLE_SKILL_LEVEL,
     bank_quantity,
     bank_surplus_pure,
     bank_under_cap_pure,
@@ -37,9 +37,12 @@ from artifactsmmo_cli.ai.keep_valuation import (
     worth_keeping,
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, season_8_status, served_game_data
 
 BANK_LOC = (4, 1)
+
+SKILL_CAP = season_8_status().max_skill_level
+"""The live server's per-skill cap, read off the captured status page."""
 
 # --------------------------------------------------------------------------- #
 # The pure cores.
@@ -85,8 +88,10 @@ def test_bank_quantity_reads_an_unvisited_bank_as_empty():
 # --------------------------------------------------------------------------- #
 
 
-def _reach_gd(*, consumer_level: int) -> GameData:
+def _reach_gd(*, consumer_level: int,
+              status: StatusSchema | None = None) -> GameData:
     gd = GameData()
+    gd._build_server(status if status is not None else season_8_status())
     gd._item_stats = {
         "ore": ItemStats(code="ore", level=20, type_="resource"),
         "bar": ItemStats(code="bar", level=20, type_="resource",
@@ -101,7 +106,7 @@ def _reach_gd(*, consumer_level: int) -> GameData:
 
 
 def test_demand_survives_when_a_consumer_is_reachable():
-    gd = _reach_gd(consumer_level=MAX_ATTAINABLE_SKILL_LEVEL)
+    gd = _reach_gd(consumer_level=SKILL_CAP)
     assert reachable_consumer_demand("ore", gd) == 8
 
 
@@ -110,8 +115,17 @@ def test_demand_is_zero_when_every_consumer_is_off_the_progression_ladder():
     crafted by any character, so the material it consumes has no reachable
     consumer at all. This is the question `level_distance_keep_ceiling` could
     not ask: it only knew how far the ITEM's level sat from the character's."""
-    gd = _reach_gd(consumer_level=MAX_ATTAINABLE_SKILL_LEVEL + 1)
+    gd = _reach_gd(consumer_level=SKILL_CAP + 1)
     assert reachable_consumer_demand("ore", gd) == 0
+
+
+def test_the_keep_valuation_reads_the_loaded_skill_cap():
+    """A season may move the cap (Review Focus 4): a recipe gated at the old
+    cap of 50 is off the ladder once the server reports a cap of 45, so the
+    material it consumes keeps no eventual demand."""
+    moved = StatusSchema.from_dict({**season_8_status().to_dict(), "max_skill_level": 45})
+    assert reachable_consumer_demand("ore", _reach_gd(consumer_level=50, status=moved)) == 0
+    assert reachable_consumer_demand("ore", _reach_gd(consumer_level=45, status=moved)) == 8
 
 
 def test_demand_is_zero_when_no_recipe_consumes_the_item_at_all():
@@ -121,11 +135,11 @@ def test_demand_is_zero_when_no_recipe_consumes_the_item_at_all():
 
 def test_an_ungated_recipe_is_always_a_reachable_consumer():
     """A recipe with no crafting-skill gate has nothing to be walled behind."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"ore": ItemStats(code="ore", level=1, type_="resource")}
     gd._crafting_recipes = {"trinket": {"ore": 3}}
     graph = gd.requirement_graph.graph()
-    assert consumer_reachable("trinket", graph) is True
+    assert consumer_reachable("trinket", graph, SKILL_CAP) is True
     assert reachable_consumer_demand("ore", gd) == 3
 
 
@@ -138,7 +152,7 @@ def test_worth_keeping_takes_the_eventual_demand_when_it_is_larger():
     """The far-skill-gated case the bank exists for: the NEAR-term cap is 0
     precisely because the recipe is gated, so only the eventual demand keeps a
     banked gemstone out of the withdraw->discard pipeline."""
-    gd = _reach_gd(consumer_level=MAX_ATTAINABLE_SKILL_LEVEL)
+    gd = _reach_gd(consumer_level=SKILL_CAP)
     state = make_state(level=5, skills={"mining": 5}, bank_items={"ore": 50})
     assert worth_keeping("ore", state, gd, NO_PROFILE_CONTEXT) == 8
 
@@ -174,7 +188,7 @@ LIVE_SKILLS = {"alchemy": 3, "cooking": 1, "fishing": 1, "gearcrafting": 7,
 def _live_gd() -> GameData:
     """R2D2's catalog neighbourhood, probed live 2026-08-05: for each pile, the
     recipes that consume it and the crafting level each is gated behind."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "sap": ItemStats(code="sap", level=30, type_="resource"),
         "raw_wolf_meat": ItemStats(code="raw_wolf_meat", level=15, type_="resource"),

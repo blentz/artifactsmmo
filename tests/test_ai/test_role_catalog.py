@@ -1,5 +1,10 @@
 import pytest
 
+from artifactsmmo_cli.ai.progression.skill_classes import (
+    COMBAT_CRAFT_SKILLS,
+    CONSUMABLE_CRAFT_SKILLS,
+    GATHER_SKILLS,
+)
 from artifactsmmo_cli.ai.role_catalog import (
     ROLE_CATALOG,
     ROLES_BY_NAME,
@@ -7,11 +12,6 @@ from artifactsmmo_cli.ai.role_catalog import (
     role_skill_level,
     role_skills,
     validate_catalog,
-)
-from artifactsmmo_cli.ai.tiers.skill_classes import (
-    COMBAT_CRAFT_SKILLS,
-    CONSUMABLE_CRAFT_SKILLS,
-    GATHER_SKILLS,
 )
 
 

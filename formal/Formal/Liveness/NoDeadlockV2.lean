@@ -16,7 +16,7 @@
 
   Phase 20e-v2 step 1 added `WaitGoal` (`src/artifactsmmo_cli/ai/goals/wait.py`)
   as the last entry in `DISCRETIONARY_ORDER`
-  (`src/artifactsmmo_cli/ai/tiers/means.py:42-49`), with
+  (`src/artifactsmmo_cli/ai/progression/means.py:42-49`), with
   `_fires(MeansKind.WAIT, ...) = True` unconditionally
   (`means.py:115-119`). Step 2 mirrors that fix in Lean: the
   `MeansKind.wait` constructor is added to `allInLadderOrder` last, and

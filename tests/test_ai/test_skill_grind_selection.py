@@ -1,6 +1,6 @@
 """Unit tests for the pure skill_grind_selection core."""
 
-from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
+from artifactsmmo_cli.ai.progression.skill_grind_selection import (
     GrindCandidate,
     skill_grind_selection_pure,
 )

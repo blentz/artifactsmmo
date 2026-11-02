@@ -1,6 +1,8 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
+import copy
 import dataclasses
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -26,6 +28,7 @@ from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.open_order import OrderSide
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
@@ -71,8 +74,21 @@ class GatherMaterialsGoal(Goal):
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
                  carry: bool = False, fight_gold: bool = False,
-                 piece_material: bool = False) -> None:
+                 piece_material: bool = False, farmed_for: str | None = None, *,
+                 now: datetime) -> None:
         self._target_item = target_item
+        # now: the cycle clock (ruling T8b), the `SelectionContext.now` of the
+        # cycle that built this goal. Every NPC buy the goal mints carries it,
+        # so the buy's event window is judged at the instant the rest of the
+        # cycle's decision is. Not part of goal identity, like `skill_grind`.
+        self._now = now
+        # farmed_for: the item a fleet currency is farmed to buy (the ticket
+        # farm, live 2026-10-31: medals farmed for the trophy). The farmer
+        # holds the turn-in election for THAT sink only
+        # (`GamePlayer._claim_currency_farm`, review M3), so siblings are not
+        # locked out of the currency's other sinks. Not part of goal
+        # identity, like `fight_gold`: the target and `needed` name the walk.
+        self.farmed_for = farmed_for
         # piece_material: the goal walks a material of a missing `L*` piece
         # (ruling T14a-D; `for_piece`), so a grey dropper of a material that
         # serves a demand may be farmed: the grey-farm directive's next-tier
@@ -110,12 +126,20 @@ class GatherMaterialsGoal(Goal):
         # (repr/serialize) — the `needed` map already distinguishes instances.
         self.skill_grind = skill_grind
 
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its clock rebound to `now` (ruling T8b): a cached
+        copy judges satisfaction, and mints its buys, at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._now = now
+        return rebound
+
     def for_piece(self) -> "GatherMaterialsGoal":
         """This goal as an `L*` piece's material walk (`piece_material`)."""
         return GatherMaterialsGoal(self._target_item, dict(self._needed),
                                    skill_grind=self.skill_grind,
                                    exclude_recycle=self._exclude_recycle, carry=self.carry,
-                                   fight_gold=self.fight_gold, piece_material=True)
+                                   fight_gold=self.fight_gold, piece_material=True,
+                                   farmed_for=self.farmed_for, now=self._now)
 
     @property
     def needed(self) -> dict[str, int]:
@@ -218,8 +242,11 @@ class GatherMaterialsGoal(Goal):
         for code, qty in list(self._needed.items()):
             if game_data.crafting_recipe(code) is not None:
                 continue
+            # A vendor the walk reaches now only (`vendor_reached`, Task 8a I-4):
+            # an island vendor past an unpaid boat raises no coin demand.
             perm = [(price, cur) for npc, price, cur in game_data.npc_purchases(code)
-                    if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]
+                    if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+                    and vendor_reached(npc, state, game_data)]
             if not perm or any(cur == "gold" for _price, cur in perm):
                 continue
             unit_price, currency = min(perm, key=lambda pc: pc[0])
@@ -434,7 +461,7 @@ class GatherMaterialsGoal(Goal):
         # (drop the dominated ones). Mirrors the GatherSelection narrowing above:
         # kills replace gathers; monsters replace resource nodes. An item with no
         # winnable dropper contributes no FightAction (it also reads as
-        # not-producible in tiers/strategy._producible, so no unreachable plan).
+        # not-producible in progression/strategy._producible, so no unreachable plan).
         # The narrowing itself now lives in ai/drop_fight_selection.py, shared
         # with UpgradeEquipmentGoal rather than copied into it.
         # Emit a fight for EVERY monster-drop in the full recipe closure, not just
@@ -451,7 +478,7 @@ class GatherMaterialsGoal(Goal):
             # One selection, shared with UpgradeEquipmentGoal's target and
             # material edges (ai/drop_fight_selection.py), which in turn asks
             # the shared oracle ai/drop_obtainability — the SAME verdict the
-            # tiers/ reachability walks consult. Nothing is decided here that
+            # progression/ reachability walks consult. Nothing is decided here that
             # selection cannot see except this action pool itself (the oracle's
             # named residual). Live Robby L12 could not gather feathers from L1
             # chickens without the drop_farm variant the selection returns (the
@@ -535,6 +562,8 @@ class GatherMaterialsGoal(Goal):
                 for npc_code, price, currency in game_data.npc_purchases(item):
                     if game_data.is_event_npc(npc_code) or game_data.npc_location(npc_code) is None:
                         continue
+                    if not vendor_reached(npc_code, state, game_data):
+                        continue
                     batch = _buy_batch(qty, price, currency, state)
                     if batch <= 0:
                         continue
@@ -543,7 +572,8 @@ class GatherMaterialsGoal(Goal):
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
                                                quantity=batch,
-                                               travel_region=game_data.npc_region(npc_code)))
+                                               travel_region=game_data.npc_region(npc_code),
+                                               now=self._now))
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
@@ -566,6 +596,8 @@ class GatherMaterialsGoal(Goal):
                 # vs sandwhisper_coin etc.). NOT npcs_selling_item: that is gold-only
                 # (#15) and would drop the special-currency vendors this path needs.
                 for npc_code, price, currency in game_data.npc_purchases(item):
+                    if not vendor_reached(npc_code, state, game_data):
+                        continue
                     batch = _buy_batch(qty, price, currency, state)
                     if batch <= 0:
                         continue
@@ -574,12 +606,14 @@ class GatherMaterialsGoal(Goal):
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
                                                quantity=batch,
-                                               travel_region=game_data.npc_region(npc_code)))
+                                               travel_region=game_data.npc_region(npc_code),
+                                               now=self._now))
                 continue
             # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
             # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
             # gold-reserve comparison in acquisition_method is sound (#15).
-            sellers = game_data.npcs_selling_item(item)
+            sellers = [(npc, price) for npc, price in game_data.npcs_selling_item(item)
+                       if vendor_reached(npc, state, game_data)]
             if not sellers:
                 continue
             if acquisition_method(item, qty, state, game_data,
@@ -589,7 +623,8 @@ class GatherMaterialsGoal(Goal):
             result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                        npc_location=game_data.npc_location(npc_code),
                                        quantity=qty,
-                                       travel_region=game_data.npc_region(npc_code)))
+                                       travel_region=game_data.npc_region(npc_code),
+                                       now=self._now))
             # Immediate-fill GE buy source (DUAL of the discard_overstock GE
             # liquidation): when a standing GE SELL order is strictly cheaper than
             # the NPC buy price AND can supply the whole qty in one fill, also offer

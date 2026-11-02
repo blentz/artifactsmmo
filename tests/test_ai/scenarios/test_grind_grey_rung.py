@@ -52,9 +52,9 @@ from artifactsmmo_cli.ai.grind_rung import grind_rung_goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.skill_xp_positive import skill_xp_positive
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT
 
@@ -164,7 +164,8 @@ def test_reservation_reaches_the_grind_through_the_context(
     assert repr(reserved) != repr(plain), (
         "the grind ignored ctx.step_profile — the reserved guard is dead again")
     # ...and what it moved to must genuinely avoid the reserved materials.
-    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats), ctx=NO_DROPS_CONTEXT)
+    alt = skill_grind_target(_RESERVE_SKILL, state, game_data, frozenset(mats),
+                             ctx=TIMED_NO_PROFILE_CONTEXT)
     assert alt is not None and not (set(game_data.crafting_recipe(alt)) & set(mats))
 
 

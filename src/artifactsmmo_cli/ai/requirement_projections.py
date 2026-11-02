@@ -5,7 +5,7 @@
 Each projection is the single answer that replaces one of the disagreeing walks.
 They landed unconsumed and Waves 3-9 swapped the consumers over one at a time;
 TWELVE production modules import this one today (`craft_plan_gen`,
-`strategy_driver`, `goals/gathering`, `goals/progression`, `tiers/objective
+`strategy_driver`, `goals/gathering`, `goals/progression`, `progression/objective
 _needs` and eight more). The wave-2 staging note that used to stand here is
 history, not a dead-code claim.
 
@@ -20,7 +20,7 @@ The two axes stay EXPLICIT (§4.2). They are legitimate differences that must
 SURVIVE unification, not drift to be collapsed:
 
 * **Axis 1 edges-vs-closure** — `requirement_edges` is one ply because
-  `tiers/strategy.py` does its own traversal on top; collapsing it breaks
+  `progression/strategy.py` does its own traversal on top; collapsing it breaks
   `act_step`.
 * **Axis 2 state truncation** — supplied as a `truncate_at` PREDICATE rather
   than baked in, so state-awareness is a pass over the graph and the graph

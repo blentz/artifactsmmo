@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.log_type import LogType
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
+    committed_kind_seconds,
     committed_timing,
     fit_model,
 )
@@ -23,7 +24,7 @@ from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
-PAGE = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30))
+PAGE = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30), kinds=())
 """An account-log bootstrap: two fights at 2 s a turn and a 30 s gather."""
 
 
@@ -58,9 +59,26 @@ def test_a_player_with_a_store_pools_the_fleet_record(tmp_path: Path) -> None:
 
 
 def test_a_player_with_no_observation_anywhere_raises() -> None:
-    player = GamePlayer(character="hero", fight_bootstrap=FleetBootstrap((), ()))
+    player = GamePlayer(character="hero", fight_bootstrap=FleetBootstrap((), (), ()))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
         player._timing()
+
+
+def test_a_live_player_times_each_kind_from_its_bootstrap() -> None:
+    """Live (no offline capture, no store): each priced kind's seconds are the
+    account-log bootstrap's, a craft's per run of the recipe (the bundle's
+    cheese yields 2, so a 4-cheese craft of 10 s is two 5 s runs); offline
+    they are the committed capture's instead."""
+    gd = load_bundle_game_data(Path(__file__).parent / "scenarios" / "fixtures"
+                               / "gamedata_bundle.json")
+    assert gd.craft_yield("cheese") == 2
+    player = GamePlayer(character="hero",
+                        fight_bootstrap=FleetBootstrap((), (), (("crafting", 10, "cheese", 4),
+                                                                ("gathering", 50, None, 1))))
+    player.game_data = gd
+    assert player._kind_seconds() == (("crafting", Fraction(5)), ("gathering", Fraction(50)))
+    player._offline_timing = committed_timing()
+    assert player._kind_seconds() == committed_kind_seconds()
 
 
 def test_a_timed_context_carries_the_cycles_seconds() -> None:
@@ -111,7 +129,9 @@ def test_a_gathering_character_fits_on_the_accounts_fights(tmp_path: Path) -> No
         acquired: list[str] = []
         player._acquire_account = lambda: acquired.append("account")  # type: ignore[method-assign]
         player._bootstrap = player._fetch_bootstrap(Api())  # type: ignore[arg-type]
-        assert player._bootstrap == FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(25, 10))
+        assert player._bootstrap == FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(25, 10),
+                                                    kinds=(("gathering", 25, None, 1),
+                                                           ("fight", 10, None, 1)))
         assert acquired == ["account", "account"]
         model, seconds = player._timing()
         assert (model.s_turn, model.samples, seconds) == (2, 1, Fraction(35, 2))

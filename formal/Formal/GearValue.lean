@@ -150,9 +150,9 @@ theorem rankValue_eq_gearValue_canonical (isWeapon : Bool)
 /-! #### The Rank ruler's own (COMBAT, EFFICIENCY) partition.
 
 Mirrors the live `ai/gear_value.gear_components(stats, Rank)`. The economics
-layer (`Formal.StrategicValue`, `tiers/pursuit_value`) consumes THESE two terms
-rather than a scalar of its own, which is what makes "one scoring algorithm"
-true of the acquisition path as well as the picker. -/
+layer that consumed THESE two terms (`strategic_value` / `pursuit_value`) was
+retired in plan C Task 6; the gear objective ranks loadouts by the fight loop's
+rate. -/
 
 /-- The Rank purpose's COMBAT term: `EquipmentScoring.ACombat` at the canonical
 adversary on the armor branch, the whole augmented weapon score on the weapon

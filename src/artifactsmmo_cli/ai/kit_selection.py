@@ -104,7 +104,7 @@ def _pick_tools(candidates: set[str], game_data: GameData) -> frozenset[str]:
     """Best tool per gathering skill (by ``tool_value``) among `candidates`.
 
     Tool magnitude is ``abs(gather_score)`` (== equip_value.tool_value,
-    which cannot be imported here: tiers.__init__ -> strategy -> guards ->
+    which cannot be imported here: progression.__init__ -> strategy -> guards ->
     bank_selection cycles).
 
     Returns a FROZENset: the answer is memoized and both callers hand it

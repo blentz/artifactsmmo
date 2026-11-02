@@ -37,7 +37,7 @@ def grind_probe_state(state: WorldState, rung: str) -> WorldState:
 
     The equipment slots matter as much as the bag: `ObtainItem.is_satisfied`
     reports an EQUIPPABLE satisfied whenever its code is worn, IGNORING
-    quantity (`tiers/meta_goal.py`). A gear grind wears what it makes, so the
+    quantity (`progression/meta_goal.py`). A gear grind wears what it makes, so the
     very first rung the character equips would otherwise leaf the rung on the
     `is_satisfied` arm and no quantity could ever defeat it.
 

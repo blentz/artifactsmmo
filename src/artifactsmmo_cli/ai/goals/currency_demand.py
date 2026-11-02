@@ -34,8 +34,8 @@ leaf is never blocked by its own reservation, only by OTHER unmet targets.
 Item-currency legs are untouched: the reserve is gold-denominated only.
 Threading: `analyze_currency_leaves` already receives `state`/`game_data`, so
 `progression_reserve.reserve_floor` is called directly here — `ai/goals/` has
-no back-edge into the `tiers` package (`progression_reserve` reads
-`ai/equip_value`, outside `tiers`), confirmed by `gathering.py` already
+no back-edge into the `progression` package (`progression_reserve` reads
+`ai/equip_value`, outside `progression`), confirmed by `gathering.py` already
 importing `reserve_floor` directly for the craft-vs-buy gate, and by a direct
 import smoke test. No new SelectionContext threading needed.
 
@@ -143,9 +143,10 @@ from typing import NamedTuple
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
+from artifactsmmo_cli.ai.progression.objective import GOLD
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi
 from artifactsmmo_cli.ai.requirement_projections import demand_set
-from artifactsmmo_cli.ai.tiers.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
@@ -240,12 +241,14 @@ def _classify_leaves(
         purchases = game_data.npc_purchases(leaf)
         if not purchases:
             continue
-        # PERMANENT, located vendors only — matching relevant_actions' guard, so
-        # the affordability view and the emitted action set use the same vendors.
+        # PERMANENT, located vendors the walk reaches now (`vendor_reached`,
+        # Task 8a I-4) only — matching relevant_actions' guard, so the
+        # affordability view and the emitted action set use the same vendors.
         permanent = [
             (npc, price, currency)
             for npc, price, currency in purchases
             if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+            and vendor_reached(npc, state, game_data)
         ]
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
         # Item-currency affordability is independent per leaf (unchanged from

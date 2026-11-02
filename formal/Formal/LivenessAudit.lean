@@ -583,8 +583,11 @@ open Formal.Liveness.BlockerMonotone
 -- derivation of WinnableAcrossBand are the named O5.4 residual.
 open Formal.Liveness.GearTierLeveling
 #print axioms winnableAcrossBand_satisfiable
-#print axioms combatTargetExists_of_gearTier
-#print axioms combatObjective_live_below_fifty
+#print axioms held_objective_emits_fight
+#print axioms objective_of_winning_candidate
+#print axioms objectiveCovers_satisfiable
+#print axioms not_objectiveCovers_of_none
+#print axioms held_objective_emits_fight_nonvacuous
 
 -- Task 4 (2026-06-20): WinnableAcrossBand DISCHARGED over the live catalog via a
 -- per-level witness table. The combat verdict is kernel `decide`d over

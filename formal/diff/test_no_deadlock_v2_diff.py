@@ -47,11 +47,11 @@ from hypothesis import strategies as st
 import artifactsmmo_cli.ai.decisions.root as root_mod
 from artifactsmmo_cli.ai.decisions.root import _task_root
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.progression.guards import GUARD_ORDER, SelectionContext
+from artifactsmmo_cli.ai.progression.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.task_accept import accept_due
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.guards import GUARD_ORDER, SelectionContext
-from artifactsmmo_cli.ai.tiers.means import COLLECT_REWARD_ORDER, INTERRUPT_MEANS
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.sim.fake_server import FakeServer
 from formal.sim.production_ladder import (

@@ -6,7 +6,7 @@ no I/O — the generator script owns file writes and the census run."""
 from collections import defaultdict
 
 from artifactsmmo_cli.audit.craft_census import CellResult
-from artifactsmmo_cli.audit.craft_completeness import nominal_char_level, tier_of
+from artifactsmmo_cli.audit.craft_completeness import decade_of, nominal_char_level
 
 GAP_ABBREV: dict[str, str] = {
     "event_gated": "EG",
@@ -76,7 +76,7 @@ def render_matrix(results: list[CellResult]) -> str:
         head = cells[0]
         tokens = " · ".join(_cell_token(c) for c in cells)
         row = f"| {recipe} | {head.craft_level} | {tokens} |"
-        groups[(head.skill, tier_of(head.craft_level))].append(row)
+        groups[(head.skill, decade_of(head.craft_level))].append(row)
     lines = [
         "# Craft-Planning Completeness — Matrix",
         "",
@@ -88,12 +88,12 @@ def render_matrix(results: list[CellResult]) -> str:
         + "; +ev = the cell with the recipe's sourcing events active.",
         "",
     ]
-    for skill, tier in sorted(groups):
-        lines.append(f"## {skill} — tier {tier}")
+    for skill, decade in sorted(groups):
+        lines.append(f"## {skill} — tier {decade}")
         lines.append("")
         lines.append("| Recipe | Craft lvl | Cells (char/skill → verdict) |")
         lines.append("|---|---|---|")
-        lines.extend(groups[(skill, tier)])
+        lines.extend(groups[(skill, decade)])
         lines.append("")
     return "\n".join(lines) + "\n"
 

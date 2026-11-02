@@ -1,7 +1,7 @@
 """Tests for SellInventoryGoal event-window seize behavior (Task 9)."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.sell_inventory import SEIZE_WINDOW_VALUE, SellInventoryGoal
@@ -9,6 +9,9 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 FIXED_NOW = datetime(2026, 5, 20, 21, 0, tzinfo=timezone.utc)
+AT_FIXED_NOW = replace(NO_PROFILE_CONTEXT, now=FIXED_NOW)
+"""The cycle clock at FIXED_NOW (ruling T8b): the goal's window read and its
+sale actions judge every event at this instant, never at the wall clock."""
 
 
 def _gd() -> GameData:
@@ -40,11 +43,9 @@ class TestSellInventorySeize:
             inventory_max=104,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
 
     def test_zero_quantity_items_are_skipped(self):
         """An inventory entry with qty <= 0 is skipped; a real sellable item still boosts."""
@@ -56,11 +57,9 @@ class TestSellInventorySeize:
             inventory_max=104,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
 
     def test_no_boost_when_no_window_and_bank_accessible(self):
         """Bank accessible, no active event, and no accumulation -> value == 0."""
@@ -74,11 +73,9 @@ class TestSellInventorySeize:
             inventory_max=7,
             active_events={},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) == 0.0
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) == 0.0
 
     def test_bank_locked_no_window_uses_fraction(self):
         """Bank locked + sellable + NO active window -> used_fraction * 100."""
@@ -92,12 +89,10 @@ class TestSellInventorySeize:
             inventory_max=100,
             active_events={},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=False)
-            expected = 96 / 100 * 100.0
-            assert goal.value(state, gd) == expected
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=False)
+        expected = 96 / 100 * 100.0
+        assert goal.value(state, gd) == expected
 
     def test_satisfied_returns_zero_when_no_accumulation_even_with_window(self):
         """When satisfied and no accumulation, value is 0 regardless of window."""
@@ -111,11 +106,9 @@ class TestSellInventorySeize:
             inventory_max=104,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) == 0.0
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) == 0.0
 
     def test_no_sellable_items_returns_zero_even_with_window(self):
         """If no held item is sellable by any NPC, value is 0."""
@@ -128,11 +121,9 @@ class TestSellInventorySeize:
             inventory_max=100,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) == 0.0
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) == 0.0
 
     def test_bank_locked_with_window_returns_max(self):
         """Bank locked AND event window live -> max(fraction*100, SEIZE_WINDOW_VALUE)."""
@@ -145,12 +136,10 @@ class TestSellInventorySeize:
             inventory_max=100,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=False)
-            result = goal.value(state, gd)
-            assert result == max(96.0, SEIZE_WINDOW_VALUE)
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=False)
+        result = goal.value(state, gd)
+        assert result == max(96.0, SEIZE_WINDOW_VALUE)
 
     def test_expired_event_no_boost(self):
         """Expired event (expiry in the past) -> no boost when bank accessible and no accumulation."""
@@ -164,8 +153,6 @@ class TestSellInventorySeize:
             inventory_max=7,
             active_events={"gemstone_merchant": FIXED_NOW - timedelta(minutes=5)},
         )
-        with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
-            dt.now.return_value = FIXED_NOW
-            goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT,
-                                     bank_accessible=True)
-            assert goal.value(state, gd) == 0.0
+        goal = SellInventoryGoal(game_data=gd, ctx=AT_FIXED_NOW,
+                                 bank_accessible=True)
+        assert goal.value(state, gd) == 0.0

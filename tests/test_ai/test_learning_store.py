@@ -234,72 +234,6 @@ def _insert_cycles(store, action_repr, cooldowns, outcomes=None, action_class=No
         ))
 
 
-class TestActionClassCost:
-    def test_returns_default_when_fewer_than_5_samples(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        _insert_cycles(store, "Fight(x)", [10.0, 11.0, 12.0], action_class="FightAction")
-        assert store.action_class_cost("FightAction", default=99.0) == 99.0
-        store.close()
-
-    def test_returns_median_over_the_whole_class(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        # Different reprs, same class — the per-class median spans both.
-        _insert_cycles(store, "Fight(x)", [10.0, 12.0], action_class="FightAction")
-        _insert_cycles(store, "Fight(y)", [14.0, 16.0, 18.0], action_class="FightAction")
-        assert store.action_class_cost("FightAction", default=99.0) == 14.0
-        store.close()
-
-    def test_filters_by_action_class(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        _insert_cycles(store, "Fight(x)", [10.0] * 5, action_class="FightAction")
-        _insert_cycles(store, "Move(a,b)", [30.0] * 5, action_class="MovementAction")
-        assert store.action_class_cost("FightAction", default=99.0) == 10.0
-        assert store.action_class_cost("MovementAction", default=99.0) == 30.0
-        store.close()
-
-    def test_ignores_failed_actions(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        _insert_cycles(store, "Fight(x)",
-                       cooldowns=[10.0, 10.0, 10.0, 99.0, 99.0],
-                       outcomes=["ok", "ok", "ok", "error:HTTP_497", "error:HTTP_497"],
-                       action_class="FightAction")
-        assert store.action_class_cost("FightAction", default=42.0) == 42.0
-        store.close()
-
-
-class TestActionClassFraction:
-    def test_empty_returns_zero(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        assert store.action_class_fraction("FightAction") == 0.0
-        store.close()
-
-    def test_fraction_over_action_mix(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        _insert_cycles(store, "Fight(x)", [1.0, 1.0, 1.0], action_class="FightAction")
-        _insert_cycles(store, "Dep", [1.0], action_class="DepositAllAction")
-        assert store.action_class_fraction("FightAction") == 0.75
-        assert store.action_class_fraction("DepositAllAction") == 0.25
-        store.close()
-
-    def test_failed_cycles_excluded_from_denominator(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="testchar")
-        store.start_session()
-        _insert_cycles(store, "Fight(x)", [1.0, 1.0], action_class="FightAction")
-        _insert_cycles(store, "Fight(y)",
-                       cooldowns=[1.0, 1.0],
-                       outcomes=["error:HTTP_497", "error:HTTP_497"],
-                       action_class="FightAction")
-        # Only the 2 ok cycles count → fraction 1.0 (both ok cycles are FightAction).
-        assert store.action_class_fraction("FightAction") == 1.0
-        store.close()
-
-
 class TestActionCost:
     def test_returns_default_when_fewer_than_5_samples(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
@@ -948,16 +882,6 @@ class TestDegradationOnDbError:
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         assert store.action_cost("FightAction(chicken)", default=3.5) == 3.5
-
-    def test_action_class_cost_returns_default(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="hero")
-        _break_engine(store)
-        assert store.action_class_cost("FightAction", default=3.5) == 3.5
-
-    def test_action_class_fraction_returns_zero(self, tmp_db_path):
-        store = LearningStore(db_path=tmp_db_path, character="hero")
-        _break_engine(store)
-        assert store.action_class_fraction("FightAction") == 0.0
 
     def test_success_rate_returns_one(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")

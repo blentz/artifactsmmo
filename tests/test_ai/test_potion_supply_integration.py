@@ -32,13 +32,14 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
+from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext, active_guards
+from artifactsmmo_cli.ai.progression.guards import _fires as guard_fires
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
-from artifactsmmo_cli.ai.tiers.guards import _fires as guard_fires
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data, stamped
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -60,7 +61,7 @@ def _ctx(fight_monster: str | None = None,
 def _gd_with_potion() -> GameData:
     """One alchemy-craftable utility heal (`small_health_potion`) whose lone
     ingredient `sunflower` drops from `sunflower_field`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         _POTION: ItemStats(code=_POTION, level=1, type_="utility", hp_restore=30,
                            crafting_skill="alchemy", crafting_level=1),
@@ -126,7 +127,7 @@ def test_understocked_producible_fires_guard_maps_goal_and_plans_craft_and_equip
 
 
 def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
-    gd = GameData()  # empty catalog: no alchemy-craftable utility potion exists
+    gd = served_game_data()  # empty catalog: no alchemy-craftable utility potion exists
     state = _understocked_state()
     ctx = _ctx(fight_monster=_MONSTER)
 
@@ -134,7 +135,7 @@ def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
     assert _fires(state, gd, ctx) is False
     # And the goal itself has no batch, so the walk declines it.
     declined: list[str] = []
-    assert decompose(CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state), state, gd,
+    assert decompose(CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now()), state, gd,
                      [MoveAction(x=0, y=0)], TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == ["potion:no_batch"]
 
@@ -146,7 +147,7 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
     Regression guard for the Robby play-trace where a well-stocked lower-tier
     potion triggered aspirational enhanced-potion grind (alchemy 16→45).
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "small_health_potion": ItemStats(
             code="small_health_potion", level=1, type_="utility",
@@ -174,7 +175,7 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
     )
 
     eng = StrategyEngine(CharacterObjective.from_game_data(gd))
-    chosen_root = eng.decide(state, gd).chosen_root
+    chosen_root = eng.decide(state, gd, ctx=stamped(NO_PROFILE_CONTEXT)).chosen_root
     assert "enhanced_health_potion" not in repr(chosen_root)
 
 

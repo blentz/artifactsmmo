@@ -284,12 +284,6 @@ class TypeEnv:
 # ---------------------------------------------------------------------------
 MODULES: tuple[ModuleSpec, ...] = (
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/combat_picker.py",
-        output=f"{GENERATED_DIR}/CombatPicker.lean",
-        core_name="CombatPicker",
-        functions=("pick_winnable_monster_pure",),
-    ),
-    ModuleSpec(
         source="src/artifactsmmo_cli/ai/nearest_tile.py",
         output=f"{GENERATED_DIR}/NearestTile.lean",
         core_name="NearestTile",
@@ -408,17 +402,11 @@ MODULES: tuple[ModuleSpec, ...] = (
         constants=("GREY_SKILL_GAP",),
     ),
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
+        source="src/artifactsmmo_cli/ai/progression/skill_grind_selection.py",
         output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
         core_name="SkillGrindSelection",
         functions=("_beats", "skill_grind_selection_pure"),
         structures=("GrindCandidate",),
-    ),
-    ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/strategic_value.py",
-        output=f"{GENERATED_DIR}/StrategicValue.lean",
-        core_name="StrategicValue",
-        functions=("strategic_value_pure",),
     ),
 )
 

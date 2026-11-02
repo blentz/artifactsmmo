@@ -19,7 +19,7 @@ observed and no prospecting slope, which prices every drop at its API prior
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.drop_chance_core import units_per_attempt
+from artifactsmmo_cli.ai.drop_chance_core import chance_at, units_per_attempt
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class LearnedDrops:
     `attempts` holds each observed source's attempt count, `hits` each
     `(source, item)` pair's hits; a pair absent from either is 0. Both are
     sorted tuples so the value is hashable: a cache that prices through it
-    keys on it (`tiers.skill_grind_target`)."""
+    keys on it (`progression.skill_grind_target`)."""
 
     attempts: tuple[tuple[str, int], ...]
     hits: tuple[tuple[tuple[str, str], int], ...]
@@ -59,6 +59,12 @@ class LearnedDrops:
         attempts, hits = self.counts(source, item)
         return units_per_attempt(rate, min_quantity, max_quantity, attempts, hits,
                                  self.k, prospecting)
+
+    def chance(self, source: str, item: str, rate: int, prospecting: int) -> Fraction:
+        """The learned chance one attempt at `source` drops `item` at all, at
+        `prospecting` (`drop_chance_core.chance_at`, the posterior)."""
+        attempts, hits = self.counts(source, item)
+        return chance_at(rate, attempts, hits, self.k, prospecting)
 
     def attempts_per_unit(self, source: str, item: str, rate: int, min_quantity: int,
                           max_quantity: int, prospecting: int) -> Fraction:

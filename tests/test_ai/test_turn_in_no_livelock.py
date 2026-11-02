@@ -21,8 +21,8 @@ from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -109,3 +109,14 @@ def test_task_material_reservation_still_excludes_its_fill() -> None:
     cands = _build(state, gd, _ctx())
     equips = [c for c in cands if isinstance(c.goal, EquipOwnedGoal)]
     assert not equips, [c.repr_ for c in cands]
+
+
+def test_a_farmer_s_claim_short_of_the_price_reserves_no_medal() -> None:
+    """The ticket farm (live 2026-10-31): a claim the fleet cannot pay yet
+    only names the shortfall's farmer (`TurnIn.ready`). Nothing is
+    surrendered, so wearing the medal stays the fleet's storage."""
+    short = TurnIn(item_code="lich_race_trophy", npc_code="archaeologist", price=10,
+                   currency="lich_race_medal", buyer="Robby", fleet_total=9)
+    cands = _build(_medal_state(), _wearable_medal_game_data(), _ctx(turn_in=short))
+    equips = [c for c in cands if isinstance(c.goal, EquipOwnedGoal)]
+    assert len(equips) == 1, [c.repr_ for c in cands]

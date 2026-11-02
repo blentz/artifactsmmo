@@ -5,7 +5,7 @@
 
 **Every "stuck" state triggers a guard.**
 
-The guard tier (`tiers/guards.py`) is the AI's preemption layer: when
+The guard tier (`progression/guards.py`) is the AI's preemption layer: when
 state crosses certain pressure thresholds, the active means/step is
 interrupted by a higher-priority recovery goal. This module models the
 guard predicates as a covering set and proves that every problematic

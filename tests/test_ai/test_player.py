@@ -23,12 +23,14 @@ from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.fight_record import FightRecord
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -37,19 +39,21 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import combat_key
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
+from artifactsmmo_cli.ai.progression import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.recovery import StuckSignal
-from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data, stamped
 from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
 
 def make_game_data_mock() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)], "cow": [(2, 0)]}
     gd._resource_locations = {"copper": [(3, 0)]}
     gd._workshop_locations = {"weaponcrafting": (5, 0)}
@@ -290,6 +294,24 @@ class TestBuildActions:
         assert "chicken" in fight_locs
         assert (1, 0) in fight_locs["chicken"]
 
+    def test_vendor_edges_carry_the_cycle_clock(self):
+        """The pool is stamped with the cycle's own instant (`_cycle_now`,
+        ruling T8b), never a wall read of its own: every NPC buy and sale
+        judges its event window at the instant the cycle's context carries."""
+        player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        player.game_data = make_game_data_mock()
+        player.game_data._npc_stock["cook"] = {"cooked_chicken": 5}
+        player.game_data._npc_sell_prices["cook"] = {"cooked_chicken": 1}
+        player.game_data._item_stats["cooked_chicken"] = ItemStats(
+            code="cooked_chicken", level=1, type_="consumable")
+        instant = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+        player._cycle_now = instant
+        vendors = [a for a in player._build_actions() if isinstance(a, NpcBuyAction | NpcSellAction)]
+        assert {type(a) for a in vendors} == {NpcBuyAction, NpcSellAction}
+        assert {a.now for a in vendors} == {instant}
+
 
 class TestArbiterSelection:
     """P3c: the cycle drives goal selection through StrategyArbiter, not a flat
@@ -317,15 +339,6 @@ class TestArbiterSelection:
         assert not hasattr(player, "_select_goal")
         assert not hasattr(player, "_build_goals")
 
-    def test_band_party_prices_a_boss_party_as_the_band_prices_a_loop(self):
-        """`_band_party` hands `best_party_loop` the band's prices and food menu:
-        a character with no `party` gets no party loop."""
-        player = GamePlayer(character="hero")
-        player._offline_timing = committed_timing()
-        player._learned_drops = LearnedDrops.empty()
-        player.seed_offline(make_state(level=5), make_game_data_mock())
-        assert player._band_party("chicken") is None
-
     def test_plan_from_state_decides_with_the_same_arguments_as_the_live_band(self):
         """Regression (runtime activation), re-pointed by wave 3a. The original
         pinned `enable_synergy=True`, a parameter the flip deleted. The RULE it
@@ -335,7 +348,7 @@ class TestArbiterSelection:
         the two-plan-producers trap. It was once synergy-blind that way, so the
         whole scenario suite and the `plan` diagnostic ran synergy inert.
 
-        Pinned as a KEY-SET comparison against `_decide_band`'s own call rather
+        Pinned as a KEY-SET comparison against `_decide_and_select`'s own call rather
         than as a list of names, so the next parameter added to one site and
         forgotten at the other fails here without anyone remembering to extend
         this test."""
@@ -356,7 +369,7 @@ class TestArbiterSelection:
 
         with patch.object(StrategyEngine, "decide", side_effect=_Stop) as spy:
             with pytest.raises(_Stop):
-                player._decide_band(player.state, player.game_data, [])
+                player._decide_and_select(player.state, player.game_data, [])
         live_kwargs = spy.call_args.kwargs
 
         assert set(diagnostic_kwargs) == set(live_kwargs)
@@ -395,31 +408,6 @@ class TestArbiterSelection:
         player.state = replace(state, crafting_target=crafting_target)
         assert player.state.crafting_target is None
 
-    def test_selection_context_marks_risky_target(self, monkeypatch):
-        """A grind target won below SECURE_WIN at max HP is risky (USER
-        2026-10-15: below 75% we probably need better gear); a secure one is
-        not; no target is never risky. Asked of the RESTED state on BARE gear
-        (`combat.unpotioned`): worn potions never hide a gear upgrade."""
-        player = self._with_strategy(make_game_data_mock(), level=3)
-        player.state = replace(player.state, hp=1, utility1_slot_quantity=40)
-        asked: list[tuple[int, int]] = []
-
-        def _secure(verdict):
-            def _fake(state, game_data, monster):
-                asked.append((state.hp, state.utility1_slot_quantity))
-                return verdict
-            return _fake
-
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: "chicken")
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
-            assert player._selection_context().combat_risky is True
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(True)):
-            assert player._selection_context().combat_risky is False
-        assert asked == [(player.state.max_hp, 0), (player.state.max_hp, 0)]
-        monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: None)
-        with patch("artifactsmmo_cli.ai.gear_objective_context.secure_win", _secure(False)):
-            assert player._selection_context().combat_risky is False
-
     def test_selection_context_carries_combat_monster(self, monkeypatch):
         player = self._with_strategy(make_game_data_mock(), level=3)
         monkeypatch.setattr(ctx_mod, "farm_target", lambda task, objective, fleet_waiting: "chicken")
@@ -442,7 +430,7 @@ class TestArbiterSelection:
                                      inventory={"copper_ore": 20}, inventory_max=20,
                                      bank_items={})  # bank visited, 0 items < capacity 50
         player._blockers.clear("bank")
-        decision = player._strategy.decide(player.state, player.game_data)
+        decision = player._strategy.decide(player.state, player.game_data, ctx=stamped(NO_PROFILE_CONTEXT))
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
             decision, player.state, player.game_data, actions, player._selection_context())
@@ -520,7 +508,7 @@ def _winnable_gd(monsters: dict[str, dict]) -> GameData:
     `monsters` maps code -> {level, hp, attack, resistance, crit, initiative}.
     Only level/hp/attack are required; the rest default sensibly.
     """
-    gd = GameData()
+    gd = served_game_data()
     for code, m in monsters.items():
         gd._monster_level[code] = m["level"]
         gd._monster_hp[code] = m["hp"]
@@ -569,8 +557,8 @@ def _seed_outcomes(store: LearningStore, state: WorldState, gd: GameData, monste
 
 
 class TestWinnable:
-    """_is_winnable / _pick_winnable_monster driven by the real predict_win
-    estimator and a real LearningStore win-rate veto (no mocking)."""
+    """_is_winnable driven by the real predict_win estimator and a real
+    LearningStore win-rate veto (no mocking)."""
 
     def _player(self, gd: GameData, state, history=None) -> GamePlayer:
         player = GamePlayer(character="hero", history=history)
@@ -617,27 +605,6 @@ class TestWinnable:
             assert self._player(gd, state, history=store)._is_winnable("chicken") is True
         finally:
             store.close()
-
-    def test_pick_returns_highest_level_winnable(self):
-        """Player at level 5 → FightAction window [4,7]. wolf(L4) qualifies;
-        chicken(L1) is below the window and excluded by the level filter;
-        titan(L8) is above the window. wolf is the only candidate."""
-        gd = _winnable_gd({
-            "chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}},
-            "wolf": {"level": 4, "hp": 10, "attack": {"fire": 1}},
-            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},  # unwinnable
-        })
-        state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
-        assert self._player(gd, state)._pick_winnable_monster() == "wolf"
-
-    def test_pick_none_when_nothing_winnable(self):
-        gd = _winnable_gd({
-            "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},
-            "colossus": {"level": 9, "hp": 100000, "attack": {"fire": 1}},
-        })
-        state = make_state(level=10, max_hp=100, attack={"fire": 50}, initiative=50)
-        assert self._player(gd, state)._pick_winnable_monster() is None
-
 
 class TestWaitForCooldown:
     def test_no_wait_when_state_is_none(self):
@@ -1452,7 +1419,7 @@ class TestExecute:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         bank_slot = MagicMock()
         bank_slot.code = "copper_ore"
@@ -1643,7 +1610,7 @@ class TestBuildGoalsTier1:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
         gd._resource_locations = {}
@@ -1756,11 +1723,7 @@ class TestBuildGoalsTier1:
             },
         )
 
-        class _Obj:
-            target_gear = {"weapon_slot": "copper_dagger"}
-            target_tools: dict[str, str] = {}
-
-        player._objective = _Obj()  # type: ignore[assignment]
+        player._objective = CharacterObjective.from_game_data(player.game_data)
         player.state = make_state(skills={"weaponcrafting": 1, "gearcrafting": 1})
         actions = player._build_actions()
         recycle_codes = {a.code for a in actions if isinstance(a, RecycleAction)}
@@ -1932,7 +1895,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -1957,7 +1920,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -2007,7 +1970,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -2042,7 +2005,7 @@ class TestExecuteHttp496BankLock:
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-        action = DepositAllAction(bank_location=(4, 0), game_data=GameData())
+        action = DepositAllAction(bank_location=(4, 0), game_data=served_game_data())
         char = make_char_schema()
         empty_events = MagicMock()
         empty_events.data = []
@@ -2234,7 +2197,7 @@ class TestBuildGoalsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {"chicken": [(1, 0)]}
         gd._monster_level = {"chicken": 1}
         gd._resource_locations = {}
@@ -2310,7 +2273,7 @@ class TestBuildActionsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {}
         gd._resource_locations = {}
         gd._workshop_locations = {}
@@ -2352,7 +2315,7 @@ class TestBuildActionsExtended:
         player = GamePlayer(character="hero")
         player._offline_timing = committed_timing()
         player._learned_drops = LearnedDrops.empty()
-        gd = GameData()
+        gd = served_game_data()
         gd._monster_locations = {}
         gd._resource_locations = {}
         gd._workshop_locations = {}
@@ -2405,58 +2368,6 @@ class TestComputeCyclesToSatisfy:
         assert player._compute_cycles_to_satisfy("ReachCharLevel(5)", current_cycle=9) is None
 
 
-class TestPathTraceSnapshot:
-    def test_includes_plan_fields_when_plan_present(self):
-        """_path_trace_snapshot merges plan fields when a path plan exists (1042-1046)."""
-        from artifactsmmo_cli.ai.learning.projections import PathPlan, PathSegment
-
-        player = GamePlayer(character="hero")
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = make_game_data_mock()
-        player.state = make_state(level=4)
-        player._last_path_plan = PathPlan(
-            target_level=10,
-            total_cycles=42.5,
-            segments=[PathSegment(
-                from_level=4, to_level=10, monster_code="cow",
-                estimated_cycles=42.5, xp_per_cycle=10.0, cycles_per_kill=1.5,
-            )],
-        )
-        snap = player._path_trace_snapshot()
-        assert snap["projected_cycles_to_max"] == 42.5
-        assert snap["path_next_action"] == "cow"
-        assert snap["path_blocked"] is False
-
-    def test_infinite_plan_reports_inf(self):
-        """An unreachable (inf) plan reports the string 'inf'."""
-        from artifactsmmo_cli.ai.learning.projections import PathPlan
-
-        player = GamePlayer(character="hero")
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-
-        player._offline_timing = committed_timing()
-
-        player._learned_drops = LearnedDrops.empty()
-        player.game_data = make_game_data_mock()
-        player.state = make_state(level=4)
-        player._last_path_plan = PathPlan(
-            target_level=10, total_cycles=float("inf"), segments=[], blocked=True,
-        )
-        snap = player._path_trace_snapshot()
-        assert snap["projected_cycles_to_max"] == "inf"
-        assert snap["path_blocked"] is True
-
-
 class TestNotifyObserverCooldown:
     def test_cooldown_remaining_computed_from_state(self):
         """_notify_observer computes cooldown_remaining from state.cooldown_expires (line 987)."""
@@ -2492,6 +2403,48 @@ class TestNotifyObserverCooldown:
         snap = captured[0]
         assert snap.plan_tree != ()
         assert snap.plan_tree[0].label == "nonexistent_item"
+
+
+class TestNotifyObserverGearObjective:
+    """The snapshot carries the cycle's gear objective as the player's
+    per-cycle log line (m*, first missing piece, missing count), the text the
+    TUI status pane shows."""
+
+    def _player(self, captured):
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        return player
+
+    def test_snapshot_carries_the_gear_objective_line(self):
+        captured = []
+        player = self._player(captured)
+        objective = GearObjective(
+            monster="wolf", loadout={"weapon": "iron_sword"}, rate=Fraction(1, 4),
+            missing=(GearPiece("weapon", "iron_sword", 1, Fraction(3, 40), Fraction(450),
+                               SourceKind.CRAFT),))
+        player._last_ctx = replace(NO_PROFILE_CONTEXT, gear_objective=objective)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective == (
+            "Gear objective: target wolf; first missing iron_sword (weapon); 1 missing")
+        assert captured[0].gear_objective == ctx_mod.gear_objective_line(objective)
+
+    def test_a_decided_cycle_without_an_objective_says_so(self):
+        captured = []
+        player = self._player(captured)
+        player._last_ctx = replace(NO_PROFILE_CONTEXT, bank_accessible=True)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective == "Gear objective: none (no loadout pays XP)"
+
+    def test_no_decision_yet_carries_no_line(self):
+        """Before the first decision nothing was computed, so the snapshot
+        claims no objective either way."""
+        captured = []
+        player = self._player(captured)
+        player._notify_observer("FightMonster", "FightAction(wolf)", "ok", [])
+        assert captured[0].gear_objective is None
 
 
 @dataclass(frozen=True)
@@ -2590,7 +2543,7 @@ class _CapturingCraft(CraftAction):
 
 
 def _batch_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable",
                                     crafting_skill="cooking", crafting_level=1),

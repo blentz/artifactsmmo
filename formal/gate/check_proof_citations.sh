@@ -45,14 +45,11 @@
 #
 # A citation is a Lean identifier, so the arbiter is what Lean itself would
 # accept — the `namespace` a declaration is written under, NOT the path of the
-# file it lives in. Those two differ in this tree by design: the summation
-# argument for `interleaveDue_reaches` needs mathlib, mathlib is quarantined to
-# the liveness tier, so the theorem is written under `namespace
-# Formal.ProgressionTree` inside `formal/Formal/Liveness/InterleaveNoStarvation
-# .lean`. `Formal.ProgressionTree.interleaveDue_reaches` is the name that
-# resolves; the path-derived `Formal.Liveness.InterleaveNoStarvation
-# .interleaveDue_reaches` is not a name at all and now fails. Paths remain
-# citable through shape 2, which is what shape 2 is for.
+# file it lives in. The two can differ: a theorem that needs mathlib is
+# quarantined to the liveness tier (`formal/Formal/Liveness/`) yet may be
+# written under the namespace of the module it is about, and then only the
+# namespaced name resolves; the path-derived name is not a name at all and
+# fails. Paths remain citable through shape 2, which is what shape 2 is for.
 #
 # SCOPE: src/ (production) and formal/diff/ (the oracle harnesses, which exist
 # precisely to bind Python to Lean). NOT tests/ — a stale citation there

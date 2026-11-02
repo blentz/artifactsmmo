@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -323,29 +323,33 @@ class TestRecycleAction:
 
 class TestNpcBuyAction:
     def test_repr(self):
-        assert repr(NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=3)) == \
+        assert repr(NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=3, now=cycle_now())) == \
             "NpcBuy(cooked_chicken×3@cook)"
 
     def test_not_applicable_without_npc_location(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=None)
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=None,
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         state = make_state(gold=100)
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_when_npc_does_not_sell_item(self):
-        action = NpcBuyAction(npc_code="cook", item_code="mystery_item", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="mystery_item", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         state = make_state(gold=100)
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_when_insufficient_gold(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 50}})
         state = make_state(gold=10)
         assert action.is_applicable(state, gd) is False
 
     def test_applicable_when_enough_gold(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         state = make_state(gold=10_000)
         assert action.is_applicable(state, gd) is True
@@ -356,7 +360,8 @@ class TestNpcBuyAction:
         price term left this edge's cost an expensive buy merely ranked badly;
         now it competes on travel time alone, so this refusal is the only thing
         standing between the objective and an emptied purse."""
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         assert action.is_applicable(make_state(gold=10_000), gd) is True
         # Covers the price of 10 outright, and leaves 95 — under the floor.
@@ -367,13 +372,15 @@ class TestNpcBuyAction:
         pocket that is refused alone is admitted once the bank is known — this
         is the reading whose absence refused a 20,000 upgrade to a character
         holding 75,000 across pocket and bank."""
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         assert action.is_applicable(make_state(gold=105), gd) is False
         assert action.is_applicable(make_state(gold=105, bank_gold=5_000), gd) is True
 
     def test_apply_deducts_gold_and_adds_item(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=2, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=2, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 10}})
         state = make_state(gold=100, inventory={})
         new_state = action.apply(state, gd)
@@ -383,7 +390,8 @@ class TestNpcBuyAction:
     def test_item_currency_applicable_with_enough_currency_ignores_gold(self):
         """Task #12: a rune sold for sandwhisper_coin is gated on the COIN stack,
         not gold — applicable at 0 gold when the coins are on hand."""
-        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
         gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
         state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=200)
@@ -392,7 +400,8 @@ class TestNpcBuyAction:
     def test_item_currency_not_applicable_without_enough_currency(self):
         """Rich in gold, poor in the pay currency → not applicable (the pre-#12
         bug would have wrongly accepted it on the gold balance)."""
-        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
         gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
         state = make_state(gold=1_000_000, inventory={"sandwhisper_coin": 50}, inventory_max=200)
@@ -401,7 +410,8 @@ class TestNpcBuyAction:
     def test_item_currency_not_applicable_when_no_free_slot(self):
         """Item-currency purchase still needs a free slot for the bought item:
         coins on hand but a full bag must refuse."""
-        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
         gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
         state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=100)  # free=0
@@ -410,7 +420,8 @@ class TestNpcBuyAction:
     def test_apply_item_currency_consumes_currency_not_gold(self):
         """apply draws the currency stack down by price*quantity and leaves gold
         untouched (the server deducts the currency; the projection must match)."""
-        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
         gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
         state = make_state(gold=500, inventory={"sandwhisper_coin": 150}, inventory_max=200)
@@ -422,7 +433,8 @@ class TestNpcBuyAction:
     def test_cost_item_currency_has_no_gold_term(self):
         """An item-currency purchase spends no gold, so cost omits the gold term
         (a gold purchase at price 100 would add 100/10 = 10)."""
-        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(0, 0))
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(0, 0),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
         gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
         state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=200)
@@ -433,7 +445,8 @@ class TestNpcBuyAction:
         check, so apply minted past inventory_max. Post-fix the slot floor
         catches the verified counterexample (inventory_used=9, inventory_max=10,
         quantity=5 — would overflow by 4)."""
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
         # used=9 (filler), max=10 → only 1 free slot, quantity=5 → must refuse.
         state = make_state(gold=1000, inventory={"filler": 9}, inventory_max=10)
@@ -441,7 +454,8 @@ class TestNpcBuyAction:
 
     def test_applicable_at_quantity_equals_free_boundary(self):
         """Boundary: quantity == inventory_free is accepted (post-fix)."""
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
         state = make_state(gold=1000, inventory={"filler": 5}, inventory_max=10)
         assert action.is_applicable(state, gd) is True
@@ -451,7 +465,8 @@ class TestNpcBuyAction:
         mutating. If a caller bypasses is_applicable (planner bug, manual
         invocation) the action crashes loudly rather than silently overflowing
         the inventory cap. Phase-3 OptimizeLoadout-shape."""
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=5, npc_location=(2, 1),
+                              now=cycle_now())
         gd = make_gd(npc_stock={"cook": {"cooked_chicken": 1}})
         state = make_state(gold=1000, inventory={"filler": 9}, inventory_max=10)
         # is_applicable would return False (slot floor), but if a caller skips
@@ -461,7 +476,7 @@ class TestNpcBuyAction:
 
     def test_cost_is_distance_only_and_ignores_the_purchase_price(self):
         action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1,
-                              npc_location=(4, 0))
+                              npc_location=(4, 0), now=cycle_now())
         state = make_state(x=0, y=0)
         cheap = action.cost(state, make_gd(npc_stock={"cook": {"cooked_chicken": 100}}))
         # 2 + 4 tiles x 5 s, in SECONDS — the buy takes the same time at any price.
@@ -471,7 +486,8 @@ class TestNpcBuyAction:
         ) == pytest.approx(cheap)
 
     def test_execute_moves_and_calls_api(self):
-        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1))
+        action = NpcBuyAction(npc_code="cook", item_code="cooked_chicken", quantity=1, npc_location=(2, 1),
+                              now=cycle_now())
         char = make_char_schema()
         state = make_state(x=0, y=0, gold=100)
         client = MagicMock()

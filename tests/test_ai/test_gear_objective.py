@@ -23,10 +23,15 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import _ordered_slots
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.fight_walk import wear
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_objective import achievable, fighter_owning, gear_objective
+from artifactsmmo_cli.ai.gear_objective import (
+    achievable,
+    fighter_owning,
+    gear_objective,
+    gear_objective_for,
+)
 from artifactsmmo_cli.ai.gear_objective_core import objective_held, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
-from artifactsmmo_cli.ai.inventory_keep import carried_keep
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep, carried_keep
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -164,7 +169,7 @@ def test_a_zero_gain_piece_is_not_missing(gd: GameData, robby: GearObjective) ->
     assert loadout == robby.loadout
     emptied = _without(state, fighter, "artifact1_slot", gd)
     assert mod._rate(emptied, gd, robby.monster, food_menu(state, gd, CTX),
-                     _loop(state, gd)) == robby.rate
+                     _loop(state, gd), mod.xp_rate) == robby.rate
     assert all(piece.code != "perfect_pearl" for piece in robby.missing)
     assert {piece.slot for piece in robby.missing}.isdisjoint(
         {"artifact1_slot", "artifact2_slot", "artifact3_slot"})
@@ -213,7 +218,7 @@ def test_gain_is_measured_against_the_target_not_a_bare_fighter(
         assert objective.loadout[piece.slot] == piece.code
         without = _without(state, fighter, piece.slot, gd)
         assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
-                                                        food, _loop(state, gd)), piece
+                                                        food, _loop(state, gd), mod.xp_rate), piece
     assert any(piece.gain > 0 for piece in objective.missing)
 
 
@@ -249,7 +254,8 @@ def test_a_bag_has_a_gain() -> None:
     without = _without(state, fighter, "bag_slot", gd)
     assert without.inventory_max == state.inventory_max
     assert piece.gain == objective.rate - mod._rate(without, gd, objective.monster,
-                                                    food_menu(state, gd, CTX), _loop(state, gd))
+                                                    food_menu(state, gd, CTX), _loop(state, gd),
+                                                    mod.xp_rate)
 
 
 def test_the_keep_s_carry_is_room_no_drop_has(monkeypatch: pytest.MonkeyPatch,
@@ -257,7 +263,7 @@ def test_the_keep_s_carry_is_room_no_drop_has(monkeypatch: pytest.MonkeyPatch,
     """The bag's room for drops is its cap less what the keep holds in it
     (`carried_keep`): a keep that fills any bag leaves no loop that drops
     something running, so no monster pays and there is no objective."""
-    monkeypatch.setattr(mod, "carried_keep", lambda *_args: 10 ** 6)
+    monkeypatch.setattr(mod, "carried_keep", lambda *_args: CarriedKeep(10 ** 6, 0))
     assert gear_objective(_novice(gd), gd, CTX, None) is None
 
 
@@ -287,10 +293,11 @@ def test_a_fresh_character_wants_its_first_weapon(gd: GameData) -> None:
     unarmed = replace(unarmed, inventory={
         item: n for item, n in unarmed.inventory.items()
         if (stats := gd.item_stats(item)) is not None and stats.type_ != "weapon"})
-    assert mod._rate(unarmed, gd, objective.monster, food, _loop(state, gd)) == 0
+    assert mod._rate(unarmed, gd, objective.monster, food, _loop(state, gd), mod.xp_rate) == 0
     assert dagger[0].gain == objective.rate > 0
     carried = mod._wearing(fighter, {"weapon_slot": None}, gd)
-    assert mod._rate(carried, gd, objective.monster, food, _loop(state, gd)) == objective.rate
+    assert mod._rate(carried, gd, objective.monster, food, _loop(state, gd),
+                     mod.xp_rate) == objective.rate
     assert not objective.held
 
 
@@ -455,7 +462,7 @@ def test_m_star_is_the_max_rate_monster(gd: GameData, novice: GearObjective) -> 
     state = _novice(gd)
     achieved = frozenset().union(*achievable(state, gd, CTX))
     food = food_menu(state, gd, CTX)
-    rates = {code: mod._rate(fighter, gd, code, food, _loop(state, gd))
+    rates = {code: mod._rate(fighter, gd, code, food, _loop(state, gd), mod.xp_rate)
              for code, (fighter, _) in mod._targets(state, gd, achieved).items()}
     assert len(set(rates.values())) > 1
     assert novice.rate == rates[novice.monster] == max(rates.values())
@@ -478,7 +485,7 @@ def test_the_rate_is_modelled_not_measured(tmp_path: Path, gd: GameData,
     store = LearningStore(db_path=str(tmp_path / "gear.db"), character="novice")
     store.start_session()
     _record_grind(store, novice.monster, every=20, rows=100)
-    assert store.fight_upkeep(novice.monster) is not None
+    assert len(store.recent_goal_cycles(grind_xp_repr(novice.monster), 100)) == 100
     objective = _objective(_novice(gd), gd, store)
     store.close()
     assert (objective.monster, objective.rate) == (novice.monster, novice.rate)
@@ -488,6 +495,22 @@ def test_none_when_no_monster_pays_even_on_the_achievable_fighter(gd: GameData) 
     """Level 41 with nothing worn and the stats of nothing: no achievable
     loadout beats any monster that pays XP at 41."""
     state = _novice(gd, equipment={}, level=41)
+    assert gear_objective(state, gd, CTX, None) is None
+
+
+def test_none_when_every_winning_candidate_rates_zero(gd: GameData) -> None:
+    """The `R = 0` branch: candidates WIN on their `L*` fighters, but no loop runs
+    (a bag with no room for a kill's drops, `runnable` false), so every rate is 0
+    and there is no objective — no root, no grind target. Production's live path
+    to it is a bag the carried keep fills (a named residual of plan C Task 4,
+    ruling C4-R2); a zero-capacity bag is the same branch at its smallest."""
+    state = replace(scenario_state(SCENARIOS["l10_bag_pursuit"], gd), inventory_max=0)
+    depth, food, loop = mod._inputs(state, gd, CTX, None)
+    targets = mod._targets(state, gd, frozenset(depth))
+    winning = [code for code in targets if drop_fight_winnable(targets[code][0], gd, code)]
+    assert winning, "the branch needs winning candidates, or it is the no-candidate one"
+    rated = mod._rated(targets, gd, food, loop)
+    assert rated and all(rate == 0 for _, rate in rated)
     assert gear_objective(state, gd, CTX, None) is None
 
 
@@ -687,7 +710,7 @@ def test_a_no_potion_loop_that_never_runs_raises(monkeypatch: pytest.MonkeyPatch
     a None from it is a broken invariant, never a rate."""
     monkeypatch.setattr(mod, "loop_rate", lambda *_args: None)
     with pytest.raises(RuntimeError, match="the no-potion loop against chicken did not run"):
-        mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd))
+        mod._rate(_novice(gd), gd, "chicken", (), _loop(_novice(gd), gd), mod.xp_rate)
 
 
 def _carrying_its_target(name: str, gd: GameData) -> tuple[WorldState, GearObjective]:
@@ -742,7 +765,7 @@ def test_a_bag_cap_below_its_worn_bag_raises(gd: GameData) -> None:
         gear_objective(state, gd, CTX, None)
 
 
-_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal_rune"),
+_L48_MISSING = [("rune_slot", "lifesteal_rune"), ("shield_slot", "goblin_guard_shield"),
                 ("ring2_slot", "mithril_ring")]
 
 
@@ -761,16 +784,16 @@ _L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal
         ("rune_slot", "lifesteal_rune"), ("ring1_slot", "gold_ring"),
         ("ring2_slot", "gold_ring")]),
     ("l40_band_entry", "cultist_acolyte", [
-        ("shield_slot", "slime_shield"), ("leg_armor_slot", "royal_skeleton_pants"),
-        ("helmet_slot", "royal_skeleton_helmet"), ("body_armor_slot", "royal_skeleton_armor"),
+        ("body_armor_slot", "royal_skeleton_armor"), ("leg_armor_slot", "royal_skeleton_pants"),
+        ("helmet_slot", "royal_skeleton_helmet"), ("shield_slot", "slime_shield"),
         ("rune_slot", "lifesteal_rune"), ("ring2_slot", "malefic_ring")]),
     ("l48_capstone_approach", "hellhound", _L48_MISSING),
     ("l48_band_adequate", "hellhound", _L48_MISSING),
     ("l48_raid_active", "hellhound", _L48_MISSING),
     ("l10_gearcrafting_gap_combat_blocked", "red_slime", [
         ("weapon_slot", "greater_wooden_staff"), ("amulet_slot", "air_and_water_amulet"),
-        ("body_armor_slot", "leather_armor"), ("boots_slot", "leather_boots"),
-        ("leg_armor_slot", "leather_legs_armor"), ("shield_slot", "iron_shield"),
+        ("shield_slot", "iron_shield"), ("body_armor_slot", "leather_armor"),
+        ("boots_slot", "leather_boots"), ("leg_armor_slot", "leather_legs_armor"),
         ("helmet_slot", "adventurer_helmet"), ("ring1_slot", "forest_ring"),
         ("ring2_slot", "forest_ring")])])
 def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str, monster: str,
@@ -798,7 +821,23 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     prospecting at a learned slope whose prior is 0, and a drop farm exactly,
     rounded once a route): the level-40 sheet's 160 prospecting no longer
     discounts its drops by `1000/1160`, so its pieces are dearer (shield 291 ->
-    319, pants 445 -> 481), and the shield still orders first."""
+    319, pants 445 -> 481), and the shield still orders first.
+
+    RE-DERIVED plan C Task 7 (a derived sheet starts at the base sheet's
+    initiative 100): the level-40 sheet, at 250 now, moves first against
+    `cultist_acolyte` (200), and the gains re-rank within layer 0: the armor
+    (0.070 -> 0.144 per 500) leads and the shield (0.145 -> 0.030 per 323)
+    falls to fourth. The level-10 sheet's `iron_shield` joins layer 0 (was 1):
+    its `wool` drops off `sheep` (initiative 50), which the held copper fighter
+    beat at 0.58 from initiative 0 and beats at 0.92 from 100.
+
+    RE-DERIVED ruling "seconds inside" (2026-10-31): every route is priced at
+    its actions' measured seconds. On origin/main the level-40 pants (gain
+    0.218 for 357) moved ahead of the shield (0.145 for 264); merged with plan
+    C Task 7 the level-40 order stays Task 7's above. At level 48 the rune's
+    20000 gold, earned at the fastest gold fight's seconds, prices it at 1224
+    (gain 0.056) against the shield's 2473 drop farm (gain 0.058), so the
+    rune heads the pieces."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing
@@ -855,8 +894,8 @@ def test_a_worn_boost_projects_to_the_sheet_totals(gd: GameData, novice: GearObj
         fighter, gd, novice.monster)
     loop = _loop(fighter, gd)
     food = food_menu(fighter, gd, CTX)
-    bare = mod._rate(fighter, gd, novice.monster, food, loop)
-    assert mod._rate(worn, gd, novice.monster, food, loop) == bare
+    bare = mod._rate(fighter, gd, novice.monster, food, loop, mod.xp_rate)
+    assert mod._rate(worn, gd, novice.monster, food, loop, mod.xp_rate) == bare
     carried = replace(fighter, inventory={**fighter.inventory, "earth_boost_potion": 30})
     assert _boost_rate(worn, gd, novice.monster, "earth_boost_potion") == _boost_rate(
         carried, gd, novice.monster, "earth_boost_potion") > bare
@@ -878,3 +917,15 @@ def test_swapping_a_worn_boost_moves_only_its_delta(gd: GameData, novice: GearOb
         assert fire.resistance == earth.resistance and fire.attack == earth.attack
     assert (fire.dmg, fire.critical_strike, fire.initiative, fire.max_hp) == (
         earth.dmg, earth.critical_strike, earth.initiative, earth.max_hp)
+
+
+@pytest.mark.parametrize("name", ["robby", "novice"])
+def test_the_pinned_objective_of_m_star_is_the_objective(
+        gd: GameData, name: str, request: pytest.FixtureRequest) -> None:
+    """`gear_objective_for` is `gear_objective` with `m` pinned (plan C Task
+    2): pinned to the argmax's own `m*`, it gives the same loadout, rate and
+    missing pieces, each picked from the fighter wearing nothing (Robby's
+    eleven worn pieces would bias a pick from the dressed character)."""
+    objective = request.getfixturevalue(name)
+    state = _robby() if name == "robby" else _novice(gd)
+    assert gear_objective_for(objective.monster, state, gd, CTX, None, mod.xp_rate) == objective

@@ -1,7 +1,7 @@
 -- @concept: crafting, planner @property: reachability, totality
 /-
 Formal model of the `strategy_traversal` PURE CORE from
-`src/artifactsmmo_cli/ai/tiers/strategy.py`:
+`src/artifactsmmo_cli/ai/progression/strategy.py`:
 
 * `is_reachable`        (strategy.py:125) — cycle-safe path-recursive reachability;
 * `unmet_closure_size`  (strategy.py:91)  — count of unmet nodes in the prereq closure;

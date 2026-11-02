@@ -27,7 +27,7 @@ def test_bank_gold_travels_on_the_snapshot():
 
 def test_bank_gold_defaults_to_none_for_snapshots_that_predate_it():
     """Unknown, not zero. A snapshot serialized before this field existed must
-    still validate, the rule `path_blocked` and the region field already rely on."""
+    still validate, the rule the region field already relies on."""
     assert _snap().bank_gold is None
 
 

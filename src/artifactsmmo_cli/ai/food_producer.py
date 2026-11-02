@@ -7,7 +7,7 @@ When no live character holds the owning role, anyone makes it — the fleet must
 not starve while the role is unheld — and a food no role crafts (an apple
 gathered off a tree) is anyone's."""
 
-# Module import, attributes read at call time: `role_catalog` -> `tiers` ->
+# Module import, attributes read at call time: `role_catalog` -> `progression` ->
 # `decisions.root` -> this module is an import cycle, and a `from ... import
 # ROLE_CATALOG` here would read the partially initialised module.
 from artifactsmmo_cli.ai import role_catalog as _role_catalog

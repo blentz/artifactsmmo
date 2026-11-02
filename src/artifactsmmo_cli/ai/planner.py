@@ -63,7 +63,7 @@ lever on this residual is an acquisition-aware admissible heuristic, which
 carries a proof obligation against `formal/Formal/PlannerAdmissibility.lean`.
 
 What the profile DID indict, identically in both configurations: `LevelSkill.
-is_applicable` -> `tiers/skill_grind_target.build_selectable_grind_candidates`.
+is_applicable` -> `progression/skill_grind_target.build_selectable_grind_candidates`.
 Cold, `is_applicable` is 48.2s of a 67.3s search (72%), of which the producer is
 47.0s (70%); learned, the producer alone is 219.3s of 310.4s (71%). It priced
 every in-skill craftable when the selection core can only ever pick the in-level

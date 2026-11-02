@@ -12,8 +12,8 @@ multiset augmented with synthetic `skill:<name>` tokens (one per craft/gather
 gate in the closure), a `char_xp` token per DROP leaf, and the TRANSITIVELY
 expanded buy-currency cost. These three tests pin that enrichment against an
 independent recompute and prove it fires on the real bundle graph — none of
-them mentions synergy. `tiers/synergy_core` is untouched and still live at
-`tiers/taskmaster_choice` and `tiers/means_worth`.
+them mentions synergy. `progression/synergy_core` is untouched and still live at
+`progression/taskmaster_choice` and `tiers/means_worth`.
 """
 
 import json

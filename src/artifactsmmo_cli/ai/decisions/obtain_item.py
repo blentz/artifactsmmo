@@ -4,7 +4,7 @@ Transcribed verbatim from the `if isinstance(step, ObtainItem):` branch of
 `strategy_driver.objective_step_goal` (originally lines 882-1006). Each class
 below is one branch of that if-pile, chained in the order the if-pile
 evaluated them -- EXCEPT for one deliberate reordering (PF-2, see
-`.superpowers/sdd/PLAN_goal_decision_graph/progress.md`): `CanICraftCurrentTier`
+`.superpowers/sdd/PLAN_goal_decision_graph/progress.md`): `CanICraftThisAtAll`
 (the crafting-skill gate, originally line 972) now runs BEFORE
 `DoesTheRecipeNeedAMonsterDrop` (originally line 924). Measured against the
 committed bundle: `_recipe_has_combat_drop_input` returns `True` for every
@@ -48,8 +48,8 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     ge_fill_priced,
 )
 from artifactsmmo_cli.ai.obtain_sources import has_non_craft_source
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -184,7 +184,7 @@ def craft_skill_gate(stats: ItemStats, state: WorldState) -> ReachSkillGoal | No
     else None.
 
     THE ONE PRODUCER of "this craft is skill-blocked, raise the skill". Both
-    `CanICraftCurrentTier` (the step is an intermediate on a chain) and
+    `CanICraftThisAtAll` (the step is an intermediate on a chain) and
     `IsTheStepTheEquippableItself` (the step IS the gear) ask it, so the two
     paths cannot answer differently — they did, and the asymmetry cost a fleet
     39.6 hours (see `IsTheStepTheEquippableItself`).
@@ -217,7 +217,7 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
             # THE SKILL GATE, ASKED ON THIS PATH TOO. This node runs BEFORE
-            # `IsThisAnIntermediateOnAChain`, and `CanICraftCurrentTier` — the
+            # `IsThisAnIntermediateOnAChain`, and `CanICraftThisAtAll` — the
             # only other place the gate is asked — sits behind that node. So an
             # equippable step went straight to `_equippable_goal` and gathered
             # materials for a craft that could not run, while the intermediate
@@ -279,7 +279,14 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
             # this cycle, and `_step_servable` demotes the root on exactly
             # that signal. Temporary by construction -- `ctx.turn_in` clears
             # with the claim and the medal is ordinary gear again.
-            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:
+            #
+            # Only a READY turn-in reserves it (review I1): a not-ready one
+            # names the shortfall's farmer (`TurnIn.ready`), asks no buy and
+            # no surrender, and may be renewed for as long as the farm runs,
+            # so reserving on it would keep every sibling from wearing a
+            # medal in an empty artifact slot indefinitely.
+            if (ctx.turn_in is not None and ctx.turn_in.ready
+                    and ctx.turn_in.currency == self.step.code):
                 return None
             dest_slot = self.step.slot if self.step.slot is not None else slots[0]
             return _equippable_goal(self.step.code, dest_slot, state, game_data, ctx)
@@ -308,13 +315,13 @@ class IsThisAnIntermediateOnAChain(Decision[Goal]):
             if root_stats is not None:
                 root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_)
                 if root_slots:
-                    return CanICraftCurrentTier(
+                    return CanICraftThisAtAll(
                         self.step, self.root, root_stats, root_slots)
         return GatherMaterialsGoal(target_item=self.step.code,
-                                   needed={self.step.code: self.step.quantity})
+                                   needed={self.step.code: self.step.quantity}, now=ctx.now)
 
 
-class CanICraftCurrentTier(Decision[Goal]):
+class CanICraftThisAtAll(Decision[Goal]):
     """strategy_driver.py:972 (originally 933-1002). HOISTED per PF-2 to run
     BEFORE `DoesTheRecipeNeedAMonsterDrop` (originally line 924) -- see the
     module docstring for the measurement that forced this. "I cannot craft
@@ -322,7 +329,7 @@ class CanICraftCurrentTier(Decision[Goal]):
     chunking a chain whose final craft cannot run is work that cannot pay
     off."""
 
-    name = "CanICraftCurrentTier"
+    name = "CanICraftThisAtAll"
 
     def __init__(self, step: ObtainItem, root: ObtainItem,
                 root_stats: ItemStats, root_slots: list[str]) -> None:
@@ -366,9 +373,9 @@ class CanICraftCurrentTier(Decision[Goal]):
 
 class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
     """strategy_driver.py:924 (originally 914-932). Reached only once
-    `CanICraftCurrentTier` has confirmed the crafting skill is adequate
+    `CanICraftThisAtAll` has confirmed the crafting skill is adequate
     (PF-2 hoist). Absorbs the depth-budget chunking that previously lived in
-    the second half of `CanICraftCurrentTier` (originally 977-1002), since
+    the second half of `CanICraftThisAtAll` (originally 977-1002), since
     that logic only applies once a skill-adequate craft is in reach."""
 
     name = "DoesTheRecipeNeedAMonsterDrop"
@@ -394,7 +401,7 @@ class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
         # hunt — and once every input is in hand the final craft is shallow.
         if _recipe_has_combat_drop_input(self.root.code, game_data):
             return GatherMaterialsGoal(target_item=self.step.code,
-                                       needed={self.step.code: self.step.quantity})
+                                       needed={self.step.code: self.step.quantity}, now=ctx.now)
         dest_slot = self.root.slot if self.root.slot is not None else self.root_slots[0]
         owned: dict[str, int] = dict(state.inventory)
         for code, qty in (state.bank_items or {}).items():
@@ -468,7 +475,7 @@ class DoesTheChainFitTheDepthBudget(Decision[Goal]):
         if _gather_step_target_is_root(self.tgt_code, self.root.code):
             return self.upgrade
         return GatherMaterialsGoal(target_item=self.tgt_code,
-                                   needed={self.tgt_code: self.tgt_qty})
+                                   needed={self.tgt_code: self.tgt_qty}, now=ctx.now)
 
 
 def obtain_item_decision(step: ObtainItem, root: MetaGoal | None) -> Decision[Goal]:

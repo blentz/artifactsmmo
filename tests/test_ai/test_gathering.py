@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def _gd_copper_dagger() -> GameData:
@@ -64,7 +64,7 @@ class TestIntermediateCraftSizedToDemand:
             bank_items={},
             skills={"mining": 5, "weaponcrafting": 5},
         )
-        goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
+        goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1}, now=cycle_now())
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
                          learned_drops=LearnedDrops.empty()),
@@ -144,7 +144,7 @@ class TestFullBagStillPlansDepositThenGather:
         gd = self._gd()
         state = self._full_bag_state()
         assert state.inventory_free == 0, "fixture must actually be a full bag"
-        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions(self._pool(gd), state, gd)
 
@@ -164,7 +164,7 @@ class TestFullBagStillPlansDepositThenGather:
         state = make_state(inventory={"copper_ore": 10}, inventory_max=100,
                            inventory_slots_max=20, bank_items={},
                            skills={"mining": 5, "woodcutting": 5})
-        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+        goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions(self._pool(gd), state, gd)
 
@@ -215,7 +215,7 @@ class TestSecondaryDropAdmission:
         salmon_spot (fishing 40 > 30) is skill-closed."""
         gd = self._gd_pearls()
         state = make_state(skills={"fishing": 30})
-        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1})
+        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1}, now=cycle_now())
         relevant = goal.relevant_actions(self._actions(), state, gd)
         gathers = [(a.resource_code, a.drop_item_override)
                    for a in relevant if isinstance(a, GatherAction)]
@@ -227,7 +227,7 @@ class TestSecondaryDropAdmission:
         select_gather_source core, now judged on the EFFECTIVE drop)."""
         gd = self._gd_pearls()
         state = make_state(skills={"fishing": 40})
-        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1})
+        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1}, now=cycle_now())
         relevant = goal.relevant_actions(self._actions(), state, gd)
         gathers = [(a.resource_code, a.drop_item_override)
                    for a in relevant if isinstance(a, GatherAction)]
@@ -281,7 +281,7 @@ class TestRecycleAsAcquisition:
         recipe IS ash_plank."""
         gd = self._gd_ash_plank()
         state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
-        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5}, now=cycle_now())
         pool = [RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1))]
         kept = goal.relevant_actions(pool, state, gd)
         assert [a.code for a in kept if isinstance(a, RecycleAction)] == ["fishing_net"]
@@ -298,12 +298,12 @@ class TestRecycleAsAcquisition:
         gd = self._gd_ash_plank()
         state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
         pool = [RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1))]
-        plain = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        plain = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5}, now=cycle_now())
         assert [a.code for a in plain.relevant_actions(pool, state, gd)
                 if isinstance(a, RecycleAction)] == ["fishing_net"]
         guarded = GatherMaterialsGoal(
             target_item="ash_plank", needed={"ash_plank": 5},
-            exclude_recycle=frozenset({"fishing_net"}))
+            exclude_recycle=frozenset({"fishing_net"}), now=cycle_now())
         assert [a for a in guarded.relevant_actions(pool, state, gd)
                 if isinstance(a, RecycleAction)] == []
 
@@ -316,7 +316,7 @@ class TestRecycleAsAcquisition:
         (that source can never be fed)."""
         gd = self._gd_ash_plank()
         state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
-        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5}, now=cycle_now())
         pool = [
             WithdrawItemAction(code="fishing_net", quantity=1),
             RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1)),
@@ -329,7 +329,7 @@ class TestRecycleAsAcquisition:
         closure."""
         gd = self._gd_ash_plank()
         state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
-        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5}, now=cycle_now())
         pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
         assert [a for a in goal.relevant_actions(pool, state, gd)
                 if isinstance(a, RecycleAction)] == []
@@ -353,7 +353,7 @@ class TestRecycleAsAcquisition:
         # it: already licence-filtered, with bag_floor stamped onto any
         # surviving RecycleAction.
         pool = license_destructive_actions(raw_pool, state, gd, ctx)
-        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5}, now=cycle_now())
         plan = (decompose(goal, state, gd, list(goal.relevant_actions(pool, state, gd)), NO_DROPS_CONTEXT) or [])
         assert plan, "planner found no plan"
         assert any(isinstance(a, RecycleAction) for a in plan)
@@ -393,6 +393,6 @@ def test_gather_materials_heuristic_zero_for_finished_target_form():
     unmet) and `heuristic` returns the positive `LevelSkill.cost` here too --
     over-estimating h and violating admissibility (BUG B finding 1)."""
     gd = _forged_plate_gd()  # forged_plate: craft-only, gearcrafting 20
-    goal = GatherMaterialsGoal(target_item="forged_plate", needed={"iron_ore": 6})
+    goal = GatherMaterialsGoal(target_item="forged_plate", needed={"iron_ore": 6}, now=cycle_now())
     under = make_state(skills={"gearcrafting": 12}, inventory={"iron_ore": 5})
     assert goal.heuristic(under, gd) == 0.0

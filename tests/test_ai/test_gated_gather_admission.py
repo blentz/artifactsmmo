@@ -7,8 +7,9 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.fixtures import cycle_now, served_game_data
 
 
 def _gd_gated_gather() -> GameData:
@@ -16,7 +17,7 @@ def _gd_gated_gather() -> GameData:
     the character is under (deep_ore ← deep_rocks, mining 10). Mirrors iron_ore
     ← iron_rocks in the l12_taskgated_bag scenario: the sole ore source is
     skill-locked, so the only route is the mining grind, then Gather."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "deep_ore": ItemStats(code="deep_ore", level=10, type_="resource",
                               subtype="mining"),
@@ -50,8 +51,8 @@ def test_open_source_displaces_locked_no_forced_grind() -> None:
         ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
+    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1}, now=cycle_now())
 
     admitted = goal.relevant_actions(actions, state, gd)
     assert any(isinstance(a, GatherAction) and a.resource_code == "shallow_rocks"
@@ -69,8 +70,8 @@ def test_gather_gate_above_ceiling_stays_excluded() -> None:
         ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
+    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1}, now=cycle_now())
 
     admitted = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, GatherAction) and a.resource_code == "deep_rocks"

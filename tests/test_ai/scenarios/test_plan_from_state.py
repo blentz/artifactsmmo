@@ -9,10 +9,10 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -68,7 +68,7 @@ def test_plan_from_state_wires_the_real_selection_context() -> None:
     holds 7 fishing_net (recipe: 6 ash_plank each) — licensed surplus
     recyclable for ash_plank, so under the wired ctx
     `prerequisites(ObtainItem("ash_plank"), ...)` must be a LEAF."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "fishing_net": ItemStats(code="fishing_net", level=1, type_="amulet",
                                  crafting_skill="gearcrafting", crafting_level=1),

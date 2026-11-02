@@ -13,8 +13,11 @@ demand for it.
 * CHARACTER-LEVEL demand: a `ReachCharLevel` root above the character, or an
   `ObtainItem` root whose item needs a higher level than the character has.
 
-The roots are the chosen root and the unmet target gear and near-term targets
-— everything the objective is building toward.
+The roots are the chosen root, the missing pieces of the cycle's gear
+objective `L*` and the tools `T*` the demanded skills climb with
+(`objective_codes`), and a crafter's fleet pieces (`ctx.fleet_pieces`, spec
+2026-10-18 §2.5: they count as missing pieces of its joint objective) as the
+craft level each needs — everything the objective is building toward.
 """
 
 from collections.abc import Sequence
@@ -22,21 +25,26 @@ from collections.abc import Sequence
 from artifactsmmo_cli.ai.craft_demand import craft_demand
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_demand import gather_demand
+from artifactsmmo_cli.ai.objective_codes import objective_codes
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def demand_roots(chosen: MetaGoal | None, state: WorldState,
                  ctx: SelectionContext) -> list[MetaGoal]:
-    """The chosen root, then one `ObtainItem` per unworn target or near-term
-    target, in a stable order. NOT the fleet consumable shortfall (spec
+    """The chosen root, then one `ObtainItem` per missing `L*` piece and
+    per `T*` tool (`objective_codes`), in a stable order, then one
+    `ReachSkillLevel` per fleet piece, its craft skill at the level that gates
+    it, offered while the cycle has a gear objective (`resolve_root` offers the
+    fleet pieces' roots on the same condition, ruling C2-m3). NOT the fleet consumable shortfall (spec
     2026-10-13 §2): food demand made fishing 'useful XP', which credited the
     food's make price, which kept the food demanded."""
-    worn = {code for code in state.equipment.values() if code is not None}
     roots: list[MetaGoal] = [] if chosen is None else [chosen]
-    roots.extend(ObtainItem(code, 1)
-                 for code in sorted(ctx.target_gear | ctx.near_term_targets) if code not in worn)
+    roots.extend(ObtainItem(code, 1) for code in sorted(objective_codes(ctx)))
+    if ctx.gear_objective is not None:
+        roots.extend(ReachSkillLevel(skill=piece.skill, level=piece.level)
+                     for piece in ctx.fleet_pieces)
     return roots
 
 

@@ -1,15 +1,16 @@
 """How far out is the held task's fight? — the ONE-LEVEL PLANNING HORIZON.
 
-`combat_deficit` answers "what gear closes this fight", and `deficit_upgrade_target`
-answers it with the first item to build. Neither says what to do when the answer is
-NOTHING, and until this module the bot's answer was: fall through to the
-monster-blind value scan — the same scan that chose `iron_boots`, already worn and
-absent from all 24 items that improved the pig margin, for ten hours.
+The gear that closes the held task's fight is `L*` of the task monster
+(`gear_objective.gear_objective_for`, plan C Task 2): the best loadout of achievable
+gear for that monster, its missing pieces in pursuit order. What to do when even
+`L*` does not close it is this module's question. Until it existed the bot's answer
+was: fall through to the monster-blind value scan — the same scan that chose
+`iron_boots`, already worn and absent from all 24 items that improved the pig
+margin, for ten hours.
 
-Measured after `e6a2e37c` taught `deficit_upgrade_target` to honour `closes`, over
-every (scenario, monster) losing pair in the offline corpus: the fall-through arm is
-not a corner. It is most of the surface. So "what happens when gear cannot close it"
-had to become a decision rather than a default.
+Measured over every (scenario, monster) losing pair in the offline corpus, the
+fall-through arm is not a corner. It is most of the surface. So "what happens when
+gear cannot close it" had to become a decision rather than a default.
 
 USER (2026-08-25), stating the rule this module implements:
 
@@ -27,7 +28,9 @@ and, refining what "cancel" means when the coin to cancel with is not in the poc
 So the verdict is a HORIZON READING, not a sentence:
 
   * `HORIZON_GEAR`        — gear alone closes the fight. Build it.
-  * `HORIZON_LEVEL_UP`    — one level plus gear closes it. Take the level.
+  * `HORIZON_LEVEL_UP`    — one level plus gear closes it: `L*` one level up wins
+                            the fight `L*`'s gate reads (`drop_fight_winnable`).
+                            Take the level.
   * `HORIZON_OUT_OF_REACH`— neither. The fight is not a near-term planning target:
                             stop spending cycles on gear that cannot win it, cancel
                             the task if a coin is in the pocket, and otherwise let it
@@ -50,19 +53,18 @@ import dataclasses
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.combat import predict_win
-from artifactsmmo_cli.ai.combat_deficit import (
-    blocked_task_monster,
-    combat_deficit,
-    deficit_upgrade_target,
-    has_combat_deficit,
-)
+from artifactsmmo_cli.ai.combat_deficit import blocked_task_monster, has_combat_deficit
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import gear_closes_for, gear_fighter_for
 from artifactsmmo_cli.ai.learning.rung_state_core import projected_max_hp
-from artifactsmmo_cli.ai.per_state_memo import per_state
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 HORIZON_GEAR = "gear"
-"""Gear alone closes the held task's fight."""
+"""Gear alone closes the held task's fight: `L*` of the task monster wins it,
+and a piece of it is missing."""
 
 HORIZON_LEVEL_UP = "level_up"
 """One character level, plus the gear that level admits, closes it."""
@@ -75,16 +77,14 @@ HORIZON_OUT_OF_REACH = "out_of_reach"
 class TaskHorizon:
     """The held task's fight, read against the one-level horizon.
 
-    `gear_target` is carried ONLY as evidence for the `HORIZON_GEAR` verdict — the
-    unpriced first step of the chain that closes the fight. The walk's
-    `WhichSlotClosesTheFight` re-asks `deficit_upgrade_target` with its own
-    pricing, because WHICH item to build first is an economics question and this
-    is not: see `resolve_task_horizon`.
+    The gear to build on the `HORIZON_GEAR` verdict is not carried: it is the
+    first missing piece of `L*(monster)` (`gear_objective_for`), priced, which
+    only the task root asks (`decisions.root._task_root`); every other reader
+    asks only the verdict (ruling C2-perf).
     """
 
     monster: str
     verdict: str
-    gear_target: tuple[str, str] | None
 
 
 def next_level_state(state: WorldState) -> WorldState:
@@ -94,8 +94,8 @@ def next_level_state(state: WorldState) -> WorldState:
     is read in THREE places that decide a fight, and the projection has to move all
     three or it understates what the level buys:
 
-      1. `combat_deficit._pool` admits catalogue gear at `stats.level <= state.level`
-         — the ACQUISITION candidates widen.
+      1. `gear_objective`'s universe admits gear at `stats.level <= state.level`
+         — the ACHIEVABLE set `L*` is picked from widens.
       2. `equipment/loadout_picker` skips owned items at `state.level < stats.level`
          — gear already in the bag but level-gated becomes WEARABLE, which changes
          the fight with no acquisition at all.
@@ -108,88 +108,57 @@ def next_level_state(state: WorldState) -> WorldState:
     the two halves of a rule drift apart.
 
     `hp` is set to the grown `max_hp`: this state exists to answer "can I win this
-    fight", and rest is an action the planner has. Same framing as `combat_deficit`,
-    which rests its own state at the top of the walk.
+    fight", and rest is an action the planner has (the `L*` fighter is at max HP).
     """
     level = state.level + 1
     max_hp = projected_max_hp(state.max_hp, state.level, level)
     return dataclasses.replace(state, level=level, max_hp=max_hp, hp=max_hp)
 
 
-@per_state
-def resolve_task_horizon(state: WorldState, game_data: GameData) -> TaskHorizon | None:
+def resolve_task_horizon(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                         history: LearningStore | None) -> TaskHorizon | None:
     """Read the held task's fight against the one-level horizon, or None.
 
     None means there is no reading to take: no monsters task in progress, or one the
-    character already beats. Callers that must distinguish "no task" from "out of
-    reach" get that for free — a verdict exists only where a fight is lost.
+    character already beats securely (`has_combat_deficit`, `secure_win` on bare
+    gear at max HP). Callers that must distinguish "no task" from "out of reach"
+    get that for free — a verdict exists only where a fight is lost.
 
-    UNPRICED — AND THAT IS A COST DECISION, NOT A SOUNDNESS ONE. `combat_deficit`
-    ranks its greedy walk on margin gain PER ACTION when an `actions_of` is supplied,
-    which changes WHICH item is picked at each step and can therefore change whether
-    the chain closes inside `MAX_CHAIN`. The first version of this docstring
-    justified the unpriced call by claiming that maximising raw margin gain per step
-    is the walk's best shot at closing. **That claim is false and was measured false
-    on 2026-08-25.** Over the four (character, monster) pairs where the two
-    orderings disagree, the PRICED walk closes and the unpriced one does not, every
-    time — and it does so by going DEEPER, not by picking better:
+    GEAR is `L*` of the task monster clearing the same bar the deficit is read
+    at (`gear_closes_for`): its fighter, wearing `L*` on bare gear at max HP,
+    `secure_win`s, and a piece of it is missing (the objective's own gain
+    filter). A missing `L*` that still loses closes
+    nothing, so it is no gear verdict: the level-up and out-of-reach arms read
+    it. Nor is a monster with no tile the fight pool reaches
+    (`monster_spawn_known`, the gate every `L*` candidate passes): its `R`
+    prices the walk back after a loss from its tile, so it has no `L*`, and
+    the same two arms read it.
 
-        l35_artifact_fill          demon        unpriced stalls at 2  priced closes at 4
-        l35_boots_drop_farm        demon        unpriced stalls at 2  priced closes at 5
-        l35_boots_drop_farm        cursed_tree  unpriced stalls at 3  priced closes at 7
-        l25_currency_leaf_unfunded vampire      unpriced stalls at 2  priced closes at 5
-
-    (all four first steps are utility-slot boost potions — the cheapest thing the
-    priced ranking can reach, which the raw-margin ranking passes over.)
-
-    Greedy is greedy: neither ordering is an existence oracle, and the unpriced one
-    is simply the one that is affordable here. It stays for two reasons that are
-    about cost and coherence rather than accuracy:
-
-      * The priced call is NOT a function of `(state, game_data)` — `_deficit_actions`
-        closes over a `SelectionContext` and a `LearningStore`
-        (`strategy_driver.map_guard`). Asking it here would make the verdict
-        ctx-dependent and break the `per_state` identity memo below, which is the
-        only thing keeping the latch, the guard mapper and the cancel rung from
-        disagreeing with each other. Trading a two-oracle divergence for a
-        three-consumer one is a bad trade.
-      * Measured on those same four pairs, the priced walk costs 85-193 ms against
-        58-88 ms unpriced, on a path that runs every cycle.
-
-    THE RESIDUAL THIS LEAVES, stated rather than hidden: over the 1,375 non-GEAR
-    derived pairs, two would be read OUT_OF_REACH although a priced chain closes
-    them (0.15 %). That is only reachable at all once a `tasks_coin` is in a pocket,
-    and as of 84,590 live cycles in `learning.db` no fleet character has ever held
-    one (0 task completions, 0 coin drops, 5 accepts). If it ever does matter, the
-    fix is to thread the WHOLE verdict on `SelectionContext` — the seam
-    `supply_target` and `turn_in` use — computed once by the player with the guard's
-    own pricing. It is NOT a second pricing path into `tiers/means.py`, whose own
-    header records the import cycle that would reopen.
-
-
-    ONE READING PER CYCLE, SHARED. Memoised on the IDENTITY of `(state, game_data)`
-    (`per_state_memo`, the pattern the keep authority uses): every caller within
-    one cycle (the task-worth cancel verdict among them) must not be able to
-    disagree, and the walk costs a catalogue sweep per
-    chain step. `combat_deficit`'s own docstring says a per-cycle caller must
-    memoise; this is that caller.
+    The verdict prices no piece and reads gains only once `L*` secures the
+    fight, up to the first missing piece; the achievable set it is read over
+    is computed once per `search_cache` episode for the character
+    (`gear_objective._cycle_inputs`, ruling C2-perf): every task-worth probe of
+    a cycle shares it.
     """
     monster = blocked_task_monster(state)
     if monster is None or not has_combat_deficit(state, game_data):
         return None
-    target = deficit_upgrade_target(state, game_data)
-    if target is not None:
-        return TaskHorizon(monster=monster, verdict=HORIZON_GEAR, gear_target=target)
+    if (game_data.monster_spawn_known(monster)
+            and gear_closes_for(monster, state, game_data, ctx, history)):
+        return TaskHorizon(monster=monster, verdict=HORIZON_GEAR)
     if predict_win(dataclasses.replace(state, hp=state.max_hp), game_data, monster):
         # A fight the gate takes (P(win) at least θ) that no gear secures: the
         # task is workable now, not a level away (post-merge review
         # 2026-10-16; the gear deficit is the SECURE_WIN bar's, the gate's is θ).
         return None
-    at_next = combat_deficit(next_level_state(state), game_data, monster)
-    if at_next is None or at_next.closes:
-        # `None` is the level-alone case: the +5 HP (or a level-gated item already in
-        # the bag) wins the fight with nothing to acquire. It is a level-up verdict
-        # exactly as much as a closing chain is, and dropping it would have made the
-        # cheapest instance of this rule the one it missed.
-        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP, gear_target=None)
-    return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH, gear_target=None)
+    # One level up (ruling C2-one-model): `L*` of the task monster over the
+    # character one level up — its achievable set at the next level, worn by
+    # the grown body — passes the gate `L*`'s own candidates pass
+    # (`drop_fight_winnable`: the bare odds or a stockable potion loadout, the
+    # learned record, a party; ruling C2-R m3). With nothing left to build
+    # (`L*` held and lost) that is the level alone, a level-up verdict all
+    # the same.
+    fighter = gear_fighter_for(monster, next_level_state(state), game_data, ctx, history)
+    if drop_fight_winnable(fighter, game_data, monster):
+        return TaskHorizon(monster=monster, verdict=HORIZON_LEVEL_UP)
+    return TaskHorizon(monster=monster, verdict=HORIZON_OUT_OF_REACH)

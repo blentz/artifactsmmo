@@ -6,8 +6,7 @@ sourced from the running goal + action. No planning or I/O."""
 
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,
@@ -16,8 +15,9 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import RootScore, StrategyDecision
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.tui.plan_format import short_root, supply_detail
 
@@ -70,7 +70,7 @@ def _label(node: MetaGoal) -> tuple[str, str]:
     if isinstance(node, ReachCharLevel):
         return f"character → {node.level}", "charlevel"
     if isinstance(node, ReachSkillLevel):
-        # "skill" matches tiers.strategy.root_category's naming for this
+        # "skill" matches progression.strategy.root_category's naming for this
         # category, so the plan pane and the resolved root's own category
         # agree on what kind of root this is.
         return f"{node.skill} → {node.level}", "skill"
@@ -84,7 +84,7 @@ def _label(node: MetaGoal) -> tuple[str, str]:
 def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
             game_data: GameData, serve_step: str | None,
             visited: frozenset[MetaGoal], depth: int,
-            ctx: SelectionContext = NO_PROFILE_CONTEXT) -> PlanTreeNode:
+            ctx: SelectionContext) -> PlanTreeNode:
     label, kind = _label(node)
     is_current = node == decision.chosen_step
     status = "current" if is_current else (
@@ -133,7 +133,7 @@ def _supply_node(supply_target: tuple[str, int, int] | None,
 
 def build_plan_tree(decision: StrategyDecision, state: WorldState,
                     game_data: GameData, serve_step: str | None,
-                    ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                    ctx: SelectionContext,
                     role: str | None = None,
                     supply_target: tuple[str, int, int] | None = None,
                     ) -> tuple[PlanTreeNode, ...]:

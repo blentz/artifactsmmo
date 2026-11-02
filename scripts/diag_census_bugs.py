@@ -14,7 +14,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.audit.craft_census import craftable_recipes
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,

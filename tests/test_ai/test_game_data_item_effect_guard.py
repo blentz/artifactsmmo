@@ -92,10 +92,10 @@ def test_season8_bare_gathering_effect_still_keys_by_its_skill():
 
 
 def test_crafting_time_effects_are_one_per_craft_skill():
-    assert _CRAFTING_TIME_EFFECTS == {
+    assert {
         "alchemy_crafting", "cooking_crafting", "gearcrafting_crafting",
         "jewelrycrafting_crafting", "mining_crafting", "weaponcrafting_crafting",
-        "woodcutting_crafting"}
+        "woodcutting_crafting"} == _CRAFTING_TIME_EFFECTS
 
 
 def test_crafting_time_effect_is_carved_and_uncredited():

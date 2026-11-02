@@ -6,6 +6,7 @@ level/skill grid and classifies whether it can produce a directional plan.
 Pure cores (grid/verdict/classifier) + a thin planner harness (`plan_craft`);
 the generator/docs live in scripts/gen_craft_completeness.py."""
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -27,6 +28,8 @@ from artifactsmmo_cli.ai.catalogue_scope import CatalogueScope
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_requirement import gather_requirement
+from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.reach_currency import funding_step_goal
@@ -38,7 +41,13 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable, monster_reached
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_tiles
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.objective import (
+    GOLD,
+    CharacterObjective,
+)
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.region_edges import (
     REACH_MEMO_SIZE,
@@ -51,12 +60,7 @@ from artifactsmmo_cli.ai.region_edges import (
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.objective import (
-    GOLD,
-    CharacterObjective,
-    is_suppliable,
-)
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 _OFFLINE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
@@ -87,11 +91,11 @@ class CraftCell:
     gold: int = 0
     """Gold in the pocket (the census character's default is none)."""
     geared: bool = False
-    """Own the catalogue's gear for the level: wear its best set
-    (`CharacterObjective.catalogue_best_gear`) and hold every other suppliable
-    equippable at the level (`_armory`), so each fight is fought in the loadout
-    the planner picks for that monster — not the gear the census character can
-    reach (`census_gear`). One generic set lost to grimlet, rosenblood,
+    """Own the catalogue's gear for the level: hold every suppliable
+    equippable at the level (`_armory`) and wear `L*` chosen over it
+    (`census_gear` with `geared`), so each fight is fought in the loadout the
+    planner picks for that monster — not the gear the census character can
+    achieve from nothing. One generic set lost to grimlet, rosenblood,
     red_dragon and flameche, which their own loadouts beat."""
     keys: bool = False
     """Hold the items the map's crossings ask for (`crossing_keys`: a
@@ -116,15 +120,15 @@ class CraftCell:
     docs/PLAN_group_fights.md increment 2)."""
 
 
-def tier_of(craft_level: int) -> int:
-    """The decade-inclusive tier bucket of a craft level: (L-1)//10+1, so
-    craft_level=10 is the LAST level of tier 1, not the first of tier 2."""
+def decade_of(craft_level: int) -> int:
+    """The decade-inclusive bucket of a craft level: (L-1)//10+1, so
+    craft_level=10 is the LAST level of decade 1, not the first of decade 2."""
     return (craft_level - 1) // 10 + 1
 
 
 def nominal_char_level(craft_level: int) -> int:
-    """The tier's nominal character level: 1 for tier 1 (L<=9), else 10*tier."""
-    return 1 if craft_level <= 9 else 10 * tier_of(craft_level)
+    """The decade's nominal character level: 1 for decade 1 (L<=9), else 10*decade."""
+    return 1 if craft_level <= 9 else 10 * decade_of(craft_level)
 
 
 def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
@@ -138,7 +142,7 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
     yielding fewer cells. `recipe`'s tier bucket is the decade its
     crafting_level falls into ((craft_level-1)//10+1, so crafting_level=10
     is the LAST level of tier 1, not the first of tier 2) — the boundary
-    offsets `10*tier±2` straddle that decade line; for a tier-1 recipe
+    offsets `10*decade±2` straddle that decade line; for a tier-1 recipe
     (crafting_level<=9) the nominal cell is 1 (any starting character),
     while a decade-boundary recipe like crafting_level=10 gets nominal=10.
     Returns [] when `recipe` has no crafting recipe (not craftable)."""
@@ -147,11 +151,11 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
         return []
     craft_level = stats.crafting_level
     skill = stats.crafting_skill
-    tier = tier_of(craft_level)
+    decade = decade_of(craft_level)
     nominal = nominal_char_level(craft_level)
     char_levels = sorted({
         max(1, min(50, lvl))
-        for lvl in (nominal, 10 * tier - 2, 10 * tier + 2)
+        for lvl in (nominal, 10 * decade - 2, 10 * decade + 2)
     })
     skill_levels = sorted({max(1, craft_level - 5), craft_level})
     return [CraftCell(cl, skill, sl)
@@ -175,17 +179,17 @@ def plan_craft(recipe: str, state: WorldState, game_data: GameData, grey: bool =
 
     task_exchange_min_coins=0: task funding is irrelevant to craft planning."""
     objective = CharacterObjective.from_game_data(game_data)
-    actions = build_actions(
-        game_data, state, objective,
-        bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
-                               exclude_recycle=keep)
-    arbiter = StrategyArbiter(GOAPPlanner(), None)
     ctx = offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
     ))
+    actions = build_actions(
+        game_data, state, objective,
+        bank_accessible=True, task_exchange_min_coins=0,
+        learned_drops=LearnedDrops.empty(), now=ctx.now)
+    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
+                               exclude_recycle=keep, now=ctx.now)
+    arbiter = StrategyArbiter(GOAPPlanner(), None)
     return arbiter._plans(goal, state, game_data, actions, ctx,
                           budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
@@ -204,11 +208,11 @@ def funding_plan(recipe: str, state: WorldState, game_data: GameData) -> list[Ac
         return []
     currency, amount = funding
     goal = funding_step_goal(currency, amount, state, game_data)
-    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
-                            bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
     ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                            initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
+    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     return StrategyArbiter(GOAPPlanner(), None)._plans(
         goal, state, game_data, actions, ctx,
         budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
@@ -589,7 +593,7 @@ def _currency_directly_attainable(currency: str, state: WorldState,
     """A purchase currency the planner can acquire with a DIRECT action edge:
     gold, a located gatherable, or a winnable permanent monster drop (the
     Fight×N → NpcBuy chain grey_farm.py already serves). Deliberately NARROWER
-    than `is_attainable_now`, which also credits a TASK-earned currency
+    than `progression/objective.feasible_now`, which also credits a TASK-earned currency
     (tasks_coin) — earning a task coin then exchanging it is a recursive
     buy-edge the planner does not yet plan (npc_purchase_acquisition Phase 2-4),
     so a task-only currency is NOT directly attainable here."""
@@ -662,7 +666,7 @@ def _has_located_gather_source(leaf: str, game_data: GameData) -> bool:
 def _leaf_status(leaf: str, state: WorldState,
                  game_data: GameData) -> GapClass | None:
     """The blocker class for a single closure leaf at the cell state, or None
-    when the leaf is reachable now. Mirrors `is_attainable_now`'s leaf walk
+    when the leaf is reachable now. Mirrors `feasible_now`'s leaf walk
     (gatherable → drop-winnable → task-earnable → buyable) but reports WHICH
     limit blocks an unreachable leaf so `classify_gap` can rank causes.
 
@@ -783,15 +787,14 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     level is the tested dimension (under- vs at-skill), so it stays exactly
     `cell.skill_level` even if the recipe also gathers with that skill.
 
-    Gear source: a FIXED POINT of `CharacterObjective.near_term_gear` (the
-    best attainable-now item per slot at `cell.char_level`): wear the pick,
-    pick again, until no slot improves — a character progresses into the gear
-    its gear lets it win. The gear is chosen for a character whose skills are
-    all at its level (crafting kept pace); the returned PLANNING state keeps
-    the cell's skills, the tested dimension. Before 2026-10-10 the pick ran
-    ONCE from a bare character with every other skill at 1, so a level-30
-    census character wore a copper dagger and lost to a level-8 cow — 570
-    `combat_blocked` cells, most of them that loadout. The loadout is equipped
+    Gear source: `census_gear`, the gear objective `L*` the player's own step
+    attaches, for a character whose skills are all at its level (crafting kept
+    pace); the returned PLANNING state keeps the cell's skills, the tested
+    dimension. The loadout is grown along the census-gear rungs, each level's
+    `L*` chosen wearing the rung below's, so a character progresses into the
+    gear its gear lets it win. (Until 2026-10-10 the census wore a one-pass pick from a
+    bare character with every other skill at 1: a level-30 census character
+    wore a copper dagger and lost to a level-8 cow.) The loadout is equipped
     with `derive_combat_stats=True`, which sums the equipped items' catalog
     stats into the server-total combat stats — what a live character wearing
     it would report.
@@ -815,8 +818,8 @@ def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldStat
     sc = ScenarioCharacter(name="craft_audit", level=cell.char_level, gold=cell.gold,
                            skills=dict(skills), inventory=armory,
                            inventory_max=ARMORY_BAG if cell.geared else 100,
-                           equipment=(_best_gear(cell.char_level, game_data) if cell.geared
-                                      else census_gear(cell.char_level, cell.events, game_data)),
+                           equipment=census_gear(cell.char_level, cell.events, cell.geared,
+                                                 game_data),
                            derive_combat_stats=True, active_events=events)
     state = scenario_state(sc, game_data)
     return replace(state, party=(state,) * cell.party) if cell.party else state
@@ -863,50 +866,96 @@ def _armory(char_level: int, game_data: GameData) -> dict[str, int]:
     """Every suppliable equippable at `char_level` (two of each, for the ring
     pair), utility potions and bags excepted: the geared cell's held gear."""
     bare = scenario_state(ScenarioCharacter(name="census_armory", level=char_level), game_data)
+    now = _census_context().now
     return {code: 2 for code, stats in game_data.all_item_stats.items()
             if stats.type_ in ITEM_TYPE_TO_SLOTS and stats.type_ not in ("utility", "bag")
-            and stats.level <= char_level and is_suppliable(code, bare, game_data)}
+            and stats.level <= char_level and is_suppliable(code, bare, game_data, now)}
 
 
-def _best_gear(char_level: int, game_data: GameData) -> dict[str, str]:
-    """The catalogue's best suppliable gear at `char_level`."""
-    bare = scenario_state(ScenarioCharacter(name="census_best", level=char_level), game_data)
-    return CharacterObjective.from_game_data(game_data).catalogue_best_gear(bare)
+CENSUS_GEAR_STEP = 5
+"""Levels between the rungs the census loadout is grown along (`census_gear`):
+rung 1, then every multiple of this."""
+
+CENSUS_GEAR_MEMO_SIZE = 4096
+"""Census loadouts held per catalogue: more than one census asks
+(`(level, events, geared)` over every grid and ladder level)."""
+
+CensusGearKey = tuple[int, frozenset[str], bool]
+"""`(level, events, geared)`: what a census loadout depends on."""
+
+_CENSUS_GEAR: "CatalogueScope[CensusGearKey, dict[str, str]]" = CatalogueScope(CENSUS_GEAR_MEMO_SIZE)
+"""`census_gear`'s loadouts, scoped per catalogue (the conditions census asks
+two: the bundle and the bundle with every achievement unlocked)."""
 
 
-_GEAR_MEMO: list[tuple[GameData, dict[tuple[int, frozenset[str]], dict[str, str]]]] = []
-"""One slot: the catalogue the memo was built on (HELD, so its identity cannot
-be reused) and its loadouts. A census worker plans every cell over one
-catalogue; a different catalogue replaces the slot."""
+def _rung_below(level: int) -> int | None:
+    """The census-gear rung below `level` (`CENSUS_GEAR_STEP`), None at level 1."""
+    if level <= 1:
+        return None
+    return max(1, (level - 1) // CENSUS_GEAR_STEP * CENSUS_GEAR_STEP)
 
 
-def census_gear(char_level: int, events: frozenset[str],
+def census_gear(char_level: int, events: frozenset[str], geared: bool,
                 game_data: GameData) -> dict[str, str]:
-    """The census character's loadout at `char_level` with `events` live: the
-    fixed point of `near_term_gear` for a character whose skills are all at
-    its level (see `census_state`). Depends on nothing else, so it is
-    memoized per catalogue."""
-    if not _GEAR_MEMO or _GEAR_MEMO[0][0] is not game_data:
-        _GEAR_MEMO[:] = [(game_data, {})]
-    memo = _GEAR_MEMO[0][1]
-    key = (char_level, events)
+    """The census character's loadout at `char_level` with `events` live,
+    GROWN as a character progresses (ruling C6-1): `L*`, the gear objective the
+    player's own step attaches (`gear_objective_context.attach_gear_objective`),
+    for a character whose skills are all at its level, wearing the loadout of
+    the rung below (`_rung_below`). With no objective at a level (no loadout
+    pays XP there) the character keeps what it wore. `geared`: the character
+    also holds the whole armory (`_armory`), so `L*` is chosen over everything
+    suppliable at the level.
+
+    Memoized per catalogue (`_CENSUS_GEAR`); a census computes its table once
+    in the parent (`census_gear_table`) and seeds its workers
+    (`seed_census_gear`)."""
+    memo = _CENSUS_GEAR.cache_for(game_data)
+    key = (char_level, events, geared)
     if key not in memo:
-        objective = CharacterObjective.from_game_data(game_data)
-        skills = {name: char_level for name in SKILL_NAMES}
-        live = tuple(sorted(events))
-        gear: dict[str, str] = {}
-        while True:
-            worn = scenario_state(
-                ScenarioCharacter(name="census_gear", level=char_level, skills=skills,
-                                  equipment=dict(gear), derive_combat_stats=True,
-                                  active_events=live),
-                game_data)
-            upgrades = objective.near_term_gear(worn)
-            if not upgrades:
-                break
-            gear.update(upgrades)  # strict per-slot improvements: terminates
-        memo[key] = gear
+        below = _rung_below(char_level)
+        worn = census_gear(below, events, geared, game_data) if below is not None else {}
+        # The loadout is a function of its key: the cell's events are live for
+        # it whoever asks (a cell's own overlay, or a census parent with none).
+        world_events = game_data.active_event_codes
+        game_data.active_event_codes = set(events)
+        try:
+            objective = _census_objective(char_level, events, geared, worn, game_data)
+        finally:
+            game_data.active_event_codes = world_events
+        _CENSUS_GEAR.remember(memo, key, dict(objective.loadout) if objective is not None else worn)
     return dict(memo[key])
+
+
+def _census_objective(char_level: int, events: frozenset[str], geared: bool,
+                      worn: dict[str, str], game_data: GameData) -> GearObjective | None:
+    """The gear objective of the census character at `char_level` wearing
+    `worn` (`census_gear`)."""
+    state = scenario_state(
+        ScenarioCharacter(name="census_gear", level=char_level,
+                          skills={name: char_level for name in SKILL_NAMES},
+                          equipment=dict(worn),
+                          inventory=_armory(char_level, game_data) if geared else {},
+                          inventory_max=ARMORY_BAG if geared else 100,
+                          derive_combat_stats=True, active_events=tuple(sorted(events))),
+        game_data)
+    return attach_gear_objective(state, game_data, _OFFLINE_CONTEXT, None).gear_objective
+
+
+def census_gear_table(keys: Iterable[CensusGearKey],
+                      game_data: GameData) -> dict[CensusGearKey, dict[str, str]]:
+    """Every loadout `keys` asks, with the rungs each grew along: the table a
+    census computes once in its parent and hands its workers."""
+    for level, events, geared in keys:
+        census_gear(level, events, geared, game_data)
+    return {key: dict(gear) for key, gear in _CENSUS_GEAR.cache_for(game_data).items()}
+
+
+def seed_census_gear(table: Mapping[CensusGearKey, dict[str, str]], game_data: GameData) -> None:
+    """Install a parent-computed table (`census_gear_table`) as `game_data`'s
+    census loadouts, so a worker never recomputes one."""
+    memo = _CENSUS_GEAR.cache_for(game_data)
+    for key, gear in table.items():
+        _CENSUS_GEAR.remember(memo, key, dict(gear))
 
 
 def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> list[str]:
@@ -915,12 +964,13 @@ def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> lis
     no crossing to fail, so it is not asked (none)."""
     if not game_data.world.transition_edges:
         return []
+    ctx = _census_context()
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     declined: list[str] = []
-    decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
-              actions, _census_context(), declined)
+    decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, now=ctx.now), state, game_data,
+              actions, ctx, declined)
     return declined
 
 
@@ -989,9 +1039,10 @@ def _vendor_sources(leaf: str, state: WorldState, game_data: GameData,
     """One verdict per vendor the cell would buy `leaf` from — present here
     (`_present_vendor`) and selling for a currency the planner directly
     acquires (`_currency_directly_attainable`), the vendors `_permanently_buyable`
-    counts — each True when the vendor's region (`GameData.npc_region`) is in
-    `reach`."""
-    return [game_data.npc_region(npc) in reach
+    counts — each True when some tile of the vendor lies in `reach`
+    (`region_edges.content_reached` over `vendor_reach.vendor_tiles`, the
+    test production's vendor gate asks: Task 8a)."""
+    return [content_reached(npc, vendor_tiles(npc, game_data), game_data, reach)
             for npc, _price, currency in game_data.npc_purchases(leaf)
             if _present_vendor(npc, game_data)
             and _currency_directly_attainable(currency, state, game_data)]
@@ -1008,7 +1059,7 @@ def _leaf_behind_crossing(leaf: str, state: WorldState, game_data: GameData,
       here (`_drop_winnable`), reached by `monster_reached`;
     - a resource that spawns (`_gather_resources`), reached by
       `region_edges.content_reached`;
-    - a vendor `_vendor_sources` counts, reached by its region;
+    - a vendor `_vendor_sources` counts, reached by its tiles;
     - a task reward (`GameData.is_task_earnable`), the always-available task
       loop `_leaf_status` reads it as, so always reached.
 

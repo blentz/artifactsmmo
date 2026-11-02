@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle, MaterialDemand
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.ai.role_catalog import ROLE_CATALOG
 from artifactsmmo_cli.ai.role_selection import (
     ROLE_IDLE_WINDOW,
@@ -65,10 +66,9 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachFleetOutcome
 from artifactsmmo_cli.ai.world_state import GOLD_CODE
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
-from tests.test_ai.fixtures import coordination_now, make_state
+from tests.test_ai.fixtures import coordination_now, cycle_now, make_state
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_actions_execute import (
     make_api_result,
@@ -849,7 +849,7 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
 
 def _tried(target, plan_len: int) -> list[dict[str, object]]:
     """The arbiter record for the supply goal built from `target`."""
-    goal = SupplyBankGoal(item_code=target[0], quantity=target[1], demand=target[2])
+    goal = SupplyBankGoal(item_code=target[0], quantity=target[1], demand=target[2], now=cycle_now())
     return [{"goal": "GrindCharacterXP", "plan_len": 3},
             {"goal": repr(goal), "plan_len": plan_len}]
 
@@ -2801,7 +2801,7 @@ def test_the_skill_demand_is_known_when_the_loadout_is_chosen(monkeypatch):
         seen["skills"] = ctx.skill_demand
         return None
 
-    monkeypatch.setattr("artifactsmmo_cli.ai.player.xp_demand",
+    monkeypatch.setattr("artifactsmmo_cli.ai.objective_demand.xp_demand",
                         lambda roots, s, g, c: (frozenset({"fishing"}), False))
     monkeypatch.setattr("artifactsmmo_cli.ai.player.fight_ahead_loadout", choose)
     monkeypatch.setattr("artifactsmmo_cli.ai.player.pool_draw", lambda *a: (False, None))
@@ -3407,9 +3407,33 @@ def test_the_decision_plans_against_the_netted_bank(tmp_path, monkeypatch):
         assert p._strategy is not None
         monkeypatch.setattr(type(p._strategy), "decide", _decide)
         with redirect_stdout(io.StringIO()), pytest.raises(_Stop):
-            p._decide_band(p.state, p.game_data, [])
+            p._decide_and_select(p.state, p.game_data, [])
         assert seen == [4_000]
         assert p.state.bank_gold == 10_000
+    finally:
+        p._coordination.close()
+        sibling.close()
+
+
+def test_a_sibling_s_item_claim_is_netted_from_the_plan_s_bank(tmp_path):
+    """The ticket farm (live 2026-10-31): two characters planned
+    `Withdraw(event_ticket)` against one bank and one drew HTTP 404. A
+    sibling's live item claim comes off the bank this character plans
+    against, as its gold claim does; a code claimed whole leaves the bank,
+    and an unread bank stays unknown."""
+    p, db = _gold_player(tmp_path, 1_000)
+    p.state = replace(p.state, bank_items={"event_ticket": 250, "copper_ore": 3})
+    sibling = CoordinationStore(db_path=db, character="rival")
+    try:
+        sibling.claim_bank_stock({"event_ticket": 200, "copper_ore": 3},
+                                 datetime.now(tz=timezone.utc))
+        p.game_data = _make_planner_gd()
+        p._update_coordination(p.state, p.game_data)
+        planned = p._net_sibling_gold(p.state)
+        assert planned.bank_items == {"event_ticket": 50}
+        assert planned.bank_gold == 1_000
+        assert p.state.bank_items == {"event_ticket": 250, "copper_ore": 3}
+        assert p._net_sibling_gold(replace(p.state, bank_items=None)).bank_items is None
     finally:
         p._coordination.close()
         sibling.close()

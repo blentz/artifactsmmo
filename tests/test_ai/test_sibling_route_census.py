@@ -73,6 +73,10 @@ class _FleetStore:
     def fleet_skill_grind_rate(self, skill: str) -> float | None:
         return None
 
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
+
 
 @pytest.fixture
 def census_world() -> tuple[WorldState, GameData]:

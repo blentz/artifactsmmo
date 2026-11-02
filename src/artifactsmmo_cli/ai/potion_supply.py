@@ -1,13 +1,9 @@
 """Potion supply: the batch the CRAFT_POTIONS guard (guards.py) fires on and
 CraftPotionsGoal plans (`potion_batch`), for the potions of the chosen
-consumable loadout only (docs/PLAN_consumable_utility.md increment 5).
-
-``target_potion_pure`` / ``bootstrap_potion_target`` rank craftable heal
-potions by effect for the utility-slot designation
-(`CharacterObjective.utility_potion_targets`); the guard does not read them."""
+consumable loadout only (docs/PLAN_consumable_utility.md increment 5)."""
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
@@ -20,98 +16,11 @@ from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, Policy
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
-from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
-    POTION_HIGH_LEVEL,
-    POTION_HIGH_QTY,
-    POTION_LOW_LEVEL,
-    POTION_LOW_QTY,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def target_potion_pure(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore",
-    exclude: str | None = None,
-) -> str | None:
-    """Highest-``effect``, craftable-now (at the item's own skill/level),
-    utility-slot-equippable heal (deterministic smallest-code tie-break); None
-    when none qualifies. The crafting skill is read from item metadata, never
-    assumed to be alchemy.
-
-    ``exclude`` skips one code from consideration — the second-utility-slot
-    caller passes the slot-1 target so it gets the catalog's SECOND-best heal
-    (utility potions are not in DUPLICATE_SLOT_TYPES, so the same code can't
-    occupy both utility slots; see equip.py's DUPLICATE_SLOT_TYPES comment).
-
-    Materials are NOT required on hand."""
-    best_code: str | None = None
-    best_restore = 0
-    for code in sorted(game_data.crafting_recipes):
-        if code == exclude:
-            continue
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != "utility":
-            continue
-        restore = getattr(stats, effect, 0)
-        if restore <= 0 or restore <= best_restore:
-            continue
-        # The crafting SKILL is item metadata (API), not an assumption: any
-        # utility-slot heal qualifies, gated by ITS OWN skill/level — never a
-        # hardcoded 'alchemy'. An item in crafting_recipes always names a skill.
-        if stats.crafting_skill is None:
-            continue
-        if state.skills[stats.crafting_skill] < stats.crafting_level:
-            continue
-        best_code, best_restore = code, restore
-    return best_code
-
-
-def _cheapest_heal_potion(game_data: GameData, effect: str = "hp_restore") -> str | None:
-    """The craftable utility heal with the smallest crafting_level (the next tier
-    to ever unlock); deterministic smallest-code tie-break. None when none exists.
-
-    Level-exempt bootstrap target: unlike target_potion_pure it does NOT require
-    the skill to already meet the recipe gate, so the arbiter can drive the FIRST
-    unlock. The crafting skill is item metadata, never assumed to be alchemy."""
-    best_code: str | None = None
-    best_level = 0
-    for code in sorted(game_data.crafting_recipes):
-        stats = game_data.item_stats(code)
-        if stats is None or stats.type_ != "utility":
-            continue
-        if getattr(stats, effect, 0) <= 0 or stats.crafting_skill is None:
-            continue
-        if best_code is None or stats.crafting_level < best_level:
-            best_code, best_level = code, stats.crafting_level
-    return best_code
-
-
-def bootstrap_potion_target(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore",
-) -> str | None:
-    """The utility heal to pursue: the effect-best potion craftable NOW, or — when
-    none is craftable yet — the cheapest-to-unlock heal so the arbiter can drive
-    the first skill unlock. Level-exempt (a potion's item level never gates it;
-    utility is judged by effect, not level). Single source of truth for the
-    utility-slot root (`CharacterObjective.utility_potion_targets`).
-
-    No ``exclude`` parameter here deliberately: the second-utility-slot caller
-    (`utility_potion_targets`) uses `target_potion_pure` directly (not this
-    function) for its second-best search — falling through to the
-    cheapest-to-unlock branch a SECOND time (excluding slot 1's pick) would
-    manufacture an aspirational grind target for an empty slot 2 whenever the
-    catalog has no other potion craftable right now, exactly the
-    already-guarded-against anti-pattern (see
-    test_robby_scenario_stocked_small_does_not_force_enhanced_grind). Slot 2
-    only ever gets a target when a second heal is ACTUALLY craftable now."""
-    craftable = target_potion_pure(state, game_data, effect)
-    if craftable is not None:
-        return craftable
-    return _cheapest_heal_potion(game_data, effect)
-
 
 POTION_POLICY = Policy(all_gather_routes=True, gather_skill_gate=True, craft_skill_gate=True,
                        event_vendors=False, spawn_known=True, allow_grey=True,
@@ -132,7 +41,8 @@ only other source was a drop, so the guard fired and the goal found no plan
 821 times in 24 h (up to 98k nodes a search)."""
 
 
-def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) -> int:
+def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData,
+                  now: datetime) -> int:
     """The largest run count <= `runs` the one walk can supply under
     `POTION_POLICY`, or 0: the bag plus `candidate * yield` copies of `code`,
     with `code` MADE (`produce`: its craft route, whose own skill gate counts)
@@ -143,10 +53,10 @@ def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) 
     if not game_data.crafting_recipes.get(code):
         return 0
     # A store-less feasibility walk: every drop at its API prior, passed
-    # explicitly (ruling T16b).
+    # explicitly (ruling T16b), on the caller's cycle clock (ruling T8b).
     model = ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
     potion = frozenset({code})
     held = model.in_bag(code)
     craft_yield = game_data.craft_yield(code)
@@ -158,7 +68,7 @@ def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) 
 
 
 def potion_batch(state: WorldState, game_data: GameData,
-                 loadout: ChosenLoadout | None) -> tuple[str, int, int] | None:
+                 loadout: ChosenLoadout | None, now: datetime) -> tuple[str, int, int] | None:
     """`(target_code, runs, equip_qty)`: the potion batch to stock this cycle, or
     None when there is nothing to stock that the ladder can supply.
 
@@ -179,25 +89,26 @@ def potion_batch(state: WorldState, game_data: GameData,
     with nothing held and no run supplyable is skipped for the next one.
 
     No loadout (no fight ahead) stocks nothing: there is no in-combat
-    consumption to stock for."""
+    consumption to stock for. `now` is the caller's cycle clock (ruling T8b),
+    the instant the supply walk's event gates read."""
     if loadout is None:
         return None
     for code, used in loadout.potions:
         deficit = potion_carry(used) - equipped_potion_qty(state, code)
         if deficit > 0:
-            batch = _sized(code, deficit, state, game_data)
+            batch = _sized(code, deficit, state, game_data, now)
             if batch is not None:
                 return batch
     return None
 
 
 def craft_potions_fires(state: WorldState, game_data: GameData,
-                        loadout: ChosenLoadout | None) -> bool:
+                        loadout: ChosenLoadout | None, now: datetime) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind: exactly when
     `potion_batch` names a batch for the chosen loadout. The exclusive gating
     truth for `CraftPotionsGoal`, by construction rather than by a parallel
     re-derivation."""
-    return potion_batch(state, game_data, loadout) is not None
+    return potion_batch(state, game_data, loadout, now) is not None
 
 
 def guard_loadout(loadout: ChosenLoadout | None, fight_monster: str | None) -> ChosenLoadout | None:
@@ -211,13 +122,6 @@ def guard_loadout(loadout: ChosenLoadout | None, fight_monster: str | None) -> C
     return loadout
 
 
-def potion_level_ramp(level: int) -> int:
-    """The level ramp of potion stock: the batch `GamePlayer._consumable_price`
-    amortizes a consumable's replacement over."""
-    return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
-                                POTION_HIGH_LEVEL, POTION_HIGH_QTY)
-
-
 def prep_supplies(code: str, qty: int, state: WorldState, game_data: GameData,
                   ctx: SelectionContext) -> bool:
     """The fight step's prep can make `qty` of `code` from here: the
@@ -226,7 +130,7 @@ def prep_supplies(code: str, qty: int, state: WorldState, game_data: GameData,
     suppliable is one `GatherMaterials` plans. Plain `feasible` under the
     policy disagreed with the walk on a grey ingredient: it refused C3P0's
     blue_slimeball that the decomposition fights for (2026-10-10)."""
-    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    model = ObtainModel(state, game_data, ctx, ctx.now)
     return model.walk(code, qty, DECOMPOSE_POLICY, keep=frozenset({code}),
                       grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible
 
@@ -237,20 +141,21 @@ def potion_stockable(code: str, state: WorldState, game_data: GameData,
     CRAFT_POTIONS ladder brews it, or the fight step's prep makes it. A
     loadout's potion that nothing stocks is fought without (live C3P0
     2026-10-10: a GE-priced health_potion it could not brew at alchemy 17)."""
-    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)
+    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data, ctx.now)
             or prep_supplies(code, 1, state, game_data, ctx))
 
 
-def ladder_supplies(code: str, deficit: int, state: WorldState, game_data: GameData) -> bool:
+def ladder_supplies(code: str, deficit: int, state: WorldState, game_data: GameData,
+                    now: datetime) -> bool:
     """The CRAFT_POTIONS guard can stock `deficit` more of `code` worn from
     here (`potion_batch`'s own sizing): held copies, or a run the ladder can
     supply. A loadout potion it cannot is the fight step's prep
     (`grind_heal_prep.potion_prep_goal`) — one stocker per potion."""
-    return _sized(code, deficit, state, game_data) is not None
+    return _sized(code, deficit, state, game_data, now) is not None
 
 
 def _sized(code: str, deficit: int, state: WorldState,
-           game_data: GameData) -> tuple[str, int, int] | None:
+           game_data: GameData, now: datetime) -> tuple[str, int, int] | None:
     """The batch for `deficit` more of `code` worn: the bag's and bank's copies
     first, then the runs the ladder sizes for the rest, cut to what can be
     supplied; None when nothing is held and not one run can be supplied."""
@@ -262,7 +167,7 @@ def _sized(code: str, deficit: int, state: WorldState,
     craft_yield = game_data.craft_yield(code)
     runs_needed = -(-short // craft_yield)
     runs = feasible_runs(code, max(1, _ladder_runs(state, game_data, recipe, runs_needed, craft_yield)),
-                         state, game_data)
+                         state, game_data, now)
     equip = min(deficit, have + runs * craft_yield)
     if equip == 0:
         return None

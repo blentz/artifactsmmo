@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.inventory_keep import (
     IN_BAG_REASONS,
     KEEP_ALL,
     OWNED_REASONS,
+    CarriedKeep,
     KeepReason,
     bankable,
     carried_keep,
@@ -26,13 +27,13 @@ from artifactsmmo_cli.ai.inventory_keep import (
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
+from artifactsmmo_cli.ai.progression.objective_needs import NeedSet
+from artifactsmmo_cli.ai.progression.strategy import MetaGoal, ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.objective_needs import NeedSet
-from artifactsmmo_cli.ai.tiers.strategy import MetaGoal, ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data
 
 
 def _ctx(**kw: object) -> SelectionContext:
@@ -51,7 +52,7 @@ def _gd() -> GameData:
     `copper_dagger <- 8 copper_ore` is a SECOND, DISJOINT root over the same
     leaf material: one root alone cannot see the difference between combining
     the two committed roots with `max` and with `sum`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
                                 subtype="tool", skill_effects={"woodcutting": -10},
@@ -140,19 +141,35 @@ def test_healing_consumable_keeps_nothing_without_a_chosen_loadout():
 
 def test_healing_consumable_keeps_the_chosen_foods_carry():
     """The food the chosen loadout eats keeps its carry (units eaten per fight ×
-    the horizon); the surplus above it is bankable."""
+    the horizon, here inside the bag's room); the surplus above it is bankable."""
     gd = _gd()
-    state = make_state(level=10, inventory={"cooked_chicken": 40, "apple": 10})
+    state = make_state(level=10, inventory={"cooked_chicken": 40, "apple": 10}, inventory_max=200)
     ctx = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
                                      food=(("apple", 1), ("cooked_chicken", 2)),
                                      made_food=(("apple", 1), ("cooked_chicken", 2))))
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
-                           state, gd, ctx) == food_carry(2) == 40
+                           state, gd, ctx) == food_carry(2, 200, None) == 40
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple",
-                           state, gd, ctx) == food_carry(1) == 20
+                           state, gd, ctx) == food_carry(1, 200, None) == 20
     assert bankable("cooked_chicken", state, gd, ctx) == 0
     ctx = _ctx(loadout=_CHOSEN)
-    assert bankable("cooked_chicken", state, gd, ctx) == 40 - food_carry(1)
+    assert bankable("cooked_chicken", state, gd, ctx) == 40 - 20
+
+
+def test_healing_consumable_keeps_no_more_than_the_bag_can_hold():
+    """Task 8c (ruling C2-food): the keep's food carry is bounded by what this
+    bag can hold of it (`chosen_loadout.food_room`): the units held plus the
+    bag's free quantity, and a stack it does not hold needs a free slot. Seven
+    a fight asks 140 apples; a bag of 50 holding 10 apples and 5 ore keeps 45."""
+    gd = _gd()
+    ctx = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(), food=(("apple", 7),),
+                                     made_food=()))
+    state = make_state(level=10, inventory={"apple": 10, "copper_ore": 5}, inventory_max=50)
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", state, gd, ctx) == 45
+    # No apple held and no free slot: the bag can hold none.
+    full = make_state(level=10, inventory={"copper_ore": 5}, inventory_max=50,
+                      inventory_slots_max=1)
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", full, gd, ctx) == 0
 
 
 def _wearing_potion(worn: int):
@@ -319,12 +336,12 @@ def test_gear_demand_has_no_blanket_fallback():
     """DELIBERATE de-blanketing: `guards._gear_protected`'s profile-less arm was
     the CODE-SET `target_gear | target_tools` (= keep ALL copies of every BiS
     code — another reason all 18 axes were hoarded). It is NOT reinstated: with
-    an empty `gear_keep` a `target_tools` code held x18 keeps exactly 1 (via the
+    an empty `gear_keep` a tool held x18 keeps exactly 1 (via the
     EQUIPPED/RECIPE_DEMAND `EQUIPPABLE_KEEP`) and 17 are disposable."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
-    ctx = _ctx(target_gear=frozenset(), target_tools=frozenset({"copper_axe"}))
+    ctx = _ctx()
     assert ctx.gear_keep == {}
     assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_axe", state, gd, ctx) == 0
     assert keep_owned("copper_axe", state, gd, ctx) == 1
@@ -586,7 +603,7 @@ def _gather_gd() -> GameData:
     """`ash_plank <- 10 ash_wood`, the ash_wood gathered from an ash_tree: an
     active GatherMaterials step accumulating a raw material in the bag — the
     shape of the livelock this keep reason exists to stop."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
                                crafting_skill="woodcutting", crafting_level=1),
@@ -702,8 +719,8 @@ def test_far_out_of_band_heals_are_never_destroyable():
     chosen = _ctx(loadout=ChosenLoadout(monster="wolf", potions=(),
                                         food=(("cooked_chicken", 1),),
                                         made_food=(("cooked_chicken", 1),)))
-    assert keep_in_bag("cooked_chicken", far, gd, chosen) == food_carry(1)
-    assert bankable("cooked_chicken", far, gd, chosen) == 30 - food_carry(1)
+    assert keep_in_bag("cooked_chicken", far, gd, chosen) == food_carry(1, 30, None) == 20
+    assert bankable("cooked_chicken", far, gd, chosen) == 30 - 20
 
     # ...and the in-band character (distance 4, no ceiling) always agreed: the
     # two bands now give the SAME ownership answer, which is the invariant.
@@ -802,7 +819,7 @@ def _slot_gd() -> GameData:
     profile cannot cover: `pick_loadout` under a `Combat` purpose names no ring
     (a ring's benefit against the monster is 0, so the empty-slot gate skips it)
     and under a `Gather` purpose names almost nothing at all."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    attack={"attack_fire": 12},
@@ -957,9 +974,11 @@ def test_carried_keep_is_what_a_deposit_leaves_but_food_and_potions():
                step_profile={"copper_ore": 12})
     assert keep_in_bag("apple", state, gd, ctx) > 0
     assert keep_in_bag("heal_potion", state, gd, ctx) > 0
-    assert carried_keep(state, gd, ctx) == 1 + 12
+    assert carried_keep(state, gd, ctx) == CarriedKeep(1 + 12, 2)
     # A keep past what is held keeps only what is held: 30 of the 50 asked.
-    assert carried_keep(state, gd, replace(ctx, step_profile={"copper_ore": 50})) == 1 + 30
+    assert carried_keep(state, gd, replace(ctx, step_profile={"copper_ore": 50})) == CarriedKeep(1 + 30, 2)
+    # Task 8c: a code the deposit banks whole fills no slot.
+    assert carried_keep(state, gd, replace(ctx, step_profile={})) == CarriedKeep(1, 1)
 
 
 def test_carried_keep_refuses_an_unknown_held_code():

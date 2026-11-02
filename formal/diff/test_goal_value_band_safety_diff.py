@@ -42,7 +42,7 @@ from artifactsmmo_cli.ai.goals.pursue_task import (
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 SURVIVAL_FLOOR = 70.0  # Phase-1 invariant, pinned in Lean as `survivalFloor`.
 
@@ -155,7 +155,7 @@ def test_gather_materials_value_below_survival_floor(
         db = f.name
     try:
         store = LearningStore(db_path=db, character="testchar")
-        goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60})
+        goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60}, now=cycle_now())
         _populate_store(store, repr(goal), char_xp=char_xp, gold=gold,
                         cycles_to_satisfy=cycles_to_satisfy)
         gd = GameData()
@@ -172,7 +172,7 @@ def test_gather_materials_value_below_survival_floor(
 def test_gather_materials_history_none_matches_base():
     """history=None preserves the original ramp value (no clamp applied).
     Pins that the Phase-17 wiring is a strict extension on the warm path."""
-    goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60})
+    goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60}, now=cycle_now())
     state = _gather_state(inv_qty=0)
     gd = GameData()
     base = goal.value(state, gd, history=None)
@@ -228,7 +228,7 @@ def test_gather_materials_high_yield_clamps_below_survival():
         db = f.name
     try:
         store = LearningStore(db_path=db, character="testchar")
-        goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60})
+        goal = GatherMaterialsGoal("copper_dagger", needed={"copper_ore": 60}, now=cycle_now())
         _populate_store(store, repr(goal), char_xp=10_000, gold=0)
         v = goal.value(_gather_state(level=40), GameData(), history=store)
         assert v < SURVIVAL_FLOOR, (v, SURVIVAL_FLOOR)

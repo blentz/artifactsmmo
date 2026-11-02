@@ -30,7 +30,14 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.audit.craft_census import CellResult, craftable_recipes, run_cell
-from artifactsmmo_cli.audit.craft_completeness import CraftCell, craft_grid, event_cells
+from artifactsmmo_cli.audit.craft_completeness import (
+    CensusGearKey,
+    CraftCell,
+    census_gear_table,
+    craft_grid,
+    event_cells,
+    seed_census_gear,
+)
 from artifactsmmo_cli.audit.craft_report import (
     render_backlog,
     render_matrix,
@@ -44,9 +51,33 @@ OUT_DIR = Path("docs/craft_completeness")
 _GD: GameData | None = None
 
 
-def _init_worker(bundle_dict: dict) -> None:
+def _init_worker(bundle_dict: dict,
+                 gear: dict[CensusGearKey, dict[str, str]] | None = None) -> None:
     global _GD
     _GD = GameData.from_cache_bundle(bundle_dict)
+    if gear is not None:
+        seed_census_gear(gear, _GD)
+
+
+def _gear_chain(keys: list[CensusGearKey]) -> dict[CensusGearKey, dict[str, str]]:
+    assert _GD is not None  # set by _init_worker in every pool worker
+    return census_gear_table(keys, _GD)
+
+
+def gear_table(keys: set[CensusGearKey], bundle_dict: dict,
+               max_workers: int) -> dict[CensusGearKey, dict[str, str]]:
+    """Every census loadout `keys` asks, computed ONCE here in the parent (ruling
+    C6-1): one growth chain per `(events, geared)`, the chains in parallel."""
+    chains: dict[tuple[frozenset[str], bool], list[CensusGearKey]] = {}
+    for key in keys:
+        chains.setdefault((key[1], key[2]), []).append(key)
+    table: dict[CensusGearKey, dict[str, str]] = {}
+    with ProcessPoolExecutor(
+        max_workers=max_workers, initializer=_init_worker, initargs=(bundle_dict,)
+    ) as ex:
+        for part in ex.map(_gear_chain, [sorted(c) for c in chains.values()], chunksize=1):
+            table.update(part)
+    return table
 
 
 def _run_one(work: tuple[str, CraftCell]) -> CellResult:
@@ -68,11 +99,15 @@ def main() -> None:
         for cell in craft_grid(recipe, gd) + event_cells(recipe, gd)
     ]
     start = time.monotonic()
+    gear = gear_table({(cell.char_level, cell.events, cell.geared) for _, cell in work},
+                      bundle_dict, max_workers)
+    print(f"census gear: {len(gear)} loadouts in {time.monotonic() - start:.0f}s",
+          file=sys.stderr)
     print(f"census: {len(recipes)} recipes / {len(work)} cells on {max_workers} workers",
           file=sys.stderr)
     results: list[CellResult] = []
     with ProcessPoolExecutor(
-        max_workers=max_workers, initializer=_init_worker, initargs=(bundle_dict,)
+        max_workers=max_workers, initializer=_init_worker, initargs=(bundle_dict, gear)
     ) as ex:
         # chunksize=1: cells are wildly uneven (instant vs 10 s budget wall), so
         # per-cell dispatch keeps every worker busy instead of a slow chunk

@@ -3,7 +3,10 @@ equip them (docs/PLAN_consumable_utility.md increment 5). The batch is
 `potion_supply.potion_batch` over the chosen loadout: the bag's and bank's
 copies first, then crafted runs sized by the supply ladder; the goal is the
 potions in the bag, then ONE equip into the utility slot `utility_slot_for`
-names. Preemptive guard-tier goal (wired in tiers/guards.py)."""
+names. Preemptive guard-tier goal (wired in progression/guards.py)."""
+
+import copy
+from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
@@ -24,9 +27,12 @@ class CraftPotionsGoal(Goal):
 
     def __init__(self, loadout: ChosenLoadout | None = None,
                  game_data: GameData | None = None,
-                 state: WorldState | None = None) -> None:
+                 state: WorldState | None = None, *, now: datetime) -> None:
         self._loadout = loadout
         self._game_data = game_data
+        # The cycle clock (ruling T8b), `SelectionContext.now`: every
+        # `potion_batch` this goal asks reads the instant the guard fired on.
+        self._now = now
         # ── the plan's FROZEN target ────────────────────────────────────────
         # The batch is sized ONCE, against the seed state (`batch_obtain` /
         # `batch_equip`, which the walk decomposes since Phase 2e), so a plan
@@ -37,17 +43,24 @@ class CraftPotionsGoal(Goal):
         # provides — A* exhausted the space with no plan on every cycle it was
         # selected (live: 285/285). Re-targeting happens on the NEXT cycle,
         # whose goal seeds from the post-batch state.
-        self._seed_target = (potion_batch(state, game_data, loadout)
+        self._seed_target = (potion_batch(state, game_data, loadout, now)
                              if state is not None and game_data is not None else None)
         self._seed_equipped = (
             equipped_potion_qty(state, self._seed_target[0])
             if state is not None and self._seed_target is not None else 0)
 
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its clock rebound to `now` (ruling T8b): a cached
+        copy judges satisfaction, and mints its buys, at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._now = now
+        return rebound
+
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
         """The batch this goal will close, read off `potion_batch` — the one
         place that decides it (the guard fires on the same call)."""
-        plan = potion_batch(state, game_data, self._loadout)
+        plan = potion_batch(state, game_data, self._loadout, self._now)
         if plan is None:
             return 0.0
         _code, _runs, equip_qty = plan
@@ -65,7 +78,7 @@ class CraftPotionsGoal(Goal):
         # game data nothing can be sized, so nothing is owed.
         if self._game_data is None:
             return True
-        return potion_batch(state, self._game_data, self._loadout) is None
+        return potion_batch(state, self._game_data, self._loadout, self._now) is None
 
     def batch_equip(self, state: WorldState) -> EquipAction | None:
         """The equip that lands this plan's batch, sized to what is still
@@ -90,7 +103,8 @@ class CraftPotionsGoal(Goal):
         equip = self.batch_equip(state)
         if equip is None or state.inventory.get(equip.code, 0) >= equip.quantity:
             return None
-        return GatherMaterialsGoal(target_item=equip.code, needed={equip.code: equip.quantity})
+        return GatherMaterialsGoal(target_item=equip.code, needed={equip.code: equip.quantity},
+                                   now=self._now)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         # The planner goal-tests via is_satisfied once the slot is topped up.

@@ -18,6 +18,7 @@ becoming decorative:
 """
 
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -128,10 +129,10 @@ def test_the_gate_fires_when_a_routed_skill_loses_its_climb(
     come from a blanket outage."""
     real = skill_grindable_module.has_grind_target
 
-    def closed_for_gear(skill: str, state: WorldState, game_data: GameData) -> bool:
+    def closed_for_gear(skill: str, state: WorldState, game_data: GameData, now: datetime) -> bool:
         if skill == "gearcrafting":
             return False
-        return real(skill, state, game_data)
+        return real(skill, state, game_data, now)
 
     monkeypatch.setattr(skill_grindable_module, "has_grind_target", closed_for_gear)
     broken = scc.run_census(world)

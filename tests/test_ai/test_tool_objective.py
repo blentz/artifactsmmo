@@ -11,21 +11,32 @@ import importlib
 from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
+from math import ceil
 
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
+from artifactsmmo_api_client.models.log_type import LogType
+
+from artifactsmmo_cli.ai.acquisition_cost import (
+    _kind_actions,
+    acquisition_actions,
+    drop_work,
+    drop_work_actions,
+)
 from artifactsmmo_cli.ai.decisions.root import RootWalk, resolve_root
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import fleet_piece_root, with_drop_tool
 from artifactsmmo_cli.ai.drop_leg import DropLeg
 from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.gear_objective_result import GearPiece
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel, no_decline
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel, no_decline
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tool_objective import drop_tool_target, tool_first, tool_target
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_decisions_which_piece import SHIELD, _missing, _resolve
@@ -45,6 +56,15 @@ def _world(*, effect: int = -10, level: int = 1, skill: str = "gearcrafting") ->
     return gd
 
 
+def _demanded(state: WorldState, gd: GameData, objective: GearObjective,
+              fleet: tuple[FleetPiece, ...] = ()) -> SelectionContext:
+    """The cycle's context for `objective`: its skill demand and the tools
+    `T*` the fixed point finds (`objective_demand`, the player's own step),
+    which `tool_first` reads (ruling C1-R)."""
+    return objective_demand(None, state, gd, replace(_ctx(), now=NOW, gear_objective=objective,
+                                                     fleet_pieces=fleet))
+
+
 def test_a_craft_skill_tool_qualifies_by_its_effect() -> None:
     gd = _world()
     state = make_state(level=15)
@@ -54,7 +74,8 @@ def test_a_craft_skill_tool_qualifies_by_its_effect() -> None:
 
 def test_a_climb_first_fetches_its_tool() -> None:
     gd = _world()
-    resolution = _resolve(make_state(level=15), gd, _missing(SHIELD))
+    state = make_state(level=15)
+    resolution = _resolve(state, gd, _missing(SHIELD), ctx=_demanded(state, gd, _missing(SHIELD)))
     assert resolution.root == ObtainItem(HAMMER, 1)
     assert resolution.blocked_target == "iron_shield"
 
@@ -66,7 +87,8 @@ def test_an_owned_tool_is_never_reacquired() -> None:
                   make_state(level=15, inventory={HAMMER: 1}),
                   make_state(level=15, equipment={"weapon_slot": HAMMER})):
         assert tool_target("gearcrafting", owned, gd, _ctx(), NOW) is None
-        assert _resolve(owned, gd, _missing(SHIELD)).root == climb
+        assert _resolve(owned, gd, _missing(SHIELD),
+                        ctx=_demanded(owned, gd, _missing(SHIELD))).root == climb
 
 
 def test_a_tool_above_the_level_or_without_effect_is_no_target() -> None:
@@ -107,20 +129,27 @@ def test_the_better_unowned_tool_is_fetched_over_a_worse_owned_one() -> None:
 
 
 def test_the_climb_is_substituted_by_its_tool() -> None:
-    gd = _world()
-    state = make_state(level=15)
-    assert tool_first(ReachSkillLevel(skill="gearcrafting", level=2), state, gd, _ctx(), NOW, no_decline) \
-        == ObtainItem(HAMMER, 1)
+    """The tool is the cycle's own for the climbed skill (`ctx.objective_tools`,
+    ruling C1-R): a tool another skill climbs with is not fetched for it, and
+    nothing is looked up a second time."""
+    climb = ReachSkillLevel(skill="gearcrafting", level=2)
+    tools = replace(_ctx(), objective_tools={"gearcrafting": HAMMER})
+    assert tool_first(climb, tools, no_decline) == ObtainItem(HAMMER, 1)
+    other = replace(_ctx(), objective_tools={"mining": HAMMER})
+    assert tool_first(climb, other, no_decline) == climb
+    assert tool_first(climb, _ctx(), no_decline) == climb
 
 
 def test_a_crafters_climb_in_front_of_a_fleet_piece_fetches_the_tool() -> None:
     gd = _world()
     piece = FleetPiece(code="iron_shield", skill="gearcrafting", level=10, gain=Fraction(1))
     state = make_state(level=15)
-    assert fleet_piece_root(piece, state, gd, _ctx(), RootWalk(), None) == ObtainItem(HAMMER, 1)
+    held = _missing()
+    ctx = _demanded(state, gd, held, (piece,))
+    assert fleet_piece_root(piece, state, gd, ctx, RootWalk(), None) == ObtainItem(HAMMER, 1)
     banked = replace(state, bank_items={HAMMER: 1})
-    assert fleet_piece_root(piece, banked, gd, _ctx(), RootWalk(), None) == ReachSkillLevel(
-        skill="gearcrafting", level=2)
+    assert fleet_piece_root(piece, banked, gd, _demanded(banked, gd, held, (piece,)), RootWalk(),
+                            None) == ReachSkillLevel(skill="gearcrafting", level=2)
 
 
 def test_a_fishing_climb_fetches_the_fishing_net() -> None:
@@ -130,9 +159,12 @@ def test_a_fishing_climb_fetches_the_fishing_net() -> None:
         crafting_skill="weaponcrafting", crafting_level=1)}
     gd._crafting_recipes = {**gd._crafting_recipes, "fishing_net": {"ash_plank": 4}}
     climb = ReachSkillLevel(skill="fishing", level=2)
-    assert tool_first(climb, make_state(level=15), gd, _ctx(), NOW, no_decline) == ObtainItem("fishing_net", 1)
-    assert tool_first(climb, make_state(level=15, bank_items={"fishing_net": 1}), gd,
-                      _ctx(), NOW, no_decline) == climb
+    for state, tool in ((make_state(level=15), "fishing_net"),
+                        (make_state(level=15, bank_items={"fishing_net": 1}), None)):
+        found = tool_target("fishing", state, gd, _ctx(), NOW)
+        assert found == tool
+        tools = replace(_ctx(), objective_tools={} if found is None else {"fishing": found})
+        assert tool_first(climb, tools, no_decline) == (climb if tool is None else ObtainItem(tool, 1))
 
 
 def _refuse_tool(root):
@@ -144,18 +176,23 @@ def test_a_declined_tool_step_falls_back_to_the_plain_climb() -> None:
     the root is the climb, and the piece is not declined for its tool."""
     gd = _world()
     state = make_state(level=15)
-    resolution = _resolve(state, gd, _missing(SHIELD), decline={ObtainItem(HAMMER, 1): "no plan"})
+    ctx = _demanded(state, gd, _missing(SHIELD))
+    resolution = _resolve(state, gd, _missing(SHIELD), decline={ObtainItem(HAMMER, 1): "no plan"},
+                          ctx=ctx)
     assert resolution.root == ReachSkillLevel(skill="gearcrafting", level=2)
     assert resolution.declined == ()
-    assert tool_first(ReachSkillLevel(skill="gearcrafting", level=2), state, gd, _ctx(), NOW,
+    assert tool_first(ReachSkillLevel(skill="gearcrafting", level=2), ctx,
                       _refuse_tool) == ReachSkillLevel(skill="gearcrafting", level=2)
 
 
 def test_a_declined_tool_step_leaves_a_fleet_climb_plain() -> None:
     gd = _world()
     piece = FleetPiece(code="iron_shield", skill="gearcrafting", level=10, gain=Fraction(1))
-    walk = RootWalk(step_decline=_refuse_tool, now=NOW)
-    assert fleet_piece_root(piece, make_state(level=15), gd, _ctx(), walk, None) == ReachSkillLevel(
+    walk = RootWalk(step_decline=_refuse_tool)
+    state = make_state(level=15)
+    ctx = _demanded(state, gd, _missing(), (piece,))
+    assert ctx.objective_tools == {"gearcrafting": HAMMER}
+    assert fleet_piece_root(piece, state, gd, ctx, walk, None) == ReachSkillLevel(
         skill="gearcrafting", level=2)
 
 
@@ -207,6 +244,12 @@ def _learned(k: Fraction = Fraction(1, 100)):
     return replace(_ctx(), learned_drops=LearnedDrops((), (), k))
 
 
+def _gather() -> Fraction:
+    """One gather in planner actions: its measured seconds over a planner
+    action's (ruling "seconds inside", 2026-10-31)."""
+    return _kind_actions(LogType.GATHERING, _learned())
+
+
 def _counting(monkeypatch, target: str) -> list[object]:
     """Record every call to `target` (a dotted path) and let it run."""
     module, name = target.rsplit(".", 1)
@@ -235,7 +278,7 @@ def test_the_saving_is_read_on_top_of_the_worn_prospecting() -> None:
     gd = _with(_pearl_world(), old_charm=_artifact("old_charm", 50))
     state = make_state(level=15, prospecting=50,
                        equipment={**make_state().equipment, "artifact1_slot": "old_charm"})
-    assert drop_work_actions(PEARLS, state, gd, _learned()) == 4000
+    assert drop_work_actions(PEARLS, state, gd, _learned()) == 4000 * _gather()
     assert drop_tool_target(PEARLS, state, gd, _learned()) == CHARM
 
 
@@ -301,11 +344,13 @@ def test_the_scan_walks_only_the_items_that_would_be_worn(monkeypatch) -> None:
 
 def test_the_strongest_item_that_pays_for_itself_is_named() -> None:
     """A stronger charm too dear to pay for itself is passed over for a weaker,
-    cheap one; when both pay, the stronger wins."""
+    cheap one; when both pay, the stronger wins. (5,000 planks: a craft run
+    is its recorded 5.5 s, review I3, not the logs' batched 13.2 s mean, and
+    2,500 planks now pay for the charm.)"""
     gd = _with(_pearl_world(), great_charm=ItemStats(
         code="great_charm", level=1, type_="artifact", prospecting=100,
         crafting_skill="weaponcrafting", crafting_level=1))
-    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 2500}}
+    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 5000}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == CHARM
     gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 1}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == "great_charm"
@@ -335,10 +380,10 @@ def test_the_saving_is_the_one_drop_models() -> None:
     """`drop_work_actions` reads `ctx.drops()` at the leg's loadout: 20 pearls
     are 6,000 gathers with nothing worn and 4,000 wearing the +50 charm."""
     gd = _pearl_world()
-    assert drop_work_actions(PEARLS, make_state(level=15), gd, _learned()) == 6000
+    assert drop_work_actions(PEARLS, make_state(level=15), gd, _learned()) == 6000 * _gather()
     wearing = make_state(level=15, prospecting=50,
                          equipment={**make_state().equipment, "artifact1_slot": CHARM})
-    assert drop_work_actions(PEARLS, wearing, gd, _learned()) == 4000
+    assert drop_work_actions(PEARLS, wearing, gd, _learned()) == 4000 * _gather()
 
 
 def test_with_drop_tool_offers_the_item_unless_its_step_is_declined() -> None:
@@ -410,9 +455,9 @@ def test_a_fleet_pieces_craft_fetches_the_prospecting_item_first() -> None:
     gd = _pearl_world()
     piece = FleetPiece(code="pearl_ring", skill="gearcrafting", level=1, gain=Fraction(1))
     state = make_state(level=15)
-    assert fleet_piece_root(piece, state, gd, _learned(), RootWalk(now=NOW), None) == \
+    assert fleet_piece_root(piece, state, gd, _learned(), RootWalk(), None) == \
         ObtainItem(CHARM, 1)
-    walk = RootWalk(step_decline={ObtainItem(CHARM, 1): "no plan"}.get, now=NOW)
+    walk = RootWalk(step_decline={ObtainItem(CHARM, 1): "no plan"}.get)
     assert fleet_piece_root(piece, state, gd, _learned(), walk, None) == ObtainItem("pearl_ring", 1)
 
 
@@ -426,8 +471,11 @@ def test_the_walk_prices_a_gather_at_the_loadout_it_is_made_in() -> None:
     held = make_state(level=15, inventory={CHARM: 1})
     plain = acquisition_actions("pearl_ring", 1, bare, gd, _learned(), equip=False)
     charmed = acquisition_actions("pearl_ring", 1, held, gd, _learned(), equip=False)
-    assert plain - charmed == 2000
-    assert drop_work_actions(PEARLS, held, gd, _learned()) == 4000
+    # Priced at a gather's measured seconds (ruling "seconds inside"), each
+    # whole price rounded up once.
+    assert plain - charmed in (ceil(6000 * _gather()) - ceil(4000 * _gather()) + d
+                               for d in (-1, 0, 1))
+    assert drop_work_actions(PEARLS, held, gd, _learned()) == 4000 * _gather()
 
 
 def test_a_scan_is_reused_only_for_the_very_inputs_it_read(tmp_path, monkeypatch) -> None:

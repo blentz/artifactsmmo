@@ -96,8 +96,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_sibling_census import (
     BlockedTargetVerdict,
@@ -334,7 +334,7 @@ def _print_root_section(
           "existing route.")
     print("provenance caveat: resolve_root's history argument here is the on-disk "
           "LearningStore, while the sensed player itself planned against an "
-          "in-memory store -- gear_target_tier reads the on-disk one, so this is "
+          "in-memory store -- the gear objective reads the on-disk one, so this is "
           "not a defect, but the two are not the same object.")
     print(f"{len(rows)} candidate root(s) (resolution.root + resolution.alternatives)")
     print(f"{len(named)} name an item")
@@ -345,7 +345,7 @@ def _print_root_section(
     print(f"{len(load_bearing)} load-bearing")
     if chosen is None:
         print("chosen root: None (resolve_root returned no root this cycle -- the "
-              "CanIClearMyTier wall case)")
+              "cycle has no gear objective)")
         _print_blocked_target_line(blocked)
         return
     print(f"chosen root: {chosen.root_repr}")

@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.inventory_keep import keep_owned
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data
 
 BANK_LOC = (4, 1)
 WORKSHOP_LOC = (1, 1)
@@ -55,7 +55,7 @@ def test_delete_only_when_worthless(bank_ok, future_value):
 
 def _gd(*, item_stats=None, recipes=None, workshops=None, bank_location=BANK_LOC,
         bank_capacity=50) -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = item_stats or {}
     gd._crafting_recipes = recipes or {}
     gd._workshop_locations = workshops or {}

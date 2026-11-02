@@ -19,7 +19,7 @@ property (an equipped item with zero spares/bank counts as 1).
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
 from formal.diff.oracle_client import run_oracle
 
 CODE = "x"

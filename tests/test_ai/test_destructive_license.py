@@ -30,9 +30,9 @@ from artifactsmmo_cli.ai.destructive_license import (
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from tests.test_ai.fixtures import make_state
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _ctx(**kw: object) -> SelectionContext:
@@ -72,7 +72,7 @@ def test_the_working_tool_gets_no_destructive_action_at_all():
         DeleteItemAction(code="copper_axe", quantity=1, cost_weight=25.0),
         RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1)),
         NpcSellAction(npc_code="merchant", item_code="copper_axe", quantity=1,
-                      npc_location=(1, 1)),
+                      npc_location=(1, 1), now=cycle_now()),
     ]
     assert license_destructive_actions(pool, state, gd, _ctx()) == []
     assert licensed_quantity("copper_axe", state, gd, _ctx()) == 0
@@ -121,7 +121,7 @@ def test_an_unheld_code_is_licensed_for_nothing():
     gd = _gd()
     state = make_state(level=10, inventory={})
     sell = NpcSellAction(npc_code="merchant", item_code="copper_bar", quantity=1,
-                         npc_location=(1, 1))
+                         npc_location=(1, 1), now=cycle_now())
     assert licensed_quantity("copper_bar", state, gd, _ctx()) == 0
     assert license_destructive_actions([sell], state, gd, _ctx()) == []
 
@@ -156,15 +156,14 @@ def test_the_factory_no_longer_carries_a_code_set_protection():
     assert "protected_gear" not in inspect.signature(build_actions).parameters
     gd = _gd()
     state = make_state(level=10, inventory={"copper_axe": 1})
-    objective = CharacterObjective(
-        target_char_level=50, target_skill_levels={}, target_gear={},
-        _game_data=gd, target_tools={"woodcutting": "copper_axe"})
+    objective = CharacterObjective.from_game_data(gd)
     recycles = {a.code for a in build_actions(gd, state, objective,
                                               bank_accessible=True,
-                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                              now=cycle_now())
                 if isinstance(a, RecycleAction)}
-    # The axe is the objective's TOOL target — the old code-set skipped its Recycle
-    # (and hoarded all 18 copies). The menu now carries it; the licence decides.
+    # The axe was the old tool sheet's target — the old code-set skipped its
+    # Recycle (and hoarded all 18 copies). The menu carries it; the licence decides.
     assert "copper_axe" in recycles
 
 
@@ -295,7 +294,7 @@ def test_npc_sell_keeps_the_bag_side_rule():
     state = make_state(level=10, inventory={}, bank_items={"fishing_net": 7})
     ctx = _ctx()
     pool = [NpcSellAction(npc_code="merchant", item_code="fishing_net",
-                          quantity=1, npc_location=(1, 1))]
+                          quantity=1, npc_location=(1, 1), now=cycle_now())]
     assert license_destructive_actions(pool, state, gd, ctx) == []
 
 
@@ -313,5 +312,5 @@ def test_npc_sell_survives_licensing_for_a_bag_side_surplus():
     ctx = _ctx()
     assert licensed_quantity("copper_axe", state, gd, ctx) == 17
     pool = [NpcSellAction(npc_code="merchant", item_code="copper_axe", quantity=1,
-                          npc_location=(1, 1))]
+                          npc_location=(1, 1), now=cycle_now())]
     assert license_destructive_actions(pool, state, gd, ctx) == pool

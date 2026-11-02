@@ -23,7 +23,10 @@ All other base combat stats are level-invariant:
 
 This is NOT a 49-point physical capture (Robby is level 6; unequipping at 49
 levels is impractical). It is a fully-derived table from the formula above,
-live-validated at level 6 (algebraic capture) and level 1 (game start).
+live-validated at level 6 (algebraic capture) and level 1 (game start), and
+on 2026-10-31 by read-only algebraic capture of all five fleet characters at
+levels 36-41 (`LIVE_ANCHORS_2026_10_31`: initiative 100 and max_hp
+115 + 5 * level on every one).
 
 Usage::
 
@@ -57,6 +60,92 @@ LIVE_ANCHOR_LEVEL_6 = {
     "source": "algebraic_subtraction_from_equipped_character_stats",
     "captured_at": "2026-06-20T15:31:40.332273+00:00",
 }
+# Read-only algebraic captures, 2026-10-31: each live sheet (GET
+# /characters/{name}) less the catalogue stats (GET /items/{code}) of every
+# worn non-utility piece, `worn` in slot order (weapon, rune, shield, helmet,
+# body, legs, boots, ring1, ring2, amulet, artifacts, bag). Each value is
+# written as measured, per character: `sheet` is the live total, `gear` the
+# worn pieces' sum, and the base the difference, for initiative, max_hp, crit
+# and attack and resistance per element, so every subtraction can be
+# reproduced from the record. Robby's and HAL's entries were re-read the same
+# evening (both had changed gear since the first read, 6ae1acb9); the bases
+# are unchanged.
+LIVE_ANCHORS_2026_10_31 = [
+    {"character": "Robby", "level": 41, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "worn": ["death_knight_sword", "lifesteal_rune", "mithril_shield", "lich_crown",
+              "malefic_armor", "skeleton_pants", "lizard_boots", "celest_ring",
+              "ring_of_chance", "dreadful_amulet", "malefic_crystal", "lich_race_medal",
+              "lost_world_map", "satchel"],
+     "sheet": {"initiative": 330, "max_hp": 910, "critical_strike": 38,
+               "attack": {"fire": 37, "earth": 37, "water": 0, "air": 0},
+               "resistance": {"fire": 39, "earth": 0, "water": 0, "air": 23}},
+     "gear": {"initiative": 230, "max_hp": 590, "critical_strike": 38,
+              "attack": {"fire": 37, "earth": 37, "water": 0, "air": 0},
+              "resistance": {"fire": 39, "earth": 0, "water": 0, "air": 23}},
+     "initiative": 100, "max_hp": 320, "critical_strike": 0,
+     "attack": {"fire": 0, "earth": 0, "water": 0, "air": 0},
+     "resistance": {"fire": 0, "earth": 0, "water": 0, "air": 0}},
+    {"character": "R2D2", "level": 37, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "worn": ["dreadful_battleaxe", "lifesteal_rune", "slime_shield", "lich_crown",
+              "bandit_armor", "royal_skeleton_pants", "gold_boots", "ring_of_chance",
+              "ring_of_chance", "corrupted_stone_amulet", "lich_race_trophy",
+              "lich_race_medal"],
+     "sheet": {"initiative": 330, "max_hp": 1040, "critical_strike": 28,
+               "attack": {"fire": 0, "earth": 20, "water": 65, "air": 0},
+               "resistance": {"fire": 7, "earth": 28, "water": 20, "air": 15}},
+     "gear": {"initiative": 230, "max_hp": 740, "critical_strike": 28,
+              "attack": {"fire": 0, "earth": 20, "water": 65, "air": 0},
+              "resistance": {"fire": 7, "earth": 28, "water": 20, "air": 15}},
+     "initiative": 100, "max_hp": 300, "critical_strike": 0,
+     "attack": {"fire": 0, "earth": 0, "water": 0, "air": 0},
+     "resistance": {"fire": 0, "earth": 0, "water": 0, "air": 0}},
+    {"character": "C3P0", "level": 36, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "worn": ["strangold_sword", "lifesteal_rune", "goblin_guard_shield",
+              "royal_skeleton_helmet", "bandit_armor", "royal_skeleton_pants",
+              "adventurer_boots", "ring_of_chance", "ring_of_the_adept", "skull_amulet",
+              "lich_race_medal"],
+     "sheet": {"initiative": 250, "max_hp": 945, "critical_strike": 14,
+               "attack": {"fire": 45, "earth": 0, "water": 0, "air": 40},
+               "resistance": {"fire": 15, "earth": 8, "water": 8, "air": 15}},
+     "gear": {"initiative": 150, "max_hp": 650, "critical_strike": 14,
+              "attack": {"fire": 45, "earth": 0, "water": 0, "air": 40},
+              "resistance": {"fire": 15, "earth": 8, "water": 8, "air": 15}},
+     "initiative": 100, "max_hp": 295, "critical_strike": 0,
+     "attack": {"fire": 0, "earth": 0, "water": 0, "air": 0},
+     "resistance": {"fire": 0, "earth": 0, "water": 0, "air": 0}},
+    {"character": "HAL", "level": 39, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "worn": ["elderwood_staff", "lifesteal_rune", "slime_shield", "lich_crown",
+              "bandit_armor", "steel_legs_armor", "snakeskin_boots", "ring_of_chance",
+              "ring_of_chance", "skull_amulet", "lich_race_medal", "satchel"],
+     "sheet": {"initiative": 330, "max_hp": 890, "critical_strike": 23,
+               "attack": {"fire": 40, "earth": 0, "water": 40, "air": 0},
+               "resistance": {"fire": 7, "earth": 13, "water": 27, "air": 15}},
+     "gear": {"initiative": 230, "max_hp": 580, "critical_strike": 23,
+              "attack": {"fire": 40, "earth": 0, "water": 40, "air": 0},
+              "resistance": {"fire": 7, "earth": 13, "water": 27, "air": 15}},
+     "initiative": 100, "max_hp": 310, "critical_strike": 0,
+     "attack": {"fire": 0, "earth": 0, "water": 0, "air": 0},
+     "resistance": {"fire": 0, "earth": 0, "water": 0, "air": 0}},
+    {"character": "Lor", "level": 36, "captured_at": "2026-10-31",
+     "source": "algebraic_subtraction_from_equipped_character_stats",
+     "worn": ["dreadful_battleaxe", "lifesteal_rune", "slime_shield", "lich_crown",
+              "bandit_armor", "royal_skeleton_pants", "lizard_boots", "royal_skeleton_ring",
+              "ring_of_chance", "corrupted_stone_amulet", "lich_race_trophy",
+              "lich_race_medal", "satchel"],
+     "sheet": {"initiative": 410, "max_hp": 1075, "critical_strike": 24,
+               "attack": {"fire": 0, "earth": 20, "water": 65, "air": 0},
+               "resistance": {"fire": 15, "earth": 20, "water": 20, "air": 15}},
+     "gear": {"initiative": 310, "max_hp": 780, "critical_strike": 24,
+              "attack": {"fire": 0, "earth": 20, "water": 65, "air": 0},
+              "resistance": {"fire": 15, "earth": 20, "water": 20, "air": 15}},
+     "initiative": 100, "max_hp": 295, "critical_strike": 0,
+     "attack": {"fire": 0, "earth": 0, "water": 0, "air": 0},
+     "resistance": {"fire": 0, "earth": 0, "water": 0, "air": 0}},
+]
 
 _DEFAULT_OUTPUT = Path(__file__).resolve().parent / "character_base_stats.json"
 
@@ -87,7 +176,7 @@ def generate_table() -> dict[str, Any]:
                 "NOT a 49-point physical capture."
             ),
             "formula": "max_hp = 115 + 5 * level",
-            "live_anchors": [LIVE_ANCHOR_LEVEL_1, LIVE_ANCHOR_LEVEL_6],
+            "live_anchors": [LIVE_ANCHOR_LEVEL_1, LIVE_ANCHOR_LEVEL_6, *LIVE_ANCHORS_2026_10_31],
             "combat_stats": {
                 "attack": "zero at all levels (all attack comes from gear)",
                 "resistance": "zero at all levels (all resistance comes from gear)",

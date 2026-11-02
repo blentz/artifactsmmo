@@ -1,12 +1,12 @@
 """Tier-3 → planner bridge: map the strategy's chosen step to a parameterized
 existing goal.
 
-Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
+Lives above goals/ and progression/ (imports both) to avoid the goals→progression cycle."""
 
 import time
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime
 
 from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_targets
 from artifactsmmo_cli.ai.actions.base import Action
@@ -93,6 +93,33 @@ from artifactsmmo_cli.ai.obtain_item_routing import is_missing_piece
 from artifactsmmo_cli.ai.planner import _SEARCH_BUDGET_SECONDS, GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import guard_loadout
+from artifactsmmo_cli.ai.progression.guards import (
+    GuardKind,
+    SelectionContext,
+    active_guards,
+    deposit_context,
+    used_fraction,
+)
+from artifactsmmo_cli.ai.progression.means import (
+    SELL_PRESSURE_FRACTION,
+    MeansKind,
+    active_means,
+)
+from artifactsmmo_cli.ai.progression.meta_goal import (
+    MetaGoal,
+    ObtainItem,
+    ReachCharLevel,
+    ReachFleetOutcome,
+    ReachSkillLevel,
+    ReachTaskOutcome,
+)
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective_needs import (
+    NeedSet,
+    link_demand,
+    objective_needs,
+)
+from artifactsmmo_cli.ai.progression.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.raid_participation import raid_survivable_pure
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.requirement_projections import demand_set, requirement_closure
@@ -103,33 +130,6 @@ from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
-from artifactsmmo_cli.ai.tiers.guards import (
-    GuardKind,
-    SelectionContext,
-    active_guards,
-    deposit_context,
-    used_fraction,
-)
-from artifactsmmo_cli.ai.tiers.means import (
-    SELL_PRESSURE_FRACTION,
-    MeansKind,
-    active_means,
-)
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    MetaGoal,
-    ObtainItem,
-    ReachCharLevel,
-    ReachFleetOutcome,
-    ReachSkillLevel,
-    ReachTaskOutcome,
-)
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.objective_needs import (
-    NeedSet,
-    link_demand,
-    objective_needs,
-)
-from artifactsmmo_cli.ai.tiers.taskmaster_choice import choose_taskmaster
 from artifactsmmo_cli.ai.utility_slot import already_provisioned
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -352,7 +352,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # cannot stock for different potions or fights.
         return CraftPotionsGoal(
             loadout=guard_loadout(ctx.loadout, ctx.fight_monster),
-            game_data=game_data, state=state)
+            game_data=game_data, state=state, now=ctx.now)
     if kind is GuardKind.PARTY_JOIN:
         if ctx.party_hold is None:
             raise ValueError("PARTY_JOIN mapped but no lease names this character")
@@ -511,7 +511,7 @@ def objective_step_goal(
         # now the `Decision` graph in `decisions/obtain_item.py`, chained
         # from `obtain_item_decision` -- see that module and
         # `.superpowers/sdd/PLAN_goal_decision_graph/progress.md` (PF-2) for
-        # why `CanICraftCurrentTier` (the crafting-skill gate) runs BEFORE
+        # why `CanICraftThisAtAll` (the crafting-skill gate) runs BEFORE
         # `DoesTheRecipeNeedAMonsterDrop`, and `decision.py` for `resolve_node`.
         #
         # `node` is annotated as the full `Decision[Goal] | Goal | None` union
@@ -587,7 +587,7 @@ def objective_step_goal(
         # carries the skill AND the target level (current + 1, re-derived every
         # cycle by the graph), so the mapping is total: `ReachSkillGoal` aims
         # `LevelSkill` at that skill, exactly as `decisions/obtain_item.
-        # CanICraftCurrentTier` does for a skill-gated craft one layer down.
+        # CanICraftThisAtAll` does for a skill-gated craft one layer down.
         return ReachSkillGoal(skill_name=step.skill, target_level=step.level)
     if isinstance(step, ReachTaskOutcome):
         # Phase 5-2c-iii-c: the task objective's step. A worthless task with a
@@ -628,7 +628,7 @@ def objective_step_goal(
             return None
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
-            return _pursue_goal(state, game_data)
+            return _pursue_goal(state, game_data, ctx.now)
         loadout = _fight_step_loadout(state, game_data, ctx, step.task_code)
         if loadout is not None:
             no_room = refused_monster(loadout)
@@ -696,7 +696,7 @@ def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,
         if not supply_due(ctx) or target is None or target[0] != step.code:
             return None
         item_code, quantity, demand = target
-        goal = SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
+        goal = SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand, now=ctx.now)
     else:
         if not turn_in_due(ctx):
             return None
@@ -777,7 +777,7 @@ def raid_may_fight(objective: GearObjective | None, chosen_root: MetaGoal | None
     return any(item in closure for item, *_ in boss_drops)
 
 
-def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
+def _pursue_goal(state: WorldState, game_data: GameData, now: datetime) -> Goal:
     """The held items task's work: the task skill's grind while it gates the
     task item, else the task pursuit batch."""
     req = task_requirement(state, game_data)
@@ -799,7 +799,7 @@ def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
         # cycles of Wait. Decomposition sizes the gathers and withdraws banked
         # stock; the trade follows once the batch is held.
         return GatherMaterialsGoal(target_item=state.task_code,
-                                   needed={state.task_code: batch})
+                                   needed={state.task_code: batch}, now=now)
     return PursueTaskGoal(task_code=state.task_code,
                           initial_progress=state.task_progress,
                           batch=batch)
@@ -1018,8 +1018,7 @@ class StrategyArbiter:
         # that actually touch event-only content are affected -- content with a
         # permanent spawn is never gated, and a plan with no event content at all
         # short-circuits before any cost is summed.
-        if plan and not plan_fits_event_window(plan, state, game_data,
-                                               datetime.now(timezone.utc)):
+        if plan and not plan_fits_event_window(plan, state, game_data, ctx.now):
             plan = []
         self.goals_tried.append({
             "goal": repr(goal),
@@ -1345,7 +1344,8 @@ class StrategyArbiter:
         # not immediately re-equipped into the empty slot — the
         # withdraw/re-equip livelock this repo already knows the shape of.
         turn_in_reserved = (
-            {ctx.turn_in.currency} if ctx.turn_in is not None else frozenset[str]())
+            {ctx.turn_in.currency} if ctx.turn_in is not None and ctx.turn_in.ready
+            else frozenset[str]())
         equip_fills = empty_slot_rank_fills(
             state, game_data,
             frozenset(task_reserved_demand(state, game_data)) | turn_in_reserved)
@@ -1457,8 +1457,8 @@ class StrategyArbiter:
         # chain (GatherMaterials/UpgradeEquipment) get tried even when the
         # top combat step can't plan.
         # WHETHER THERE IS A REAL OBJECTIVE STEP AT ALL. `chosen_root is None`
-        # is the walk's WALL arm (`CanIClearMyTier`): no gear work and nothing
-        # winnable in the band. `_resolve_step_goal` still walks the fallbacks
+        # is the walk's WALL arm (`WhichPieceIsNext` with no gear objective: no
+        # achievable loadout pays XP anywhere). `_resolve_step_goal` still walks the fallbacks
         # and may return one, but a fallback promoted because there was no step
         # is not an objective step — filing it at BAND_STEP would let it claim a
         # priority the walk explicitly declined to give anything.

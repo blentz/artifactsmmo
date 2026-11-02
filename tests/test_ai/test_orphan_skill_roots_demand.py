@@ -6,12 +6,19 @@ cycles each for 0 character XP while neither needed a fish. Since 2026-10-08
 ("Only when demanded") the same holds for EVERY skill, cooking included.
 """
 
+from dataclasses import replace
+from datetime import UTC, datetime
+
+import pytest
+
+from artifactsmmo_cli.ai import skill_grindable
 from artifactsmmo_cli.ai.decisions.root import _orphan_skill_roots
-from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 from tests.test_ai.test_gather_demand import _gd
 
 _BOOTS = ObtainItem(code="iron_boots", quantity=1)
@@ -33,7 +40,7 @@ class TestGatheringSkillNeedsDemand:
         # Vacuity guard: mining has a genuinely open, XP-positive
         # rung at 10->11 — `iron_rocks` gathers at mining@10, right at the
         # character's current level.
-        assert skill_is_grindable("mining", 11, state, gd) is True
+        assert skill_is_grindable("mining", 11, state, gd, now=cycle_now()) is True
         # Nothing demands mining, so `gather_demand` is
         # silent for it even with a root on offer (`iron_boots` needs
         # gearcrafting, not mining, at this character's level).
@@ -65,7 +72,7 @@ class TestGatheringSkillNeedsDemand:
         """HAL's shape: a root's closure bottoms out in a leaf out of reach."""
         gd = self._gd_with_open_mining_floor()
         state = make_state(level=20, skills={"mining": 1, "cooking": 1})
-        assert skill_is_grindable("mining", 2, state, gd) is True
+        assert skill_is_grindable("mining", 2, state, gd, now=cycle_now()) is True
         assert "mining" in _skills(state, gd, [_BOOTS])
 
     def test_an_admitted_skill_emits_the_demanded_level(self):
@@ -98,6 +105,24 @@ class TestGatheringSkillNeedsDemand:
         gd.world.workshop_locations["cooking"] = (0, 2)
         gd._crafting_recipes["cooked_gudgeon"] = {"gudgeon": 1}
         state = make_state(level=20, skills={"mining": 10, "cooking": 1})
-        assert skill_is_grindable("cooking", 2, state, gd) is True
+        assert skill_is_grindable("cooking", 2, state, gd, now=cycle_now()) is True
         assert _orphan_demand(state, gd, []) == {}
         assert "cooking" not in _skills(state, gd, [])
+
+
+def test_the_orphan_climbs_are_asked_on_the_contexts_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T8b: an orphan skill's open rung is asked at the cycle's
+    instant (`ctx.now`), never at the wall clock."""
+    instant = datetime(2026, 1, 1, 12, tzinfo=UTC)
+    seen: list[datetime] = []
+    real = skill_grindable.skill_is_grindable
+
+    def spy(skill: str, level: int, state: WorldState, gd: GameData, now: datetime) -> bool:
+        seen.append(now)
+        return real(skill, level, state, gd, now)
+
+    monkeypatch.setattr(skill_grindable, "skill_is_grindable", spy)
+    gd = TestGatheringSkillNeedsDemand()._gd_with_open_mining_floor()
+    state = make_state(level=20, skills={"mining": 1, "cooking": 1})
+    _orphan_skill_roots(state, gd, [_BOOTS], replace(NO_DROPS_CONTEXT, now=instant))
+    assert seen and set(seen) == {instant}

@@ -10,7 +10,7 @@ from fractions import Fraction
 
 import pytest
 
-from artifactsmmo_cli.ai.tiers.synergy_core import (
+from artifactsmmo_cli.ai.progression.synergy_core import (
     S_MIN,
     TOP_QUANTILE,
     expected_pool_synergy,

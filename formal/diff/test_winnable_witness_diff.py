@@ -32,7 +32,7 @@ This is the ANTI-RIGGING gate. For every witness row it asserts:
      table the kernel decides is the one pinned here.
 
 Skips cleanly when the real fixtures are absent (CI / `formal/gate.sh` stay
-green until the data is captured), mirroring `test_winnable_across_band_diff.py`.
+green until the data is captured).
 """
 from __future__ import annotations
 
@@ -62,23 +62,21 @@ from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.fight_odds_core import fight_odds, win_probability
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from formal.diff.test_winnable_across_band_diff import (
+from formal.sim.generate_lean_fixture import _acquirability_closure
+from formal.sim.winnable_witness import (
     BAND_HI,
     BAND_LO,
     BASE_STATS_PATH,
     SNAPSHOT_PATH,
-    _game_data_from_snapshot,
-    _item_stats_from_snapshot,
-    _snapshot_has_combat_fields,
-)
-from formal.sim.generate_lean_fixture import _acquirability_closure
-from formal.sim.winnable_witness import (
     WITNESS_THETA,
     WitnessRow,
     _base_world_state,
     build_witness_row,
     build_witness_table,
     crit_bound,
+    game_data_from_snapshot,
+    item_stats_from_snapshot,
+    snapshot_has_combat_fields,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "Formal/Liveness/GameDataFixture.lean"
@@ -135,13 +133,13 @@ def _load_real_inputs() -> tuple[dict[str, dict[str, Any]], dict[str, ItemStats]
     if not BASE_STATS_PATH.exists():
         return None
     snapshot = json.loads(SNAPSHOT_PATH.read_text())
-    if not _snapshot_has_combat_fields(snapshot):
+    if not snapshot_has_combat_fields(snapshot):
         return None
     base_stats = json.loads(BASE_STATS_PATH.read_text()).get("base_stats", {})
     if not base_stats:
         return None
-    stats_by_code = _item_stats_from_snapshot(snapshot)
-    game_data = _game_data_from_snapshot(snapshot, stats_by_code)
+    stats_by_code = item_stats_from_snapshot(snapshot)
+    game_data = game_data_from_snapshot(snapshot, stats_by_code)
     return base_stats, stats_by_code, game_data
 
 
@@ -154,8 +152,8 @@ def test_witness_rows_pin_projection_and_verdict() -> None:
     if loaded is None:
         pytest.skip(
             "real fixtures absent — capture character_base_stats.json and "
-            "re-snapshot game_data_snapshot.json (see "
-            "test_winnable_across_band_diff.py module docstring)."
+            "re-snapshot game_data_snapshot.json (formal/sim/capture_base_stats.py, "
+            "formal/sim/snapshot_game_data.py)."
         )
     base_stats, stats_by_code, game_data = loaded
     rows = build_witness_table(base_stats, stats_by_code, game_data)
@@ -288,7 +286,7 @@ def test_acquirable_rows_pin_fight_odds() -> None:
     `WITNESS_THETA`, and the fixture carries exactly those scalars."""
     loaded = _load_real_inputs()
     if loaded is None:
-        pytest.skip("real fixtures absent (see test_winnable_across_band_diff.py).")
+        pytest.skip("real fixtures absent (formal/sim/capture_base_stats.py, snapshot_game_data.py).")
     base_stats, stats_by_code, game_data = loaded
     _gather, _drops, cert = _acquirability_closure(json.loads(SNAPSHOT_PATH.read_text()))
     acq_stats = {c: st for c, st in stats_by_code.items() if c in set(cert)}

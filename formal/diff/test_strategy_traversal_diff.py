@@ -24,12 +24,14 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pytest import MonkeyPatch
 
-from artifactsmmo_cli.ai.tiers import strategy
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression import strategy
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from formal.diff.oracle_client import run_oracle
+from tests.test_ai.fixtures import stamped
 
 # kind codes match the Lean oracle: 0 = obtain, 2 = char
 KIND_OBTAIN, KIND_CHAR = 0, 2
@@ -62,7 +64,7 @@ def _install(graph, mp):
     def fake_prerequisites(node, state, game_data, recoverable=None):
         return [graph.node(p) for p in graph.prereqs[graph.id_of(node)]]
 
-    def fake_producible(code, state, game_data):
+    def fake_producible(code, state, game_data, now):
         return graph.prod[int(code)]
 
     def make_is_sat(g):
@@ -130,9 +132,9 @@ def test_strategy_traversal_matches_lean(seed):
 
     with MonkeyPatch.context() as mp:
         _install(graph, mp)
-        py_reach = strategy.is_reachable(root_node, state, game_data)
-        py_closure = strategy.unmet_closure_size(root_node, state, game_data)
-        py_step = strategy.actionable_step(root_node, state, game_data)
+        py_reach = strategy.is_reachable(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
+        py_closure = strategy.unmet_closure_size(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
+        py_step = strategy.actionable_step(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
         py_step_id = graph.id_of(py_step) if py_step is not None else None
 
     args = _encode(graph, root, fuel)
@@ -189,11 +191,11 @@ def test_root_cost_matches_lean(seed):
 
             class _S:
                 level = have
-            py = strategy.root_cost(root_node, _S(), game_data)
+            py = strategy.root_cost(root_node, _S(), game_data, ctx=stamped(NO_PROFILE_CONTEXT))
             args = _encode_root_cost(graph, root, fuel, KIND_CHAR, target, have)
         else:
             root_node = graph.node(root)
-            py = strategy.root_cost(root_node, object(), game_data)
+            py = strategy.root_cost(root_node, object(), game_data, ctx=stamped(NO_PROFILE_CONTEXT))
             args = _encode_root_cost(graph, root, fuel, KIND_OBTAIN, 0, 0)
 
     lean = run_oracle("strategy_root_cost", [args])[0]["root_cost"]
@@ -221,8 +223,8 @@ def test_cycle_unreachable_and_none():
     state, gd = object(), object()
     with MonkeyPatch.context() as mp:
         _install(g, mp)
-        assert strategy.is_reachable(g.node(0), state, gd) is False
-        assert strategy.actionable_step(g.node(0), state, gd) is None
+        assert strategy.is_reachable(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) is False
+        assert strategy.actionable_step(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) is None
     args = _encode(g, 0, 8)
     assert run_oracle("strategy_is_reachable", [args])[0]["is_reachable"] is False
     assert run_oracle("strategy_actionable", [args])[0]["actionable"] is None
@@ -239,8 +241,8 @@ def test_satisfied_interior_pruning():
     state, gd = object(), object()
     with MonkeyPatch.context() as mp:
         _install(g, mp)
-        assert strategy.unmet_closure_size(g.node(0), state, gd) == 2
-        py_step = strategy.actionable_step(g.node(0), state, gd)
+        assert strategy.unmet_closure_size(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) == 2
+        py_step = strategy.actionable_step(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT))
         py_step_id = g.id_of(py_step)
     args = _encode(g, 0, 8)
     assert run_oracle("strategy_closure_size", [args])[0]["closure_size"] == 2

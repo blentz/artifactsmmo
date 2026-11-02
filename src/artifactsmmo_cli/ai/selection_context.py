@@ -3,11 +3,11 @@ cores read (guards, keep authority, deposit selection).
 
 It lives in its OWN module, below every consumer, because the keep authority
 (`ai/inventory_keep.py`) and the deposit selector (`ai/bank_selection.py`) both
-need it while `ai/tiers/guards.py` — its historical home — imports THEM. Keeping
+need it while `ai/progression/guards.py` — its historical home — imports THEM. Keeping
 the dataclass in `guards` made `guards -> bank_selection -> inventory_keep ->
 guards` a cycle the moment deposit started asking the keep authority how many
-copies it may bank. `tiers.guards` re-exports the name, so every existing
-`from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
+copies it may bank. `progression.guards` re-exports the name, so every existing
+`from artifactsmmo_cli.ai.progression.guards import SelectionContext` still resolves.
 
 Pure data: no behavior, so this module imports nothing else from the package —
 the exceptions are `TurnIn` below, a leaf pure-data class (`ai.currency_turnin`
@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from fractions import Fraction
 
+from artifactsmmo_api_client.models.log_type import LogType
+
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
@@ -29,6 +31,7 @@ from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
+from artifactsmmo_cli.ai.untimed_action_kind_error import UntimedActionKindError
 
 
 @dataclass(frozen=True)
@@ -43,7 +46,7 @@ class SelectionContext:
     # game_data, None)`), computed by the player per cycle. Threaded here so
     # the BANK_EXPAND means guard applies the SAME reserve gate as the proven
     # should_expand_bank core WITHOUT means.py importing progression_reserve
-    # (which imports back into the tiers package — circular). Default 0 =
+    # (which imports back into the progression package — circular). Default 0 =
     # reserve-free (legacy fixtures keep their old semantics).
     gold_reserve: int = 0
     # 2026-08-19 (S-051 + the USER's no-immediate-redraw rule). True when a task
@@ -69,6 +72,12 @@ class SelectionContext:
     # is demanded. A task's XP is a reason only for demanded XP (USER
     # 2026-10-07: the seesaw is emergent, never a phase rule).
     skill_demand: frozenset[str] = frozenset()
+    # The tool `T*` each demanded skill climbs with, skill -> tool
+    # (`tool_objective.tool_target` for each skill in `skill_demand` that names
+    # one, ruling C1-a), set by the player with `skill_demand` by one fixed
+    # point (`objective_demand`). Read through `objective_codes`, beside the
+    # missing `L*` pieces, and by `tool_first` for the climbed skill.
+    objective_tools: dict[str, str] = field(default_factory=dict)
     # The role this character holds and every role a live character holds
     # (`CoordinationStore.live_leases`), set by the player each cycle. None /
     # empty on a single-character run. `food_producer.may_make_food` reads
@@ -96,25 +105,14 @@ class SelectionContext:
     # cook nor eat them (USER 2026-10-08: "Reserve the claimed batch"; live,
     # R2D2 ate the cooked_rat_meat its SupplyBank claim made, 4 of 4).
     supply_reserved: frozenset[str] = frozenset()
-    # Long-term gear and tool codes — fed by player from the
-    # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
-    # craft candidates alongside the active task item. Empty fallback
-    # leaves the guard task-only.
-    target_gear: frozenset[str] = field(default_factory=frozenset)
-    target_tools: frozenset[str] = field(default_factory=frozenset)
-    # Usable-NOW gear/tool targets (near_term_gear ∪ target_tools): the codes the
-    # skill-grind treats as `wanted` keepers so it crafts a real upgrade for skill
-    # XP instead of a throwaway. Distinct from `target_gear` (endgame BiS, which is
-    # never craftable at low char level — using it would make the preference dead).
-    near_term_targets: frozenset[str] = field(default_factory=frozenset)
     # Active-profile gear-demand KEEP map {code: keep_count} (spec
     # 2026-06-28-gear-loadout-profiles): the deduped per-code demand across the
-    # active loadout profiles UNION the in-flight upgrade codes (+1 spare). This
-    # is the GEAR portion of every keep/recycle/deposit/sell protection — it
-    # REPLACES the `target_gear`/`target_tools` recipe-closure protection (which
-    # remains the PURSUIT target for crafting). Empty (the default) means no
-    # profile info → consumers fall back to the legacy blanket equippable keep,
-    # so a freshly-started bot with no recorded profiles never strips its gear.
+    # active loadout profiles, with every `L*` code kept at the copies `L*`
+    # wears (`gear_objective_context.with_objective_keep`). This is the GEAR
+    # portion of every keep/recycle/deposit/sell protection. Empty (the
+    # default) means no profile info → consumers fall back to the legacy
+    # blanket equippable keep, so a freshly-started bot with no recorded
+    # profiles never strips its gear.
     gear_keep: dict[str, int] = field(default_factory=dict)
     # Active objective-step goal's material profile {code: needed_qty} — the
     # GOAL_MATERIALS keep reason (`ai/inventory_keep.py`) reads it so the
@@ -280,26 +278,6 @@ class SelectionContext:
     # that does not choose one: nothing is stocked for it.
     loadout: ChosenLoadout | None = None
 
-    # The grind target stands only on consumables (USER 2026-10-10, "loadout
-    # picks the monster"): `combat_monster` is the band's pick on its best
-    # loadout, and on BARE gear the cascade names no monster at all — no
-    # winnable task monster, nothing in the band winnable bare, no windowed
-    # pick. The gear decisions (`decisions.root.IsAFightBlockingMe`) read this
-    # and never `loadout`, so a potion-propped win never hides a gear upgrade.
-    # False (the default) whenever bare gear has a fight, or there is no target.
-    # Since the gear objective names the grind target (`gear_objective` below)
-    # nothing sets it: the band pick it described is no longer the target, and
-    # a target that wins only on potions is `combat_risky` too.
-    combat_propped: bool = False
-
-    # The grind target wins below SECURE_WIN (USER 2026-10-15: below 75% we
-    # probably need better gear; `combat.secure_win`, asked at max HP on bare
-    # gear, `combat.unpotioned`): like a
-    # propped target it does not hide a gear upgrade from
-    # `decisions.root.IsAFightBlockingMe`. It is still fought when no gear is
-    # to be built. False whenever there is no target.
-    combat_risky: bool = False
-
     # Whether the held items task pays enough to defer the grind (spec
     # 2026-10-14 items-task-pays §2, `held_task_pays.held_task_pays`): its
     # gold or drops verdict, or skill XP the DAG demands at a better rate than
@@ -325,6 +303,12 @@ class SelectionContext:
     # (`timing` / `action_seconds_of`), never a constant.
     fight_seconds: FightSecondsModel | None = None
     action_seconds: Fraction | None = None
+    # The measured seconds of one action of each `/my/logs` kind (`gathering`,
+    # `crafting`, ...: `fight_seconds_model.kind_seconds`), from the
+    # account-log bootstrap or the committed capture offline: the pricer
+    # charges each route's action at its own kind's seconds (B, ruling
+    # "seconds inside", 2026-10-31). None on a context that never prices.
+    kind_seconds: tuple[tuple[str, Fraction], ...] | None = None
 
     # The fleet's drop evidence this cycle (spec 2026-10-18 §2.8, ruling
     # T16a): the ONE drop model the acquisition walk, the obtain model's gather
@@ -368,6 +352,18 @@ class SelectionContext:
         if self.fight_seconds is None:
             raise ValueError("this context carries no learned fight seconds")
         return self.fight_seconds
+
+    def seconds_of(self, kind: LogType) -> Fraction:
+        """The measured seconds of one action of `/my/logs` kind `kind`.
+        Raises when this context carries no kind seconds, and
+        `UntimedActionKindError` for a kind the log never timed (the user's
+        I2 ruling, 2026-10-31: no default stands in for it)."""
+        if self.kind_seconds is None:
+            raise ValueError("this context carries no learned action-kind seconds")
+        measured = dict(self.kind_seconds).get(kind.value)
+        if measured is None:
+            raise UntimedActionKindError(kind.value)
+        return measured
 
     def action_seconds_of(self) -> Fraction:
         """The learned seconds of one planner action; raises when this context

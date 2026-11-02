@@ -3,6 +3,7 @@ the reuse-vs-replan decision lives in ai.should_replan, not here."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -54,6 +55,18 @@ class PlanCache:
             return None
         return self.plan[self.cursor]
 
+    def on_cycle_clock(self, now: datetime) -> None:
+        """Hand the cached goal and every step this cycle's clock (ruling T8b),
+        through their one seam (`Goal.on_cycle_clock` / `Action.on_cycle_clock`).
+        A cached plan outlives the cycle that planned it, and a vendor step or a
+        goal's satisfaction judges its event window at the instant it carries:
+        without this, a buy planned before its window shut would still read as
+        applicable from the old instant, and a goal whose last sale closed would
+        still read as unmet, so the cycle would keep executing legs toward a
+        trade the server refuses."""
+        self.selected_goal = self.selected_goal.on_cycle_clock(now)
+        self.plan = [action.on_cycle_clock(now) for action in self.plan]
+
     def advance(self) -> None:
         self.cursor += 1
 
@@ -64,14 +77,14 @@ class PlanCache:
         """Snapshot the current step's completion target. Call on every advance
         and on every plan install (fresh decide or resumed commitment).
         `holdings` is `cache_holdings(state)`: the bag, and the pocket's gold."""
-        output = _output(self.current(), game_data)
+        output = step_output(self.current(), game_data)
         self.step_target = None if output is None else holdings.get(output[0], 0) + output[1]
 
     def batch_satisfied(self, holdings: Mapping[str, int], game_data: GameData) -> bool:
         """True when the armed step's target holding has been reached. Always
         True for a step with no target (step_target is None), so such an
         advance behaves exactly as it did before batching existed."""
-        output = _output(self.current(), game_data)
+        output = step_output(self.current(), game_data)
         if self.step_target is None or output is None:
             return True
         return holdings.get(output[0], 0) >= self.step_target
@@ -83,7 +96,7 @@ def cache_holdings(state: WorldState) -> dict[str, int]:
     return {**state.inventory, GOLD_CODE: state.gold}
 
 
-def _output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
+def step_output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
     """The (item, units) a step must add before the cursor moves on: a gather's
     drop, or a planned fight's drop; None for any other step. A single gather
     is armed too: a secondary drop (algae from a gudgeon spot) can come up

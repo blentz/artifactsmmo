@@ -56,10 +56,11 @@ precondition. That set is DELETED and the pool is now licensed by this authority
 anywhere, and every destructive action in production answers to these two caps.
 """
 
+from dataclasses import dataclass
 from enum import Enum
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.chosen_loadout import food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION
@@ -173,7 +174,10 @@ def _active_task(code: str, state: WorldState, game_data: GameData,
 def _healing_consumable(code: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext) -> int:
     """The chosen loadout's CARRY of `code` (docs/PLAN_consumable_utility.md
-    increment 5): the food its recovery eats, `chosen_loadout.food_carry` units;
+    increment 5): the food its recovery eats, `chosen_loadout.food_carry` units,
+    bounded by its share of this bag's room (`food_shares`: one room for all the
+    loadout's foods, over the bag's free slots and quantity, the other keeps
+    already in it; the keep prices nothing, so no stock bounds it);
     a potion it wears, `chosen_loadout.potion_carry` less the units already worn
     (the bag holds the rest until it is equipped). Every other consumable — and
     every one when no loadout is chosen (no fight ahead) — keeps 0 in the bag.
@@ -190,9 +194,11 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
     loadout = ctx.loadout
     if loadout is None:
         return 0
-    for food, eaten in loadout.food:
+    shares = food_shares([(eaten, state.inventory.get(food, 0)) for food, eaten in loadout.food],
+                         state.inventory_slots_free, state.inventory_free)
+    for (food, eaten), share in zip(loadout.food, shares, strict=True):
         if food == code:
-            return food_carry(eaten)
+            return food_carry(eaten, share, None)
     for potion, used in loadout.potions:
         if potion == code:
             return max(0, potion_carry(used) - equipped_potion_qty(state, code))
@@ -303,8 +309,8 @@ def _gear_demand(code: str, state: WorldState, game_data: GameData,
     """The active-profile gear demand, plus a keep-1 floor for the slots the profile
     is SILENT about.
 
-    NO CODE-SET FALLBACK. There is deliberately no profile-less fallback to
-    `ctx.target_gear | ctx.target_tools` — see the module docstring: that fallback is
+    NO CODE-SET FALLBACK. There is deliberately no profile-less fallback to the
+    old `target_gear | target_tools` sheets — see the module docstring: that fallback was
     a code-SET (keep-ALL-copies), and the profile-less case (`gear_keep` empty) is
     correctly served with keep-1 by EQUIPPED / RECIPE_DEMAND
     (`useful_quantity_cap`'s `EQUIPPABLE_KEEP` blanket, which `_recipe_demand` only
@@ -415,18 +421,31 @@ def destroyable(code: str, state: WorldState, game_data: GameData,
     return max(0, owned - keep_owned(code, state, game_data, ctx))
 
 
-def carried_keep(state: WorldState, game_data: GameData, ctx: SelectionContext) -> int:
-    """Units the bag still holds after a deposit, but for food and potions: each
+@dataclass(frozen=True)
+class CarriedKeep:
+    """What the bag still holds after a deposit, but for food and potions: its
+    `units` and the `stacks` (slots) they fill."""
+
+    units: int
+    stacks: int
+
+
+def carried_keep(state: WorldState, game_data: GameData, ctx: SelectionContext) -> CarriedKeep:
+    """What the bag still holds after a deposit, but for food and potions: each
     held code's bag units up to `keep_in_bag` (the copies `DepositAll` leaves,
-    `bankable`). The fight loop's room for drops is the bag cap less these and
-    less its own consumables' carry, which the loop counts itself
-    (`loop_rate`, spec 2026-10-18 §2.10). A held code the catalogue does not
-    know raises: its kind decides whether the loop already counts it."""
-    total = 0
+    `bankable`), and the slots the codes it leaves fill. The fight loop's room
+    for drops is the bag cap less these units and less its own consumables'
+    carry, which the loop counts itself (`loop_rate`, spec 2026-10-18 §2.10);
+    its room for its foods is the bag less these units and slots and the
+    potion carry (`chosen_loadout.food_shares`, Task 8c). A held code the catalogue
+    does not know raises: its kind decides whether the loop already counts it."""
+    total = stacks = 0
     for code, held in state.inventory.items():
         stats = game_data.item_stats(code)
         if stats is None:
             raise KeyError(f"{code} is held but has no item stats")
         if stats.type_ not in (FOOD, POTION):
-            total += min(held, keep_in_bag(code, state, game_data, ctx))
-    return total
+            kept = min(held, keep_in_bag(code, state, game_data, ctx))
+            total += kept
+            stacks += 1 if kept > 0 else 0
+    return CarriedKeep(total, stacks)

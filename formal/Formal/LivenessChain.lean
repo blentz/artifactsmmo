@@ -6,25 +6,24 @@ import Formal.ActionApplicability
 /-!
 # Formal.LivenessChain
 
-**The capstone: bootstrap combat fires when a winnable target exists.**
+**The capstone: bootstrap combat fires when the grind target exists.**
 
-This module composes the previously-proven G3 (`CombatTargetExistence`),
-G4 (`ActionApplicability`), and G5 (`StepDispatch`) modules into a
-single end-to-end liveness theorem:
+This module composes G3 (`CombatTargetExistence`), G4
+(`ActionApplicability`), and G5 (`StepDispatch`) into a single end-to-end
+liveness theorem:
 
-> If the monster catalog contains a monster that is winnable at full HP
-> AND that monster satisfies the FightAction level/gear filters AND no
-> task overrides the picker, then the chain
->   target picker → step dispatch → action applicability
-> resolves to a fightable FightAction.
+> If the grind target exists — the gear objective names `m*` and its `L*`
+> is held — AND the FightAction predicate holds, AND no task overrides the
+> target, then the chain
+>   grind target → step dispatch → action applicability
+> resolves to a fightable FightAction on `m*`.
 
-This is the formal closure of the 2026-06-06 trace surface. The Python
-fixes (commits 18576fc, 157b631) eliminated the specific bugs found in
-the trace; this theorem makes the chain LIVENESS into a kernel-checked
-invariant, so any future regression that re-introduces the bug class
-(e.g., a picker that returns None when a winnable target exists, a
-dispatcher that routes ReachCharLevel away from GrindCharacterXP) will
-fail the gate at build time.
+This is the formal closure of the 2026-06-06 trace surface (a target the
+dispatcher or the action layer then refused). Plan C Task 4 restated it
+over the two-arm grind target: the windowed picker it used to compose was
+deleted, and with it the claim that ANY winnable XP-positive catalogue
+monster yields a fight — by design (spec 2026-10-18 §2.4) no fight is
+chosen for XP while a piece of `L*` is missing.
 
 Phase G6 of `docs/PLAN_composition_correctness.md`.
 -/
@@ -38,30 +37,26 @@ open Formal.CombatTargetExistence Formal.StepDispatch Formal.ActionApplicability
 FightAction. Every condition is locally provable in its own G-module;
 this structure is the join point. -/
 structure LivenessInputs where
-  monsters    : List Monster
+  /-- The gear objective's target monster `m*` (or `none`). -/
+  pathTarget  : Option Int
+  /-- Whether `L*` is held (the objective's `held`, no fleet piece waiting). -/
+  pathHeld    : Bool
   fightInputs : FightInputs
-  /-- The opaque winnability oracle (project Python `is_winnable` after
-      projecting hp := max_hp). G3 proves the picker existence claim
-      against this. -/
-  winnable    : WinnableFn
-  /-- The xp-per-kill positivity oracle (`game_data.xp_per_kill(m, L) > 0`)
-      — the P0-revision fallback tier's lower gate. -/
-  xpPos       : WinnableFn
   /-- The bootstrap root's char-level target — the value carried by the
       ReachCharLevel(level) step the strategy engine produces. -/
   bootstrapLevel : Int
 
 /-! ## The chain. -/
 
-/-- The composition: picker → dispatch → applicability. Returns
+/-- The composition: grind target → dispatch → applicability. Returns
 `some FightAction` when all three gates pass. -/
 def chainEmitsFight (i : LivenessInputs) (hasTask : Bool) (taskTarget : Option Int) : Option Int :=
-  -- 1. Picker: get a winnable monster (or `none`).
+  -- 1. Grind target: the task's monster, else a held `m*` (or `none`).
   let pickTarget : Option Int :=
     if hasTask then
       taskTarget  -- task forces target
     else
-      winnableFarmTarget i.fightInputs.playerLevel none i.winnable i.xpPos i.monsters
+      winnableFarmTarget none i.pathTarget i.pathHeld
   match pickTarget with
   | none => none
   | some monster =>
@@ -76,71 +71,45 @@ def chainEmitsFight (i : LivenessInputs) (hasTask : Bool) (taskTarget : Option I
 /-! ## Liveness invariant. -/
 
 /-- **The headline theorem**. Given:
-* a winnable monster exists in the catalog (G3 condition),
-* no active task overrides the picker,
+* the grind target exists (`m*` named, `L*` held — G3 condition),
+* no active task overrides it,
 * the FightAction predicate holds (G4 condition),
 
-then the chain emits SOME FightAction — no `none` is possible from any
-of the three layers.
-
-This is the kernel-checked guarantee that the 2026-06-06 trace failure
-mode (bootstrap step plans nothing, falls to PursueTask) cannot recur
-inside the modeled abstraction. -/
+then the chain emits a FightAction on `m*` — no `none` is possible from any
+of the three layers. -/
 theorem chain_emits_fight_when_target_exists_and_applicable
-    (i : LivenessInputs)
-    (hExists  : ∃ m ∈ i.monsters, i.winnable m = true ∧ i.xpPos m = true ∧
-                  notOverleveled i.fightInputs.playerLevel m = true)
-    (hApp     : fightApplicable i.fightInputs = true) :
-    ∃ monster, chainEmitsFight i false none = some monster := by
-  -- Step 1: picker returns some.
+    (i : LivenessInputs) (m : Int)
+    (hPath : i.pathTarget = some m)
+    (hHeld : i.pathHeld = true)
+    (hApp  : fightApplicable i.fightInputs = true) :
+    chainEmitsFight i false none = some m := by
   unfold chainEmitsFight
   simp only [Bool.false_eq_true, if_false]
-  obtain ⟨code, hPick⟩ :=
-    winnableFarmTarget_falls_through_no_task i.fightInputs.playerLevel
-      i.winnable i.xpPos i.monsters hExists
-  rw [hPick]
-  -- Step 2: dispatch is grindCharacterXP code.
-  show ∃ monster,
-    (match stepDispatch { combatMonster := some code, targetReachable := true } (MetaGoal.reachCharLevel i.bootstrapLevel) with
+  rw [hPath, hHeld, winnableFarmTarget_falls_through_no_task]
+  show (match stepDispatch { combatMonster := some m, targetReachable := true } (MetaGoal.reachCharLevel i.bootstrapLevel) with
      | some (GoalClass.grindCharacterXP m) =>
          if fightApplicable i.fightInputs = true then some m else none
-     | _ => none) = some monster
+     | _ => none) = some m
   rw [dispatch_reach_char_with_target_goes_to_grind]
-  -- Step 3: applicability passes.
   simp [hApp]
 
 /-! ## Inverse: when the chain DOES return none, surface which gate. -/
 
-/-- If the chain returns `none` and no task is active, then either no
-VIABLE target exists (winnable ∧ xp-positive ∧ under the suicide guard —
-the P0-revision picker's honest-`none` condition), or the FightAction
+/-- If the chain returns `none` and no task is active, then either there is
+no grind target (no `m*`, or its `L*` not held), or the FightAction
 predicate fails. The dispatcher cannot be the culprit (G5's safe-fail
 guarantee). -/
-theorem chain_none_implies_picker_or_applicability_blocked
+theorem chain_none_implies_target_or_applicability_blocked
     (i : LivenessInputs)
     (hNone : chainEmitsFight i false none = none) :
-    (∀ m ∈ i.monsters,
-        (i.winnable m && i.xpPos m
-          && notOverleveled i.fightInputs.playerLevel m) = false) ∨
+    (i.pathTarget = none ∨ i.pathHeld = false) ∨
     fightApplicable i.fightInputs = false := by
   unfold chainEmitsFight at hNone
   simp only [Bool.false_eq_true, if_false] at hNone
-  cases hPick : winnableFarmTarget i.fightInputs.playerLevel none
-      i.winnable i.xpPos i.monsters with
+  cases hPick : winnableFarmTarget none i.pathTarget i.pathHeld with
   | none =>
-    -- Picker returned none ⇒ no viable target in catalog.
     left
-    unfold winnableFarmTarget at hPick
-    -- hPick : (pickWinnableWindowed ...).map Monster.code = none
-    -- ⇒ pickWinnableWindowed ... = none
-    have hPickNone : pickWinnableWindowed i.fightInputs.playerLevel
-        i.winnable i.xpPos i.monsters = none := by
-      cases hPW : pickWinnableWindowed i.fightInputs.playerLevel
-          i.winnable i.xpPos i.monsters with
-      | none => rfl
-      | some _ => rw [hPW] at hPick; exact absurd hPick (by simp)
-    exact pickWinnableWindowed_none_implies_no_viable_target
-      i.fightInputs.playerLevel i.winnable i.xpPos i.monsters hPickNone
+    exact winnableFarmTarget_none_no_task i.pathTarget i.pathHeld hPick
   | some monster =>
     right
     rw [hPick] at hNone
@@ -149,5 +118,17 @@ theorem chain_none_implies_picker_or_applicability_blocked
     cases hF : fightApplicable i.fightInputs with
     | false => rfl
     | true => rw [hF] at hNone; simp at hNone
+
+/-- Non-vacuity witness: the headline's hypotheses are jointly satisfiable —
+a held `m*` and a concrete applicable fight (the inputs of
+`ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous`). -/
+theorem chain_emits_fight_nonvacuous :
+    chainEmitsFight
+      { pathTarget := some 4, pathHeld := true, bootstrapLevel := 7,
+        fightInputs := { hasLocations := true, inventoryFree := 1, hp := 100,
+                         maxHp := 100, playerLevel := 5, monsterLevel := 5,
+                         minFreeSlots := 1, xpPerKill := 10 } }
+      false none = some 4 :=
+  chain_emits_fight_when_target_exists_and_applicable _ 4 rfl rfl (by decide)
 
 end Formal.LivenessChain

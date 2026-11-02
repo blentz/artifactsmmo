@@ -21,10 +21,10 @@ is what a grep can find and a callback is not.
 
 The `Callable` rule is the callback half of the same hole: a `Decision` that
 accepts an injected pricer takes a cost model as a parameter, which puts the
-model outside this census's reach. Wave 4's `WhichSlotClosesTheFight` makes one
-textual call to `deficit_upgrade_target` that prices 22 candidates behind a
-closure — permitted, because the closure it injects is built FROM `route_price`,
-and forbidden to become a parameter of the node itself.
+model outside this census's reach. Wave 4's `WhichSlotClosesTheFight` (deleted
+in plan C Task 2) made one textual call to a deficit walk that priced 22
+candidates behind a closure — permitted, because the closure it injected was
+built FROM `route_price`, and forbidden to become a parameter of the node itself.
 
 WHAT WOULD MAKE THIS CENSUS VACUOUS
 -----------------------------------
@@ -86,10 +86,12 @@ entirely. One of the two evasions the design names."""
 FUNNEL = "route.py"
 """The ONE module permitted to import a pricing producer."""
 
-MIN_DECISION_CLASSES = 13
+MIN_DECISION_CLASSES = 9
 """Floor on `Decision` subclasses found, so the sweep cannot pass by finding
-nothing. Raised with the graph: wave 3 shipped five root nodes, wave 4 added
-`IsAFightBlockingMe` and `WhichSlotClosesTheFight`. Mirrors
+nothing: the seven `obtain_item` nodes, `IsThisTargetBlocked` and
+`WhichPieceIsNext`. Lowered from 13 when plan C Task 3 deleted the tier walk's
+four root nodes (`IsMyGearBehindMyTier`, `WhichSlotIsFurthestBehind`,
+`IsThereACombatTarget`, `CanIClearMyTier`). Mirrors
 `test_decisions_dag._MIN_CLASSES`."""
 
 

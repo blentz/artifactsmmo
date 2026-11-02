@@ -45,7 +45,7 @@ CHECK. `resolve_root` already guarantees no member of `alternatives` is
 value-equal to `root` (`ordered` is filtered with `alt != root` before it
 becomes `alternatives`), so `candidate is resolution.root` and `candidate ==
 resolution.root` agree on every real resolution. What they do NOT agree on is
-position: `root` can be `None` (`CanIClearMyTier`'s wall case), and when it
+position: `root` can be `None` (the wall: no gear objective), and when it
 is, `[resolution.root, *resolution.alternatives]` with `None` filtered starts
 with the FIRST ALTERNATIVE, not with "nothing chosen". A position check
 (`index == 0`) would misreport that first alternative as chosen even though
@@ -75,9 +75,9 @@ from dataclasses import dataclass
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.sibling_route_census import SiblingVerdict, sibling_route_verdicts
 
@@ -127,15 +127,14 @@ def root_sibling_verdicts(
     plus -- separately -- the item the walk named and then erased.
 
     `store` does double duty, exactly as `commands/sibling_route_report.py`'s
-    own `store` already does for T2.0: it is `resolve_root`'s `history`
-    (`CanIClearMyTier` reads `next_uncleared_tier(state, game_data, history)`
-    off it) AND `sibling_route_verdicts`'s `store` (`fleet_supply_request_
-    cycles`, `skill_grind_rate`). One real store, read from, never written to
+    own `store` already does for T2.0: it is `resolve_root`'s `history` AND
+    `sibling_route_verdicts`'s `store` (`fleet_supply_request_cycles`,
+    `skill_grind_rate`). One real store, read from, never written to
     -- this function performs no action and commits no session row.
 
     The candidate set is `[resolution.root, *resolution.alternatives]` with
     `None` filtered, in the order the walk returned them -- `root` is the
-    wall case (`CanIClearMyTier` can return `None`), and `Sequence[MetaGoal]`
+    wall case (no gear objective), and `Sequence[MetaGoal]`
     cannot type a `None` member, which is why `resolve_root` itself filters
     it out of `ordered` before building `alternatives`; this function applies
     the identical filter to its own leading `root` slot for the same reason.

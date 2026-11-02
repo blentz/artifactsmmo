@@ -196,6 +196,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l12_taskgated_bag | `ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='iron_armor', quantity=1, slot='body_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l12_taskgated_bag | `ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l12_taskgated_bag | `ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='iron_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -217,13 +224,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l12_taskgated_bag | `ObtainItem(code='mushroom', quantity=4)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='mushroom', quantity=4)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='mushroom', quantity=4)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l12_taskgated_bag | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l12_taskgated_bag | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l12_taskgated_bag | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_taskgated_bag | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -252,6 +252,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l15_midband | `ObtainItem(code='highwayman_dagger', quantity=1, slot='weapon_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l15_midband | `ObtainItem(code='highwayman_dagger', quantity=1, slot='weapon_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l15_midband | `ObtainItem(code='highwayman_dagger', quantity=1, slot='weapon_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l15_midband | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -259,13 +266,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l15_midband | `ReachSkillLevel(skill='gearcrafting', level=11)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l15_midband | `ReachSkillLevel(skill='jewelrycrafting', level=7)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l20_band_entry | `ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l20_band_entry | `ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l20_band_entry | `ObtainItem(code='fire_and_earth_amulet', quantity=1, slot='amulet_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -350,13 +350,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l30_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=19)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l30_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=19)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l30_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=19)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
 | l40_band_entry | `ObtainItem(code='royal_skeleton_pants', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l40_band_entry | `ObtainItem(code='royal_skeleton_pants', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ObtainItem(code='royal_skeleton_pants', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -371,13 +371,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l40_band_entry | `ObtainItem(code='royal_skeleton_helmet', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ObtainItem(code='royal_skeleton_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ObtainItem(code='royal_skeleton_helmet', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l40_band_entry | `ObtainItem(code='royal_skeleton_armor', quantity=1, slot='body_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l40_band_entry | `ObtainItem(code='slime_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l40_band_entry | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l40_band_entry | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -392,20 +392,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l40_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=26)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=26)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l40_band_entry | `ReachSkillLevel(skill='jewelrycrafting', level=26)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_capstone_approach | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -413,20 +413,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_capstone_approach | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_band_adequate | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -434,20 +434,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_band_adequate | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_raid_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -455,20 +455,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l48_raid_active | `ReachSkillLevel(skill='jewelrycrafting', level=36)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | gold | **wall_gold** | - | - | - | - | - | - | - | - |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l48_event_active | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l10_bag_pursuit | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l10_bag_pursuit | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l10_bag_pursuit | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -525,13 +525,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l12_bag_pursuit | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_bag_pursuit | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_bag_pursuit | `ReachSkillLevel(skill='jewelrycrafting', level=2)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -539,13 +539,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l35_artifact_fill | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l35_artifact_fill | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l35_artifact_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l35_artifact_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -567,13 +567,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l35_artifact_fill | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l35_artifact_fill | `ObtainItem(code='goblin_guard_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l35_boots_drop_farm | `ObtainItem(code='steel_boots', quantity=1, slot='boots_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -581,13 +588,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='death_knight_sword', quantity=1, slot='weapon_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l35_boots_drop_farm | `ObtainItem(code='mushmush_wizard_hat', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l35_boots_drop_farm | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l35_boots_drop_farm | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l35_boots_drop_farm | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -707,13 +707,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -728,6 +721,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -735,13 +742,13 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l13_drop_recipe_grind | `ReachSkillLevel(skill='weaponcrafting', level=6)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l13_drop_recipe_grind | `ObtainItem(code='sticky_sword', quantity=1, slot='weapon_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l13_drop_recipe_grind | `ObtainItem(code='iron_legs_armor', quantity=1, slot='leg_armor_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l10_gearcrafting_gap | `ReachSkillLevel(skill='gearcrafting', level=6)` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -959,20 +966,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l12_deep_chain_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l12_deep_chain_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l12_deep_chain_grind | `ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='air_and_water_amulet', quantity=1, slot='amulet_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l19_band_edge | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -980,20 +987,20 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l19_band_edge | `ReachSkillLevel(skill='jewelrycrafting', level=15)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')` | root | gold | PASS | - | - | - | - | - | - | - | - |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
+| l11_band_floor | `ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l32_items_task | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l32_items_task | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l32_items_task | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -1085,13 +1092,6 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
 | l32_held_task_closable | `ReachSkillLevel(skill='jewelrycrafting', level=16)` | alt | gold | PASS | - | - | - | - | - | - | - | - |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | tasks_coin | PASS | - | 0 | 0 | yes | 0 | 0 | 0 | 0 |
-| l32_held_task_closable | `ObtainItem(code='earth_boost_potion', quantity=1, slot='utility1_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l32_held_task_open | `ObtainItem(code='lifesteal_rune', quantity=1, slot='rune_slot')` | root | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
@@ -1412,21 +1412,21 @@ residual scope: 25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 250 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 207 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='hard_leather_helmet', quantity=1, slot='helmet_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 162 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 184 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring1_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | event_ticket | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | sandwhisper_coin | PASS | - | 0 | 0 | - | 3 | 1 | 0 | 1 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | sonnengott_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |
-| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 162 | yes | 0 | 0 | 0 | 0 |
+| l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | tasks_coin | PASS | yes | 1000001 | 184 | yes | 0 | 0 | 0 | 0 |
 | l25_currency_leaf_unfunded | `ObtainItem(code='skull_ring', quantity=1, slot='ring2_slot')` | alt | gold | PASS | - | - | - | - | - | - | - | - |
 | l25_currency_leaf_unfunded | `ReachSkillLevel(skill='weaponcrafting', level=21)` | alt | corrupted_gem | PASS | - | 0 | 0 | - | 3 | 0 | 0 | 3 |
 | l25_currency_leaf_unfunded | `ReachSkillLevel(skill='weaponcrafting', level=21)` | alt | enchanted_coin | PASS | - | 0 | 0 | - | 0 | 0 | 0 | 0 |

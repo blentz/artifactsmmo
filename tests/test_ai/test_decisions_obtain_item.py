@@ -46,13 +46,13 @@ from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import TurnIn
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
-from artifactsmmo_cli.audit.drop_wall_census import unwinnable_drop_items
+from artifactsmmo_cli.audit.drop_wall_census import unwinnable_drop_items, worn_fighter
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_strategy_driver import (
@@ -121,7 +121,7 @@ def test_a_skill_gated_step_that_is_itself_the_equippable_raises_the_skill(
         bundle_game_data):
     """THE SIBLING of the test above, and the half that was missing.
 
-    `CanICraftCurrentTier` sits behind `IsThisAnIntermediateOnAChain`, which is
+    `CanICraftThisAtAll` sits behind `IsThisAnIntermediateOnAChain`, which is
     only reached when the step is NOT equippable.
     `IsTheStepTheEquippableItself` runs FIRST and, for any equippable step,
     routed straight to `_equippable_goal` without ever asking whether the craft
@@ -527,7 +527,10 @@ def test_where_the_wall_is_reached_and_why_no_cycle_acts_on_it() -> None:
                                       attach_gear_objective(state, gd, TIMED_NO_PROFILE_CONTEXT,
                                                             store),
                                       store)
-            walled = set(unwinnable_drop_items(state, gd))
+            # The node fires where `obtain_sources` withholds a drop: on the
+            # WORN gear, at max HP. The drop-wall census asks the achievable
+            # fighter since plan C Task 7; this test asks production's own wall.
+            walled = set(unwinnable_drop_items(state, gd, worn_fighter(state)))
             for root in [c for c in (resolution.root, *resolution.alternatives)
                          if c is not None]:
                 step = actionable_step(root, state, gd, TIMED_NO_PROFILE_CONTEXT) or root
@@ -599,3 +602,11 @@ def test_a_currency_under_a_live_turn_in_is_not_routed_to_an_equip(
 
     goal = resolve_node(obtain_item_decision(step, step), state, gd, live, None)
     assert goal is None or "UpgradeEquipment" not in repr(goal), goal
+
+    # Review I1: a NOT-ready claim (the fleet holds 3 of 10) only names the
+    # shortfall's farmer; it reserves nothing, and the step equips as before.
+    farming = dataclasses.replace(live, turn_in=dataclasses.replace(live.turn_in,
+                                                                     fleet_total=3))
+    assert farming.turn_in is not None and not farming.turn_in.ready
+    farmed = resolve_node(obtain_item_decision(step, step), state, gd, farming, None)
+    assert repr(farmed) == repr(unreserved)

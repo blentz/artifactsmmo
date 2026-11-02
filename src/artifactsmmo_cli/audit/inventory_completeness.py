@@ -31,7 +31,7 @@ cells only — the single DECLARED liveness exemption (`KEEP_ALL_SENTINEL`).
 
 PRESSURE IS SPLIT slot-vs-quantity because that distinction is where the HTTP 497
 livelock lived (a live bag sat at 68/124 QUANTITY while 20/20 SLOTS): the relief
-guards read `max(quantity_fraction, slot_fraction)` (`tiers.guards.used_fraction`)
+guards read `max(quantity_fraction, slot_fraction)` (`progression.guards.used_fraction`)
 while the DESTRUCTIVE discard guards deliberately stay quantity-only, so a
 slot-pressured bag and a quantity-pressured bag reach DIFFERENT production routes.
 A census with one "full" state would be blind to half of them.
@@ -67,6 +67,7 @@ blankets, so the in-bag LIVENESS cells fail today. That is the census working.
 
 import dataclasses
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Literal
 
@@ -93,6 +94,10 @@ from artifactsmmo_cli.ai.inventory_keep import (
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import (
     StrategyArbiter,
@@ -100,10 +105,6 @@ from artifactsmmo_cli.ai.strategy_driver import (
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, TASKS_COIN_CODE, WorldState
 
 SURPLUS = 6
@@ -696,7 +697,7 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     _goal, plan, tried = arbiter.select(
         census_decision(cell.reason, game_data), state, game_data, actions, ctx)
@@ -855,7 +856,10 @@ def _sellable(code: str, state: WorldState, game_data: GameData) -> bool:
     route — production is right to keep holding it."""
     return any(NpcSellAction(npc_code=npc, item_code=code, quantity=1,
                              npc_location=game_data.npc_location(npc),
-                             travel_region=game_data.npc_region(npc)
+                             travel_region=game_data.npc_region(npc),
+                             # The census is an offline sweep, outside any
+                             # cycle: its clock is the instant it is asked.
+                             now=datetime.now(UTC)
                              ).is_applicable(state, game_data)
                for npc, _price in game_data.npcs_buying_item(code))
 

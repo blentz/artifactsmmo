@@ -93,13 +93,13 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
+from artifactsmmo_cli.ai.progression.guards import _fires as _guard_fires
+from artifactsmmo_cli.ai.progression.means import MeansKind
+from artifactsmmo_cli.ai.progression.means import _fires as _means_fires
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.strategy_driver import map_guard, map_means, objective_step_goal
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
-from artifactsmmo_cli.ai.tiers.guards import _fires as _guard_fires
-from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.means import _fires as _means_fires
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.sim.production_ladder import LadderMeans
 

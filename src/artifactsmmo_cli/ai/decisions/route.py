@@ -7,11 +7,12 @@ discharged by an AST census over the package; this module is the single hole it
 leaves, so the graph has one cost model rather than one per node.
 
 INERT ON ARRIVAL (wave 4 increment 4.1b). It ships before its first caller
-because the alternative is worse: `WhichSlotClosesTheFight` (increment 4.2) needs
+because the alternative is worse: `WhichSlotClosesTheFight` (increment 4.2,
+deleted in plan C Task 2) needed
 a price, and pricing it in `decisions/root.py` would put the first forbidden
 import inside the package and make O6 red the day it was written. Landing the
-funnel first costs nothing — an unused module with its own tests — and means 4.2
-adds a call rather than an exception.
+funnel first cost nothing — an unused module with its own tests — and meant 4.2
+added a call rather than an exception.
 
 TOTAL over `META_GOAL_KINDS`, with a drift assertion in the same shape as
 `prerequisite_graph.prerequisites`: a new root kind cannot silently return an
@@ -23,6 +24,14 @@ enter: no gold price, no level gap, no wall-clock cooldown, no travel distance.
 A caller that needs seconds converts ONCE, at the call site, by the published
 `ge_order_config.AVG_CYCLE_SECONDS`, and says so.
 
+INSIDE, THE PRICER COUNTS SECONDS (ruling "seconds inside", 2026-10-31). Every
+route option is priced at the measured seconds its actions take (a gather, a
+craft, a withdraw at its `/my/logs` kind's mean cooldown; a fight at its
+learned seconds with the rest it forces) and converted to planner actions in
+ONE place, `acquisition_cost._in_actions`, by the measured seconds of one
+planner action. So the arms still return planner actions, and a fight and a
+gather compare by the time they take.
+
 A LOWER BOUND, never an estimate, and NOT CACHEABLE ACROSS CYCLES —
 `UNOBTAINABLE_PER_UNIT` is charged for an item with no route THIS cycle.
 
@@ -31,9 +40,9 @@ ranking walk was measured at 33.9 s against a documented 300 ms. A `Decision`
 may call it at most once per candidate child, and only when the node has more
 than one child that is a genuine alternative. A call that INJECTS a pricing
 callback into a helper counts as one call PER CANDIDATE THE HELPER PRICES, not
-as one — wave 4's `WhichSlotClosesTheFight` makes one textual call to
-`deficit_upgrade_target` which prices 22 candidates behind a closure. It may
-never appear inside a `sorted(...)` key over an unbounded list.
+as one — wave 4's `WhichSlotClosesTheFight` (deleted in plan C Task 2) made one
+textual call to a deficit walk that priced 22 candidates behind a closure. It
+may never appear inside a `sorted(...)` key over an unbounded list.
 """
 
 from math import ceil
@@ -46,14 +55,10 @@ from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.fleet_work import FLEET_SUPPLY
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
-from artifactsmmo_cli.ai.learning.projections import cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_sources import obtain_sources
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
-from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     META_GOAL_KINDS,
     MetaGoal,
     ObtainItem,
@@ -62,6 +67,9 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     ReachTaskOutcome,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
+from artifactsmmo_cli.ai.task_worth import held_task_cancel_due
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -183,18 +191,12 @@ TOTAL over `META_GOAL_KINDS` since wave 6. The two climbs return
             state.skills.get(goal.skill, 1), state.skill_xp.get(goal.skill, 0),
             max_xp, goal.level, rate)
     if isinstance(goal, ReachCharLevel):
-        # `PathPlan.total_cycles` is "CYCLES — planner actions"
-        # (`projections.py:263`) and counts the WHOLE combat loop.
-        if history is None:
-            return UNOBTAINABLE_PER_UNIT
-        plan = cheapest_path_to_level(goal.level, state, history, game_data, ctx.timing())
-        # `blocked` -> UNOBTAINABLE_PER_UNIT, never `inf`: the walk needs a
-        # TOTAL ORDER, which is why UNOBTAINABLE_PER_UNIT is a large number and
-        # not infinity. A blocked climb means every beatable monster is grey —
-        # the character needs GEAR, not monsters.
-        if plan.blocked:
-            return UNOBTAINABLE_PER_UNIT
-        return int(plan.total_cycles)
+        # A level-up is not an acquisition (spec 2026-10-18 §6.2): it has no
+        # acquisition price, so it reads as unpriceable, never as free.
+        # UNOBTAINABLE_PER_UNIT, never `inf`: the walk needs a TOTAL ORDER. No
+        # decision prices one; the wall censuses do, over a root walk that may
+        # resolve a level-up.
+        return UNOBTAINABLE_PER_UNIT
     if isinstance(goal, ReachTaskOutcome):
         # The remaining kills, each at the whole-loop `cycles_per_kill` a drop
         # farm and a level grind are both quoted in (`acquisition_cost.

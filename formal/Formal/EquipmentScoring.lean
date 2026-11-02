@@ -159,8 +159,8 @@ theorem AScore_no_monster (item : Item) :
 
 /-! ### Splitting `AScore` into its COMBAT and EFFICIENCY slices.
 
-The ECONOMICS layer (`Formal.StrategicValue`, live `tiers/pursuit_value`) must
-let combat DOMINATE utility when ranking what to acquire cross-slot. It used to
+The ECONOMICS layer (`strategic_value` / `pursuit_value`, both retired in plan
+C Task 6) had to let combat DOMINATE utility when ranking what to acquire cross-slot. It used to
 do that with a scalar of its own — a flat 8-stat sum `combatRaw` that added a
 resistance PERCENTAGE to an HP amount to a damage figure 1:1 — which is a second
 ruler, free to disagree with this one about the same slot.

@@ -44,8 +44,9 @@ from artifactsmmo_cli.ai.world_state import WorldState
 #
 # All remaining types keep the strict one-slot-per-code rule (HTTP 485;
 # documented utility small_health_potion case). Shared with
-# `equipment/loadout_picker.py` (pick_loadout cap) and the objective layer's
-# `_DUPLICATE_FILL_TYPES` (both read this set generically).
+# `equipment/loadout_picker.py` (pick_loadout cap), which reads this set
+# generically (the objective layer's `_DUPLICATE_FILL_TYPES` read it too until
+# plan C Task 6 deleted the gear sheets).
 DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})
 
 

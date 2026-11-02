@@ -38,8 +38,8 @@ from artifactsmmo_cli.ai import player as player_module
 from artifactsmmo_cli.ai.acquisition_cost import (
     CROSSING_ACTIONS,
     acquisition_actions,
-    door_route,
     route_options,
+    route_order,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT, RouteOption
 from artifactsmmo_cli.ai.actions.base import Action
@@ -58,15 +58,15 @@ from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLI
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression_reserve import fee_shortfall, spendable_pocket
 from artifactsmmo_cli.ai.region_edges import door_reaches, door_toll, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from artifactsmmo_cli.audit import craft_completeness
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -363,7 +363,7 @@ def test_the_plan_fetches_the_key_first(monkeypatch: pytest.MonkeyPatch) -> None
     The level-30 sheet: the lich (level 30) is not grey for it."""
     state, world, player = _seeded("l30_band_entry")
     monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
-    goal = GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1})
+    goal = GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}, now=cycle_now())
     ctx = player._selection_context()
     plan = decompose(goal, state, world, player._build_actions(), ctx)
     assert plan is not None
@@ -385,13 +385,13 @@ def test_a_fee_door_is_opened_by_fighting_for_its_gold() -> None:
     state, world, player = _seeded("l48_band_adequate")
     assert state.gold < 5000
     piece = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, player._build_actions(), player._selection_context())
     assert plan is not None
     (fight,) = plan
     assert isinstance(fight, FightAction) and fight.gold_target is not None
     declined: list[str] = []
-    plain = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1})
+    plain = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, now=cycle_now())
     assert decompose(plain, state, world, player._build_actions(), player._selection_context(),
                      declined) is None
     assert declined == ["infeasible:dryad_hair:no_route:dryad_hair"]
@@ -422,7 +422,7 @@ def _rare_ready_dropper(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """A ready route no longer hides a door: both are priced, the cheaper door
-    leg is the price, and the walk serves it (`door_route` is its `prefer`):
+    leg is the price, and the walk serves it (`route_order` ranks it first):
     the plan fights for the key, not the cyclops."""
     state, world, player = _seeded("l30_band_entry")
     _rare_ready_dropper(monkeypatch)
@@ -430,9 +430,10 @@ def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served
     options = route_options("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY)
     assert [(o.venue, o.unlock) for o in options] == [("cyclops", ""),
                                                       ("lich", "door:lich_tomb_keyx1")]
-    assert door_route("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY,
-                      pocket=state.gold, store=None) == (SourceKind.DROP, "lich")
-    plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}),
+    assert next(iter(route_order("life_crystal_shard", state, world, ctx,
+                                 policy=DECOMPOSE_POLICY, pocket=state.gold,
+                                 store=None))) == (SourceKind.DROP, "lich")
+    plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}, now=cycle_now()),
                      state, world, player._build_actions(), ctx)
     assert plan is not None
     fights = [a.monster_code for a in plan if isinstance(a, FightAction)]
@@ -444,13 +445,16 @@ def test_a_ready_route_the_door_cannot_beat_is_the_one_served(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """An item a ready route serves at no more per unit than a door route: the
     door route is dominated and not priced (a gold fight past the 5000-gold
-    door against the ready gold fights), and `door_route` is None."""
+    door against the ready gold fights), and no door route is ranked."""
     state, world, player = _seeded("l30_band_entry")
     ctx = player._selection_context()
     gold = route_options(GOLD_CODE, state, world, ctx, policy=PIECE_POLICY)
     assert gold and not [o for o in gold if o.unlock]
-    assert door_route("copper_ore", state, world, ctx, policy=DECOMPOSE_POLICY,
-                      pocket=state.gold, store=None) is None
+    ranked = route_order("copper_ore", state, world, ctx, policy=DECOMPOSE_POLICY,
+                         pocket=state.gold, store=None)
+    assert ranked
+    assert not [o for o in route_options("copper_ore", state, world, ctx,
+                                         policy=DECOMPOSE_POLICY) if o.unlock]
 
 
 def test_a_door_route_a_ready_one_dominates_is_not_priced(
@@ -525,6 +529,10 @@ class _RatedStore:
     def fleet_skill_grind_rate(self, skill: str) -> float | None:
         return self.fleet
 
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
+
 
 def test_a_gather_past_a_door_pays_its_climb_as_the_skill_gate_does() -> None:
     """A GATHER_SKILL gate beside a door is paid with the climb
@@ -563,6 +571,41 @@ def test_the_gear_chain_under_a_door_is_priced_with_that_door_shut(
     assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset(), state) is not None
     assert gear("x", state, world, ctx, None, DECOMPOSE_POLICY, frozenset({LICH_DOOR}),
                 state) is None
+
+
+def test_a_gear_unlock_s_deficit_is_computed_once_per_decision(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Review I5: HAL's walk of the trophy asked `_gear_unlock` 216 times for
+    eight distinct (monster, state) deficits, 20.6 s of a 37.8 s `plan`. The
+    full-hp deficit is memoised through the store's decision episode, keyed on
+    the state a price reads; outside an episode, or without a store, it is
+    computed afresh."""
+    state, world, _player = _seeded("l30_band_entry")
+    asked: list[int] = []
+
+    def deficit(s, g, monster):  # type: ignore[no-untyped-def]
+        asked.append(s.hp)
+        return CombatDeficit(monster, -1, (), False)
+
+    monkeypatch.setattr(acquisition_cost, "combat_deficit", deficit)
+    gear = acquisition_cost._gear_unlock
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    store = LearningStore(db_path=str(tmp_path / "e.db"), character="hero")
+    try:
+        hurt = replace(state, hp=1)
+        with store.search_cache():
+            for _ in range(3):
+                assert gear("x", hurt, world, ctx, store, DECOMPOSE_POLICY, frozenset(),
+                            hurt) is None
+            richer = replace(hurt, gold=hurt.gold + 1)
+            assert gear("x", richer, world, ctx, store, DECOMPOSE_POLICY, frozenset(),
+                        richer) is None
+        assert asked == [state.max_hp, state.max_hp]
+        assert gear("x", hurt, world, ctx, store, DECOMPOSE_POLICY, frozenset(), hurt) is None
+        assert gear("x", hurt, world, ctx, None, DECOMPOSE_POLICY, frozenset(), hurt) is None
+        assert len(asked) == 4
+    finally:
+        store.close()
 
 
 def test_the_gear_past_a_door_never_reprices_that_door(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -609,7 +652,7 @@ def test_a_fee_the_reserve_keeps_is_priced_and_fought_for_alike(
     monkeypatch.setattr(craft_plan_gen, "_walk_plan",
                         lambda goal, *a, **k: walked.append(goal.needed) or walk_plan(goal, *a, **k))
     piece = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     plan = decompose(piece, rich, world, player._build_actions(), ctx)
     assert plan is not None
     (fight,) = plan
@@ -673,6 +716,21 @@ def test_a_consumed_key_is_paid_again_for_every_bank_trip(
                    DECOMPOSE_POLICY, True, frozenset(), state) is None
 
 
+def test_a_door_farm_with_no_room_for_its_trips_is_not_offered(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """A farm past a consumed key whose re-entries cannot be priced (no room
+    in the bag for one win's drops: `_reentry_actions` is None) is no route:
+    `route_options` drops the door leg rather than price it without its
+    trips, and the lich farm is offered again once the bag has room."""
+    state, world, _option, _ready = _lich_farm(monkeypatch)
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    full = replace(state, inventory_max=0)
+    assert [o.venue for o in route_options("life_crystal_shard", full, world, ctx,
+                                           policy=DECOMPOSE_POLICY) if o.unlock] == []
+    assert "lich" in [o.venue for o in route_options("life_crystal_shard", state, world, ctx,
+                                                     policy=DECOMPOSE_POLICY) if o.unlock]
+
+
 def test_a_gather_and_a_gold_fight_past_a_fee_pay_its_toll_per_entry() -> None:
     """The 5000-gold door's fee is a toll too: a gather past it carries the
     fee's re-entry share per gather, a gold fight per win."""
@@ -728,7 +786,7 @@ def test_the_walk_opens_the_cheapest_door_as_the_pricer_does(
     monkeypatch.setattr(craft_plan_gen, "_open_door",
                         lambda door, *a, **k: opened.append(door) or open_door(door, *a, **k))
     piece = GatherMaterialsGoal("palm_wood", {"palm_wood": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     assert decompose(piece, state, world, player._build_actions(), ctx) is not None
     assert opened == [cheap]
     step = model.walk("palm_wood", 1, PIECE_POLICY).plan[0]
@@ -803,7 +861,7 @@ def _served(monkeypatch: pytest.MonkeyPatch, world: GameData, store: LearningSto
                         lambda door, *a, **k: opened.append(door))
     monkeypatch.setattr(craft_plan_gen, "_decompose_grind",
                         lambda skill, level, *a, **k: grinds.append((skill, level)))
-    decompose(GatherMaterialsGoal("loot", {"loot": 1}), _climber(), world,
+    decompose(GatherMaterialsGoal("loot", {"loot": 1}, now=cycle_now()), _climber(), world,
               region_edges.region_edge_actions(world), TIMED_NO_PROFILE_CONTEXT, store=store)
     return opened, grinds
 
@@ -844,7 +902,7 @@ def test_the_walk_takes_the_climb_the_pricer_took_over_a_door(
         monkeypatch: pytest.MonkeyPatch, rated_store: LearningStore) -> None:
     """Final review I-2. `loot` grows on an overworld vein at mining 5 and
     past the spare door at mining 1. With the store the pricer's cheapest
-    route is the climb, so `door_route` names no door route and the walk
+    route is the climb, so `route_order` ranks the vein first and the walk
     opens the mining grind; without it the door route is the only priced one
     and the walk opens the door."""
     world = _climb_world(vault_door=False, vein=True)
@@ -852,10 +910,11 @@ def test_the_walk_takes_the_climb_the_pricer_took_over_a_door(
     assert [o.unlock for o in route_options("loot", state, world, ctx, rated_store,
                                             policy=DECOMPOSE_POLICY)] == [
         "skill:mining:5", "door:spare_keyx1"]
-    assert door_route("loot", state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
-                      store=rated_store) is None
-    assert door_route("loot", state, world, ctx, policy=DECOMPOSE_POLICY, pocket=state.gold,
-                      store=None) == (SourceKind.GATHER, "loot_rocks")
+    assert next(iter(route_order("loot", state, world, ctx, policy=DECOMPOSE_POLICY,
+                                 pocket=state.gold, store=rated_store))) == (
+        SourceKind.GATHER, "loot_vein")
+    assert list(route_order("loot", state, world, ctx, policy=DECOMPOSE_POLICY,
+                            pocket=state.gold, store=None)) == [(SourceKind.GATHER, "loot_rocks")]
     assert _served(monkeypatch, world, rated_store) == ([], [("mining", 5)])
     assert _served(monkeypatch, world, None) == ([(("spare_key", 1),)], [])
 
@@ -871,7 +930,7 @@ def test_the_cycle_hands_its_store_to_the_walk(
         asked.append(store)
         return []
 
-    goal = GatherMaterialsGoal("loot", {"loot": 1})
+    goal = GatherMaterialsGoal("loot", {"loot": 1}, now=cycle_now())
     monkeypatch.setattr(strategy_driver, "decompose", walk)
     StrategyArbiter(GOAPPlanner(), history=rated_store)._plans(
         goal, make_state(), GameData(), [], TIMED_NO_PROFILE_CONTEXT)

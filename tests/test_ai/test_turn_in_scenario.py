@@ -6,7 +6,7 @@ medals; the fleet still converts them. This is the scenario the earlier
 tasks (dual-role recognition, the holdings ledger, the readiness core, the
 exclusive buyer claim, `SelectionContext.turn_in`/`.recall`, the two goals,
 and the re-equip reservation) were all built to make true, run for real
-through `GamePlayer._resolve_turn_in` and `_decide_band` rather than through
+through `GamePlayer._resolve_turn_in` and `_decide_and_select` rather than through
 any one component in isolation.
 
 THE LIVE FLEET IS THE SHAPE THAT MATTERS (fix-round-3): Robby 27, C3P0 17,
@@ -50,7 +50,7 @@ def _bank_gd():
     resolution tests it exists for, but `_build_actions` (the factory) always
     resolves `game_data.bank_location()` up front and raises when no bank
     tile is known — a real live catalog always has one. Give it an
-    unconditional bank tile so `_decide_band` can plan for real, following
+    unconditional bank tile so `_decide_and_select` can plan for real, following
     the same copy-don't-edit-the-shared-fixture precedent
     `test_turn_in_no_livelock.py`'s `_wearable_medal_game_data` set."""
     gd = medal_game_data()
@@ -125,7 +125,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
     c3po._resolve_turn_in(c3po.state, gd)
     assert c3po._turn_in is not None and c3po._turn_in.buyer == "Robby"
     assert c3po._recall == ("lich_race_medal", 2)
-    c3po_goal, c3po_plan, _ = c3po._decide_band(
+    c3po_goal, c3po_plan, _ = c3po._decide_and_select(
         c3po.state, gd, c3po._build_actions())
     assert isinstance(c3po_goal, SurrenderCurrencyGoal)
     # Both worn copies come off (the two slots are interchangeable, so the
@@ -143,7 +143,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
         inventory={}, bank_items={"lich_race_medal": 2}))
     r2d2._resolve_turn_in(r2d2.state, gd)
     assert r2d2._recall == ("lich_race_medal", 2)
-    r2d2_goal, r2d2_plan, _ = r2d2._decide_band(
+    r2d2_goal, r2d2_plan, _ = r2d2._decide_and_select(
         r2d2.state, gd, r2d2._build_actions())
     assert isinstance(r2d2_goal, SurrenderCurrencyGoal), (
         "a sibling's deposit must not satisfy THIS character's surrender")
@@ -160,7 +160,7 @@ def test_the_live_fleet_of_below_level_medal_wearers_reaches_the_trophy(tmp_path
         bank_items={"lich_race_medal": 8})
     robby._resolve_turn_in(robby.state, gd)
     assert robby._turn_in is not None and robby._turn_in.buyer == "Robby"
-    goal, plan, _ = robby._decide_band(robby.state, gd, robby._build_actions())
+    goal, plan, _ = robby._decide_and_select(robby.state, gd, robby._build_actions())
     assert isinstance(goal, CurrencyTurnInGoal)
     reprs = [repr(a) for a in plan]
     # Its own two worn medals fund 2 of the 10, so the bank supplies 8 — not
@@ -198,6 +198,7 @@ def test_the_buyer_snapshot_carries_the_turn_in_block_with_role_buyer(tmp_path):
         "fleet_total": 10,
         "buyer": "Robby",
         "role": "buyer",
+        "ready": True,
     }
 
 

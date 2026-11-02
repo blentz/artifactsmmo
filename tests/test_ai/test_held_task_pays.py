@@ -210,7 +210,6 @@ class TestPlayerPricesThePayOncePerCycle:
         monkeypatch.setattr(player, "_task_aligned_monster", lambda: None)
         monkeypatch.setattr(player_mod, "pool_draw", lambda *a: (False, None))
         monkeypatch.setattr(player_mod, "fight_ahead_loadout", lambda *a: None)
-        monkeypatch.setattr(ctx_mod, "secure_win", lambda *a: True)
 
         def fake(state_, game_data, ctx, monster, history):  # type: ignore[no-untyped-def]
             pays.append((monster, ctx.combat_monster))

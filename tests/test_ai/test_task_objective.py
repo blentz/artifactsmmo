@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.decisions import root as root_mod
 from artifactsmmo_cli.ai.decisions.route import route_price
-from artifactsmmo_cli.ai.gear_objective_result import GearObjective
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
@@ -31,13 +31,21 @@ from artifactsmmo_cli.ai.goals.task_kills import PRIORITY, TaskKillsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.plan_tree import _label
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import root_category
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
+from artifactsmmo_cli.ai.task_horizon import (
+    HORIZON_GEAR,
+    HORIZON_LEVEL_UP,
+    HORIZON_OUT_OF_REACH,
+    TaskHorizon,
+)
 from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachTaskOutcome
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import root_category
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, stamped
 from tests.test_ai.test_grey_farm import _gd, make_state
 
 
@@ -84,7 +92,7 @@ class TestTaskKillsGoal:
 
     def test_it_round_trips_through_the_plan_cache(self) -> None:
         goal = TaskKillsGoal("chicken", 3)
-        back = goal_from_dict(goal_to_dict(goal), None)
+        back = goal_from_dict(goal_to_dict(goal), None, now=cycle_now())
         assert isinstance(back, TaskKillsGoal)
         assert repr(back) == repr(goal) == "TaskKills(chicken)"
         assert not back.is_satisfied(_held(3)) and back.is_satisfied(_held(4))
@@ -101,7 +109,7 @@ class TestReachTaskOutcome:
 
     def test_every_meta_goal_dispatch_has_an_arm(self) -> None:
         node = ReachTaskOutcome("chicken")
-        assert prerequisites(node, _held(), _gd()) == []
+        assert prerequisites(node, _held(), _gd(), ctx=stamped(NO_PROFILE_CONTEXT)) == []
         assert root_category(node) == "task"
         assert _label(node) == ("task chicken", "task")
 
@@ -190,21 +198,33 @@ class TestTaskRoot:
         assert got == ReachTaskOutcome("chicken")
 
     def test_an_unwinnable_task_asks_for_gear(self) -> None:
-        """USER 2026-10-05: the task asks for the gear that beats its monster."""
+        """USER 2026-10-05: the task asks for the gear that beats its monster:
+        the horizon's gear verdict, the first missing piece of `L*` of the task
+        monster (plan C Task 2), in its slot, asked of the cycle's state and
+        context."""
+        piece = GearPiece("weapon_slot", "iron_sword", 0, Fraction(1), Fraction(10),
+                          SourceKind.CRAFT)
+        later = GearPiece("helmet_slot", "iron_helm", 0, Fraction(1), Fraction(10),
+                          SourceKind.CRAFT)
+        objective = GearObjective("chicken", {}, Fraction(1), (piece, later))
+        state = _held()
         with (patch.object(root_mod, "is_winnable", return_value=False),
-              patch.object(root_mod, "deficit_upgrade_target",
-                           return_value=("iron_sword", "weapon_slot")) as deficit):
-            got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
-        assert got == ObtainItem("iron_sword", 1, slot="weapon_slot")
-        actions_of = deficit.call_args.kwargs["actions_of"]
-        with patch.object(root_mod._route, "route_price", return_value=17) as price:
-            assert actions_of("iron_sword", "weapon_slot") == 17
-        assert price.call_args.args[0] == ObtainItem("iron_sword", 1, slot="weapon_slot")
+              patch.object(root_mod, "resolve_task_horizon",
+                           return_value=TaskHorizon("chicken", HORIZON_GEAR)) as horizon,
+              patch.object(root_mod, "gear_objective_for", return_value=objective) as pinned):
+            got = root_mod._task_root(state, _gd(), TIMED_NO_PROFILE_CONTEXT, None)
+            assert got == ObtainItem("iron_sword", 1, slot="weapon_slot")
+            assert horizon.call_args.args[0] is state
+            assert horizon.call_args.args[2:] == (TIMED_NO_PROFILE_CONTEXT, None)
+            assert pinned.call_args.args[:2] == ("chicken", state)
 
     def test_an_unwinnable_task_no_gear_closes_waits(self) -> None:
-        with (patch.object(root_mod, "is_winnable", return_value=False),
-              patch.object(root_mod, "deficit_upgrade_target", return_value=None)):
-            assert root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
+        """Any other reading names no gear: the task waits for a coin."""
+        for reading in (None, TaskHorizon("chicken", HORIZON_LEVEL_UP),
+                        TaskHorizon("chicken", HORIZON_OUT_OF_REACH)):
+            with (patch.object(root_mod, "is_winnable", return_value=False),
+                  patch.object(root_mod, "resolve_task_horizon", return_value=reading)):
+                assert root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None) is None
 
     def test_the_walk_offers_it_after_the_trunk(self) -> None:
         gd = _gd()
@@ -231,7 +251,8 @@ class TestWorthCancelFold:
         """An unwinnable task no gear closes: no other arm offers it, so only
         the cancel can."""
         with (patch.object(root_mod, "is_winnable", return_value=False),
-              patch.object(root_mod, "deficit_upgrade_target", return_value=None)):
+              patch.object(root_mod, "resolve_task_horizon",
+                           return_value=TaskHorizon("chicken", HORIZON_OUT_OF_REACH))):
             with patch.object(root_mod._route, "task_cancel_due", return_value=True):
                 got = root_mod._task_root(_held(), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
             assert got == ReachTaskOutcome("chicken")

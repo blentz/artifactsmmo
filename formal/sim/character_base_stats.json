@@ -854,6 +854,353 @@
         "level": 6,
         "max_hp": 145,
         "source": "algebraic_subtraction_from_equipped_character_stats"
+      },
+      {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "captured_at": "2026-10-31",
+        "character": "Robby",
+        "critical_strike": 0,
+        "gear": {
+          "attack": {
+            "air": 0,
+            "earth": 37,
+            "fire": 37,
+            "water": 0
+          },
+          "critical_strike": 38,
+          "initiative": 230,
+          "max_hp": 590,
+          "resistance": {
+            "air": 23,
+            "earth": 0,
+            "fire": 39,
+            "water": 0
+          }
+        },
+        "initiative": 100,
+        "level": 41,
+        "max_hp": 320,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "attack": {
+            "air": 0,
+            "earth": 37,
+            "fire": 37,
+            "water": 0
+          },
+          "critical_strike": 38,
+          "initiative": 330,
+          "max_hp": 910,
+          "resistance": {
+            "air": 23,
+            "earth": 0,
+            "fire": 39,
+            "water": 0
+          }
+        },
+        "source": "algebraic_subtraction_from_equipped_character_stats",
+        "worn": [
+          "death_knight_sword",
+          "lifesteal_rune",
+          "mithril_shield",
+          "lich_crown",
+          "malefic_armor",
+          "skeleton_pants",
+          "lizard_boots",
+          "celest_ring",
+          "ring_of_chance",
+          "dreadful_amulet",
+          "malefic_crystal",
+          "lich_race_medal",
+          "lost_world_map",
+          "satchel"
+        ]
+      },
+      {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "captured_at": "2026-10-31",
+        "character": "R2D2",
+        "critical_strike": 0,
+        "gear": {
+          "attack": {
+            "air": 0,
+            "earth": 20,
+            "fire": 0,
+            "water": 65
+          },
+          "critical_strike": 28,
+          "initiative": 230,
+          "max_hp": 740,
+          "resistance": {
+            "air": 15,
+            "earth": 28,
+            "fire": 7,
+            "water": 20
+          }
+        },
+        "initiative": 100,
+        "level": 37,
+        "max_hp": 300,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "attack": {
+            "air": 0,
+            "earth": 20,
+            "fire": 0,
+            "water": 65
+          },
+          "critical_strike": 28,
+          "initiative": 330,
+          "max_hp": 1040,
+          "resistance": {
+            "air": 15,
+            "earth": 28,
+            "fire": 7,
+            "water": 20
+          }
+        },
+        "source": "algebraic_subtraction_from_equipped_character_stats",
+        "worn": [
+          "dreadful_battleaxe",
+          "lifesteal_rune",
+          "slime_shield",
+          "lich_crown",
+          "bandit_armor",
+          "royal_skeleton_pants",
+          "gold_boots",
+          "ring_of_chance",
+          "ring_of_chance",
+          "corrupted_stone_amulet",
+          "lich_race_trophy",
+          "lich_race_medal"
+        ]
+      },
+      {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "captured_at": "2026-10-31",
+        "character": "C3P0",
+        "critical_strike": 0,
+        "gear": {
+          "attack": {
+            "air": 40,
+            "earth": 0,
+            "fire": 45,
+            "water": 0
+          },
+          "critical_strike": 14,
+          "initiative": 150,
+          "max_hp": 650,
+          "resistance": {
+            "air": 15,
+            "earth": 8,
+            "fire": 15,
+            "water": 8
+          }
+        },
+        "initiative": 100,
+        "level": 36,
+        "max_hp": 295,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "attack": {
+            "air": 40,
+            "earth": 0,
+            "fire": 45,
+            "water": 0
+          },
+          "critical_strike": 14,
+          "initiative": 250,
+          "max_hp": 945,
+          "resistance": {
+            "air": 15,
+            "earth": 8,
+            "fire": 15,
+            "water": 8
+          }
+        },
+        "source": "algebraic_subtraction_from_equipped_character_stats",
+        "worn": [
+          "strangold_sword",
+          "lifesteal_rune",
+          "goblin_guard_shield",
+          "royal_skeleton_helmet",
+          "bandit_armor",
+          "royal_skeleton_pants",
+          "adventurer_boots",
+          "ring_of_chance",
+          "ring_of_the_adept",
+          "skull_amulet",
+          "lich_race_medal"
+        ]
+      },
+      {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "captured_at": "2026-10-31",
+        "character": "HAL",
+        "critical_strike": 0,
+        "gear": {
+          "attack": {
+            "air": 0,
+            "earth": 0,
+            "fire": 40,
+            "water": 40
+          },
+          "critical_strike": 23,
+          "initiative": 230,
+          "max_hp": 580,
+          "resistance": {
+            "air": 15,
+            "earth": 13,
+            "fire": 7,
+            "water": 27
+          }
+        },
+        "initiative": 100,
+        "level": 39,
+        "max_hp": 310,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "attack": {
+            "air": 0,
+            "earth": 0,
+            "fire": 40,
+            "water": 40
+          },
+          "critical_strike": 23,
+          "initiative": 330,
+          "max_hp": 890,
+          "resistance": {
+            "air": 15,
+            "earth": 13,
+            "fire": 7,
+            "water": 27
+          }
+        },
+        "source": "algebraic_subtraction_from_equipped_character_stats",
+        "worn": [
+          "elderwood_staff",
+          "lifesteal_rune",
+          "slime_shield",
+          "lich_crown",
+          "bandit_armor",
+          "steel_legs_armor",
+          "snakeskin_boots",
+          "ring_of_chance",
+          "ring_of_chance",
+          "skull_amulet",
+          "lich_race_medal",
+          "satchel"
+        ]
+      },
+      {
+        "attack": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "captured_at": "2026-10-31",
+        "character": "Lor",
+        "critical_strike": 0,
+        "gear": {
+          "attack": {
+            "air": 0,
+            "earth": 20,
+            "fire": 0,
+            "water": 65
+          },
+          "critical_strike": 24,
+          "initiative": 310,
+          "max_hp": 780,
+          "resistance": {
+            "air": 15,
+            "earth": 20,
+            "fire": 15,
+            "water": 20
+          }
+        },
+        "initiative": 100,
+        "level": 36,
+        "max_hp": 295,
+        "resistance": {
+          "air": 0,
+          "earth": 0,
+          "fire": 0,
+          "water": 0
+        },
+        "sheet": {
+          "attack": {
+            "air": 0,
+            "earth": 20,
+            "fire": 0,
+            "water": 65
+          },
+          "critical_strike": 24,
+          "initiative": 410,
+          "max_hp": 1075,
+          "resistance": {
+            "air": 15,
+            "earth": 20,
+            "fire": 15,
+            "water": 20
+          }
+        },
+        "source": "algebraic_subtraction_from_equipped_character_stats",
+        "worn": [
+          "dreadful_battleaxe",
+          "lifesteal_rune",
+          "slime_shield",
+          "lich_crown",
+          "bandit_armor",
+          "royal_skeleton_pants",
+          "lizard_boots",
+          "royal_skeleton_ring",
+          "ring_of_chance",
+          "corrupted_stone_amulet",
+          "lich_race_trophy",
+          "lich_race_medal",
+          "satchel"
+        ]
       }
     ]
   }

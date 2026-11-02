@@ -7,17 +7,17 @@ from fractions import Fraction
 
 import pytest
 
-import artifactsmmo_cli.ai.gold_rate as gold_rate
+import artifactsmmo_cli.ai.gold_rate as gold_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.task_horizon import HORIZON_GEAR, HORIZON_OUT_OF_REACH, TaskHorizon
 from artifactsmmo_cli.ai.task_worth import held_task_cancel_due, short_items, task_worth_for
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
 
 
 def _gd() -> GameData:
@@ -35,39 +35,38 @@ def _gd() -> GameData:
 def _fixed_fight(monkeypatch):  # type: ignore[no-untyped-def]
     """Two cycles a kill, every fight of 10 s; the horizon reads the fight as
     won."""
-    monkeypatch.setattr(mod, "expected_damage_per_fight", lambda s, g, m: 0)
+    for module in (mod, gold_mod):
+        monkeypatch.setattr(module, "expected_damage_per_fight", lambda s, g, m: 0)
+        monkeypatch.setattr(module, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
     monkeypatch.setattr(mod, "walk_seconds", lambda *_args: Fraction(10))
-    monkeypatch.setattr(mod, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
-    # `fight_gold_rate` lives in `gold_rate` now (S-046: the pricer reads it).
-    monkeypatch.setattr(gold_rate, "expected_damage_per_fight", lambda s, g, m: 0)
-    monkeypatch.setattr(gold_rate, "cycles_per_kill", lambda dmg, hp, seconds: 2.0)
-    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+    monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
     monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
 
 
 class TestShortItems:
     def test_the_closure_less_the_bag_and_bank(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         state = make_state(inventory={"cloth": 2}, bank_items={"wolf_hair": 1})
         assert short_items(state, _gd(), ctx) == {"wolf_cloak", "wolf_hair"}
 
     def test_a_banked_supply_is_not_short(self) -> None:
         """Live 2026-10-07: wolf, pig and skeleton read "aligned" while the bank
         held their drops."""
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         state = make_state(bank_items={"wolf_hair": 4, "thread": 6})
         assert short_items(state, _gd(), ctx) == {"wolf_cloak", "cloth"}
 
-    def test_worn_gear_needs_nothing(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, near_term_targets=frozenset({"wolf_cloak"}))
+    def test_a_held_objective_needs_nothing(self) -> None:
+        """`L*` held: no piece is missing, so no drop is short for gear."""
         state = make_state(equipment={"body_armor_slot": "wolf_cloak"})
-        assert short_items(state, _gd(), ctx) == frozenset()
+        assert short_items(state, _gd(), with_missing(TIMED_NO_PROFILE_CONTEXT)) == frozenset()
+        assert short_items(state, _gd(), TIMED_NO_PROFILE_CONTEXT) == frozenset()
 
 
 @pytest.mark.usefixtures("_fixed_fight")
 class TestTaskWorthFor:
     def test_a_short_drop_is_a_reason(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         worth = task_worth_for("wolf", "monsters", 10, make_state(level=30), _gd(), ctx, None)
         assert worth == TaskWorth(xp=False, gold=False, drops=True)
 
@@ -93,10 +92,10 @@ class TestTaskWorthFor:
         # the horizon makes the out-of-reach task worthless.
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         monkeypatch.setattr(mod, "resolve_task_horizon",
-                            lambda s, g: TaskHorizon("wolf", HORIZON_OUT_OF_REACH, None))
+                            lambda s, g, c, h: TaskHorizon("wolf", HORIZON_OUT_OF_REACH))
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(),
                                   demanded, None).any()
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: TaskHorizon("wolf", HORIZON_GEAR, None))
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: TaskHorizon("wolf", HORIZON_GEAR))
         assert task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp
 
     def test_an_items_task_earns_its_reward_over_its_actions(self, monkeypatch) -> None:
@@ -137,7 +136,7 @@ class TestHeldTaskCancelDue:
         assert not held_task_cancel_due(self._held(task_progress=10), _gd(), TIMED_NO_PROFILE_CONTEXT, None)
 
     def test_a_worthy_task_is_kept(self) -> None:
-        ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, target_gear=frozenset({"wolf_cloak"}))
+        ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("body_armor_slot", "wolf_cloak"))
         assert not held_task_cancel_due(self._held(task_code="wolf"), _gd(), ctx, None)
 
 
@@ -170,7 +169,7 @@ class TestXpDemanded:
 
     def test_character_xp_counts_only_when_level_is_demanded(self, monkeypatch) -> None:
         monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: True)
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
         state = make_state(level=30)
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         assert task_worth_for("wolf", "monsters", 10, state, _gd(), demanded, None).xp
@@ -189,6 +188,6 @@ class TestXpDemanded:
 
     def test_unpaid_xp_is_no_reason_however_demanded(self, monkeypatch) -> None:
         monkeypatch.setattr(mod, "task_advances_progression", lambda s, g: False)
-        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g: None)
+        monkeypatch.setattr(mod, "resolve_task_horizon", lambda s, g, c, h: None)
         demanded = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT, level_demanded=True)
         assert not task_worth_for("wolf", "monsters", 10, make_state(), _gd(), demanded, None).xp

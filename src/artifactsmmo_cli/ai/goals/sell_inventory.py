@@ -1,6 +1,8 @@
 """SellInventoryGoal: sell the copies the keep authority licenses, for gold and space."""
 
-from datetime import datetime, timezone
+import copy
+from dataclasses import replace
+from datetime import datetime
 
 from artifactsmmo_cli.ai.accumulation_sell import (
     SEVERE_STEPS,
@@ -16,6 +18,7 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -91,6 +94,13 @@ class SellInventoryGoal(Goal):
                 bank_sellable_surplus(state, game_data, ctx))
             self._initial_owned = self._owned_snapshot_total(state)
 
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
+
     def _owned_snapshot_total(self, state: WorldState) -> int:
         """Copies of the snapshot's codes the character OWNS — bag PLUS bank.
 
@@ -162,11 +172,12 @@ class SellInventoryGoal(Goal):
         this cycle, and the arm declines to withdraw them at all."""
         for npc_code, _price in game_data.npcs_buying_item(code):
             loc = game_data.npc_location(npc_code)
-            if loc is None:
+            if loc is None or not vendor_reached(npc_code, landed, game_data):
                 continue
             sale = NpcSellAction(npc_code=npc_code, item_code=code,
                                  quantity=quantity, npc_location=loc,
-                                 travel_region=game_data.npc_region(npc_code))
+                                 travel_region=game_data.npc_region(npc_code),
+                                 now=self._ctx.now)
             if sale.is_applicable(landed, game_data):
                 return sale
         return None
@@ -187,11 +198,12 @@ class SellInventoryGoal(Goal):
                                            relief=self._relief).items():
             for npc_code, _price in game_data.npcs_buying_item(code):
                 loc = game_data.npc_location(npc_code)
-                if loc is None:
+                if loc is None or not vendor_reached(npc_code, state, game_data):
                     continue
                 act = NpcSellAction(npc_code=npc_code, item_code=code,
                                     quantity=quantity, npc_location=loc,
-                                    travel_region=game_data.npc_region(npc_code))
+                                    travel_region=game_data.npc_region(npc_code),
+                                    now=self._ctx.now)
                 if act.is_applicable(state, game_data):
                     result.append(act)
                     break
@@ -199,12 +211,14 @@ class SellInventoryGoal(Goal):
 
     def _active_window_for_inventory(self, state: WorldState, game_data: GameData) -> bool:
         """True if some held item can be sold to a currently-active reachable merchant."""
-        now = datetime.now(timezone.utc)
+        now = self._ctx.now
         for item_code, qty in state.inventory.items():
             if qty <= 0:
                 continue
             for npc_code, _price in game_data.npcs_buying_item(item_code):
                 if not game_data.is_event_npc(npc_code):
+                    continue
+                if not vendor_reached(npc_code, state, game_data):
                     continue
                 if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
                                        active_events=state.active_events, now=now):

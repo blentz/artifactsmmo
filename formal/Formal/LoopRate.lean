@@ -14,17 +14,21 @@ Python `Fraction`.
 * `restPart m maxHp` — 0 when nothing is missing, else the published Rest:
   `max 3 ⌈min m maxHp × 100 / maxHp⌉` (`rest_cooldown_core.rest_cooldown_seconds`;
   the Nat ceil is the same one `Formal.ActionCostNonneg.restCost` uses);
-* a food is `(restore, price, held)` (USER 2026-10-09, "free until used up"):
-  the first `held` units are free, every further unit costs `price` (its
+* a food is `(restore, price, held, room)` (USER 2026-10-09, "free until used
+  up"): the first `held` units are free, every further unit costs `price` (its
   replacement); `price = none` means it has no replacement, so at most `held`
-  units can be eaten. Eating `k` units is one use:
+  units can be eaten; and at most `room` units can be eaten, the units the bag
+  can carry of it (Task 8c ruling C2-food, `chosen_loadout.food_room`). Eating `k` units is one use:
   `eatCost k = (k = 0 ? 0 : eat) + (k - held) × price` (the flat consumable
   cooldown; Nat subtraction is the `max 0`);
-* `recovery` — per food, the minimum over `k ≤ foodBound` (`⌈m / restore⌉`, and
-  no more than `held` for a food with no replacement) of eating `k` and
-  recovering the rest with the remaining foods; with no food left, rest. The
-  count bound loses no optimum: `recovery_le_planCost` — recovery is at most
-  the cost of EVERY feasible count vector.
+* `recovery` — per food, the minimum over `k ≤ foodBound` (`⌈m / restore⌉`, no
+  more than `held` for a food with no replacement, and no more than `room`) of
+  eating `k` and recovering the rest with the remaining foods; with no food
+  left, rest. The count bound loses no optimum: `recovery_le_planCost` —
+  recovery is at most the cost of EVERY feasible count vector. A food the bag
+  has no room for is no food (`no_room_skips`: the recovery falls back to the
+  other foods and to Rest, priced, not vetoed), and more room never slows
+  recovery (`room_mono`).
 * a potion the fight drank is `(used, price, held)`: `potionCost = (used −
   held) × price`, and with no replacement it is priceable only while `used ≤
   held`; `consumedPrice` sums them (`none`: some drink cannot be paid for).
@@ -77,14 +81,15 @@ def minUpTo : Nat → (Nat → Nat) → Nat
   | 0, f => f 0
   | n + 1, f => min (minUpTo n f) (f (n + 1))
 
-/-- A food: `(restore, price, held)`; a `none` price has no replacement. -/
-abbrev Food := Nat × Option Nat × Nat
+/-- A food: `(restore, price, held, room)`; a `none` price has no replacement,
+and `room` is the most units of it the bag can carry. -/
+abbrev Food := Nat × Option Nat × Nat × Nat
 
 /-- The most units of a food the search tries: `⌈m / r⌉`, capped at `held`
-when the food has no replacement. -/
-def foodBound (m r : Nat) : Option Nat → Nat → Nat
-  | some _, _ => countBound m r
-  | none, h => min (countBound m r) h
+when the food has no replacement, and at the bag's `room` for it. -/
+def foodBound (m r : Nat) : Option Nat → Nat → Nat → Nat
+  | some _, _, c => min (countBound m r) c
+  | none, h, c => min (min (countBound m r) h) c
 
 /-- One use of `k` units: the flat cooldown once, plus the price of every unit
 past the held ones. -/
@@ -92,24 +97,38 @@ def eatCost (k eat : Nat) : Option Nat → Nat → Nat
   | some p, h => (if k = 0 then 0 else eat) + (k - h) * p
   | none, _ => if k = 0 then 0 else eat
 
-/-- The cheapest recovery of `m` missing HP (scaled seconds). -/
-def recovery (scale eat maxHp : Nat) : List Food → Nat → Nat
-  | [], m => scale * restPart m maxHp
-  | (r, p, h) :: fs, m =>
-    minUpTo (foodBound m r p h) (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r))
+/-- The most units of a food the joint search tries in a bag with `q` units of
+room and `s` stacks left (Task 8c fix round 1): none with no stack left, else
+`foodBound` and no more than the room left. -/
+def jointBound (m r : Nat) (p : Option Nat) (h c q s : Nat) : Nat :=
+  if s = 0 then 0 else min (foodBound m r p h c) q
 
-/-- A count vector the foods can be eaten with: a food with no replacement is
-eaten at most `held` times. Counts missing at the end are 0. -/
-def feasible : List Food → List Nat → Prop
-  | [], _ => True
-  | _ :: fs, [] => feasible fs []
-  | (_, p, h) :: fs, k :: ks => (p = none → k ≤ h) ∧ feasible fs ks
+/-- The stacks left after eating `k` units of one food: a food eaten takes one. -/
+def slotsAfter (k s : Nat) : Nat := if k = 0 then s else s - 1
+
+/-- The cheapest recovery of `m` missing HP (scaled seconds) from a bag with `q`
+units of room and `s` stacks for its foods: ONE room for all of them. -/
+def recovery (scale eat maxHp : Nat) : List Food → Nat → Nat → Nat → Nat
+  | [], m, _, _ => scale * restPart m maxHp
+  | (r, p, h, c) :: fs, m, q, s =>
+    minUpTo (jointBound m r p h c q s)
+      (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (q - k) (slotsAfter k s))
+
+/-- A count vector the foods can be eaten with from a bag with `q` units of room
+and `s` stacks: a food with no replacement is eaten at most `held` times, no
+food more than its `room`, the units sum to at most `q`, and the foods eaten
+number at most `s`. Counts missing at the end are 0. -/
+def feasible : List Food → List Nat → Nat → Nat → Prop
+  | [], _, _, _ => True
+  | _ :: fs, [], q, s => feasible fs [] q s
+  | (_, p, h, c) :: fs, k :: ks, q, s =>
+    (p = none → k ≤ h) ∧ k ≤ c ∧ k ≤ q ∧ (k ≠ 0 → 0 < s) ∧ feasible fs ks (q - k) (slotsAfter k s)
 
 /-- What eating the count vector `ks` and resting the remainder costs. -/
 def planCost (scale eat maxHp : Nat) : List Food → List Nat → Nat → Nat
   | [], _, m => scale * restPart m maxHp
   | _ :: fs, [], m => planCost scale eat maxHp fs [] m
-  | (r, p, h) :: fs, k :: ks, m => eatCost k eat p h + planCost scale eat maxHp fs ks (m - k * r)
+  | (r, p, h, _) :: fs, k :: ks, m => eatCost k eat p h + planCost scale eat maxHp fs ks (m - k * r)
 
 /-- The price of the `used` drinks of one potion past its `held` units. -/
 def potionCost (u h : Nat) : Option Nat → Option Nat
@@ -224,172 +243,400 @@ theorem eatCost_held_anti (k eat h h' : Nat) (p : Option Nat) (hh : h ≤ h') :
     show (if k = 0 then 0 else eat) + (k - h') * q ≤ (if k = 0 then 0 else eat) + (k - h) * q
     exact Nat.add_le_add_left (Nat.mul_le_mul_right _ (by omega)) _
 
-theorem foodBound_held_mono (m r h h' : Nat) (p : Option Nat) (hh : h ≤ h') :
-    foodBound m r p h ≤ foodBound m r p h' := by
+theorem foodBound_held_mono (m r h h' c : Nat) (p : Option Nat) (hh : h ≤ h') :
+    foodBound m r p h c ≤ foodBound m r p h' c := by
   cases p with
-  | none => show min (countBound m r) h ≤ min (countBound m r) h'; omega
+  | none => show min (min (countBound m r) h) c ≤ min (min (countBound m r) h') c; omega
   | some _ => exact Nat.le_refl _
 
+theorem foodBound_room_mono (m r h c c' : Nat) (p : Option Nat) (hc : c ≤ c') :
+    foodBound m r p h c ≤ foodBound m r p h c' := by
+  cases p with
+  | none => show min (min (countBound m r) h) c ≤ min (min (countBound m r) h) c'; omega
+  | some _ => show min (countBound m r) c ≤ min (countBound m r) c'; omega
+
 /-- A count inside the search is feasible. -/
-theorem foodBound_feasible (m r h k : Nat) (p : Option Nat) (hk : k ≤ foodBound m r p h) :
-    p = none → k ≤ h := by
-  intro hp; subst hp; simp only [foodBound] at hk; omega
+theorem foodBound_feasible (m r h c k : Nat) (p : Option Nat) (hk : k ≤ foodBound m r p h c) :
+    (p = none → k ≤ h) ∧ k ≤ c := by
+  cases p with
+  | none =>
+    simp only [foodBound] at hk
+    exact ⟨fun _ => (by omega), by omega⟩
+  | some _ =>
+    simp only [foodBound] at hk
+    exact ⟨fun hp => (by cases hp), by omega⟩
 
 /-- A feasible count past the search bound eats the whole deficit at the bound. -/
-theorem foodBound_cover (m r h k : Nat) (p : Option Nat) (hr : 0 < r)
-    (hk : foodBound m r p h < k) (hfeas : p = none → k ≤ h) :
-    m - foodBound m r p h * r = 0 := by
+theorem foodBound_cover (m r h c k : Nat) (p : Option Nat) (hr : 0 < r)
+    (hk : foodBound m r p h c < k) (hfeas : (p = none → k ≤ h) ∧ k ≤ c) :
+    m - foodBound m r p h c * r = 0 := by
   have hcov := countBound_covers m r hr
+  obtain ⟨hfh, hkc⟩ := hfeas
   cases p with
   | some q =>
-    show m - countBound m r * r = 0
-    omega
-  | none =>
-    have hkh := hfeas rfl
     simp only [foodBound] at hk ⊢
-    have hb : min (countBound m r) h = countBound m r := by omega
+    have hb : min (countBound m r) c = countBound m r := by omega
     rw [hb]; omega
+  | none =>
+    have hkh := hfh rfl
+    simp only [foodBound] at hk ⊢
+    have hb : min (min (countBound m r) h) c = countBound m r := by omega
+    rw [hb]; omega
+
+theorem jointBound_le_of (m r h h' c c' q s : Nat) (p p' : Option Nat)
+    (hb : foodBound m r p h c ≤ foodBound m r p' h' c') :
+    jointBound m r p h c q s ≤ jointBound m r p' h' c' q s := by
+  unfold jointBound
+  by_cases hs : s = 0
+  · simp [hs]
+  · simp only [hs, if_false]; omega
+
+/-- A count inside the joint search is a feasible count for the food. -/
+theorem jointBound_feasible (m r h c q s k : Nat) (p : Option Nat)
+    (hk : k ≤ jointBound m r p h c q s) :
+    (p = none → k ≤ h) ∧ k ≤ c ∧ k ≤ q ∧ (k ≠ 0 → 0 < s) := by
+  unfold jointBound at hk
+  by_cases hs : s = 0
+  · simp only [hs, if_true] at hk
+    have hk0 : k = 0 := by omega
+    subst hk0
+    exact ⟨fun _ => Nat.zero_le _, Nat.zero_le _, Nat.zero_le _, fun h => absurd rfl h⟩
+  · simp only [hs, if_false] at hk
+    have hf := foodBound_feasible m r h c k p (by omega)
+    exact ⟨hf.1, hf.2, by omega, fun _ => by omega⟩
+
+/-- A feasible count past the joint bound: the bound is the food's own, and it
+eats the whole deficit. -/
+theorem jointBound_cover (m r h c q s k : Nat) (p : Option Nat) (hr : 0 < r)
+    (hk : jointBound m r p h c q s < k)
+    (hfeas : (p = none → k ≤ h) ∧ k ≤ c ∧ k ≤ q ∧ (k ≠ 0 → 0 < s)) :
+    jointBound m r p h c q s = foodBound m r p h c ∧ m - foodBound m r p h c * r = 0 := by
+  obtain ⟨hh, hc, hq, hs⟩ := hfeas
+  have hs' : s ≠ 0 := by have := hs (by omega); omega
+  have hj : jointBound m r p h c q s = foodBound m r p h c := by
+    unfold jointBound at hk ⊢
+    simp only [hs', if_false] at hk ⊢
+    omega
+  refine ⟨hj, foodBound_cover m r h c k p hr (by omega) ⟨hh, hc⟩⟩
 
 /-! ## Theorems -/
 
 /-- NEVER WORSE THAN RESTING: recovery is at most resting the whole deficit. -/
 theorem recovery_le_rest (scale eat maxHp : Nat) :
-    ∀ (fs : List Food) (m : Nat),
-      recovery scale eat maxHp fs m ≤ scale * restPart m maxHp
-  | [], _ => Nat.le_refl _
-  | (r, p, h) :: fs, m => by
-    show minUpTo (foodBound m r p h)
-        (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r)) ≤ _
+    ∀ (fs : List Food) (m q s : Nat),
+      recovery scale eat maxHp fs m q s ≤ scale * restPart m maxHp
+  | [], _, _, _ => Nat.le_refl _
+  | (r, p, h, c) :: fs, m, q, s => by
+    show minUpTo (jointBound m r p h c q s)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (q - k) (slotsAfter k s))
+      ≤ _
     refine Nat.le_trans (minUpTo_le _ _ 0 (Nat.zero_le _)) ?_
-    simp only [eatCost_zero, Nat.zero_mul, Nat.zero_add, Nat.sub_zero]
-    exact recovery_le_rest scale eat maxHp fs m
+    simp only [eatCost_zero, Nat.zero_mul, Nat.zero_add, Nat.sub_zero, slotsAfter, if_true]
+    exact recovery_le_rest scale eat maxHp fs m q s
+
+/-- Nothing missing costs nothing, whatever the bag. -/
+theorem recovery_zero (scale eat maxHp : Nat) (fs : List Food) (q s : Nat) :
+    recovery scale eat maxHp fs 0 q s = 0 := by
+  have h := recovery_le_rest scale eat maxHp fs 0 q s
+  simp [restPart] at h
+  omega
 
 /-- MORE HP MISSING NEVER RECOVERS FASTER (every food restores something). -/
 theorem recovery_mono_missing (scale eat maxHp : Nat) :
-    ∀ (fs : List Food), (∀ f ∈ fs, 0 < f.1) → ∀ (m m' : Nat), m ≤ m' →
-      recovery scale eat maxHp fs m ≤ recovery scale eat maxHp fs m'
-  | [], _, m, m', h => Nat.mul_le_mul_left _ (restPart_mono m m' maxHp h)
-  | (r, p, hd) :: fs, hpos, m, m', h => by
-    have hr : 0 < r := hpos (r, p, hd) (List.mem_cons_self ..)
+    ∀ (fs : List Food), (∀ f ∈ fs, 0 < f.1) → ∀ (m m' q s : Nat), m ≤ m' →
+      recovery scale eat maxHp fs m q s ≤ recovery scale eat maxHp fs m' q s
+  | [], _, m, m', _, _, h => Nat.mul_le_mul_left _ (restPart_mono m m' maxHp h)
+  | (r, p, hd, c) :: fs, hpos, m, m', q, s, h => by
+    have hr : 0 < r := hpos (r, p, hd, c) (List.mem_cons_self ..)
     have htail : ∀ f ∈ fs, 0 < f.1 := fun f hf => hpos f (List.mem_cons_of_mem _ hf)
     have ih := recovery_mono_missing scale eat maxHp fs htail
-    show minUpTo (foodBound m r p hd)
-        (fun j => eatCost j eat p hd + recovery scale eat maxHp fs (m - j * r))
-      ≤ minUpTo (foodBound m' r p hd)
-        (fun j => eatCost j eat p hd + recovery scale eat maxHp fs (m' - j * r))
+    show minUpTo (jointBound m r p hd c q s)
+        (fun j => eatCost j eat p hd + recovery scale eat maxHp fs (m - j * r) (q - j) (slotsAfter j s))
+      ≤ minUpTo (jointBound m' r p hd c q s)
+        (fun j => eatCost j eat p hd + recovery scale eat maxHp fs (m' - j * r) (q - j) (slotsAfter j s))
     apply le_minUpTo
     intro k hk'
-    by_cases hk : k ≤ foodBound m r p hd
+    by_cases hk : k ≤ jointBound m r p hd c q s
     · refine Nat.le_trans (minUpTo_le _ _ k hk) ?_
-      exact Nat.add_le_add_left (ih _ _ (Nat.sub_le_sub_right h _)) _
-    · refine Nat.le_trans (minUpTo_le _ _ (foodBound m r p hd) (Nat.le_refl _)) ?_
-      have hzero := foodBound_cover m r hd k p hr (by omega) (foodBound_feasible m' r hd k p hk')
-      show eatCost (foodBound m r p hd) eat p hd
-          + recovery scale eat maxHp fs (m - foodBound m r p hd * r) ≤ _
-      rw [hzero]
-      exact Nat.add_le_add (eatCost_mono _ _ _ _ _ (by omega)) (ih _ _ (Nat.zero_le _))
+      exact Nat.add_le_add_left (ih _ _ _ _ (Nat.sub_le_sub_right h _)) _
+    · refine Nat.le_trans (minUpTo_le _ _ (jointBound m r p hd c q s) (Nat.le_refl _)) ?_
+      obtain ⟨hj, hzero⟩ := jointBound_cover m r hd c q s k p hr (by omega)
+        (jointBound_feasible m' r hd c q s k p hk')
+      show eatCost (jointBound m r p hd c q s) eat p hd
+          + recovery scale eat maxHp fs (m - jointBound m r p hd c q s * r)
+              (q - jointBound m r p hd c q s) (slotsAfter (jointBound m r p hd c q s) s) ≤ _
+      rw [hj, hzero, recovery_zero, Nat.add_zero]
+      exact Nat.le_trans (eatCost_mono _ _ _ _ _ (by omega)) (Nat.le_add_right _ _)
 
 /-- ANOTHER FOOD NEVER SLOWS RECOVERY: eating none of it is always an option. -/
-theorem add_food_le (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Food) (m : Nat) :
-    recovery scale eat maxHp ((r, p, h) :: fs) m ≤ recovery scale eat maxHp fs m := by
-  show minUpTo (foodBound m r p h)
-      (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r)) ≤ _
+theorem add_food_le (scale eat maxHp r h c : Nat) (p : Option Nat) (fs : List Food) (m q s : Nat) :
+    recovery scale eat maxHp ((r, p, h, c) :: fs) m q s ≤ recovery scale eat maxHp fs m q s := by
+  show minUpTo (jointBound m r p h c q s)
+      (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (q - k) (slotsAfter k s))
+    ≤ _
   refine Nat.le_trans (minUpTo_le _ _ 0 (Nat.zero_le _)) ?_
-  simp [eatCost_zero]
+  simp [eatCost_zero, slotsAfter]
 
 /-- A cheaper menu stays cheaper with one more food in front of both. -/
 theorem cons_mono (scale eat maxHp : Nat) (f : Food) (A B : List Food)
-    (hAB : ∀ m, recovery scale eat maxHp A m ≤ recovery scale eat maxHp B m) (m : Nat) :
-    recovery scale eat maxHp (f :: A) m ≤ recovery scale eat maxHp (f :: B) m := by
-  obtain ⟨r, p, h⟩ := f
-  exact minUpTo_mono _ _ (fun k => Nat.add_le_add_left (hAB _) _) _
+    (hAB : ∀ m q s, recovery scale eat maxHp A m q s ≤ recovery scale eat maxHp B m q s)
+    (m q s : Nat) :
+    recovery scale eat maxHp (f :: A) m q s ≤ recovery scale eat maxHp (f :: B) m q s := by
+  obtain ⟨r, p, h, c⟩ := f
+  exact minUpTo_mono _ _ (fun k => Nat.add_le_add_left (hAB _ _ _) _) _
 
 /-- A food no dearer at the head of a menu is no dearer anywhere in it. -/
 theorem replace_mono (scale eat maxHp : Nat) (f g : Food) (post : List Food)
-    (hgf : ∀ m, recovery scale eat maxHp (g :: post) m ≤ recovery scale eat maxHp (f :: post) m) :
-    ∀ (pre : List Food) (m : Nat),
-      recovery scale eat maxHp (pre ++ g :: post) m ≤ recovery scale eat maxHp (pre ++ f :: post) m
-  | [], m => hgf m
-  | e :: pre, m => cons_mono scale eat maxHp e _ _ (replace_mono scale eat maxHp f g post hgf pre) m
+    (hgf : ∀ m q s, recovery scale eat maxHp (g :: post) m q s
+      ≤ recovery scale eat maxHp (f :: post) m q s) :
+    ∀ (pre : List Food) (m q s : Nat),
+      recovery scale eat maxHp (pre ++ g :: post) m q s
+        ≤ recovery scale eat maxHp (pre ++ f :: post) m q s
+  | [], m, q, s => hgf m q s
+  | e :: pre, m, q, s =>
+    cons_mono scale eat maxHp e _ _ (replace_mono scale eat maxHp f g post hgf pre) m q s
 
 /-- A CHEAPER FOOD NEVER SLOWS RECOVERY, wherever it sits in the list. -/
-theorem price_mono (scale eat maxHp r h p p' : Nat) (post : List Food) (hp : p' ≤ p)
-    (pre : List Food) (m : Nat) :
-    recovery scale eat maxHp (pre ++ (r, some p', h) :: post) m
-      ≤ recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
-  replace_mono scale eat maxHp _ _ post (fun m => by
-    show minUpTo (countBound m r)
-        (fun k => eatCost k eat (some p') h + recovery scale eat maxHp post (m - k * r))
-      ≤ minUpTo (countBound m r)
-        (fun k => eatCost k eat (some p) h + recovery scale eat maxHp post (m - k * r))
-    exact minUpTo_mono _ _
-      (fun k => Nat.add_le_add_right (eatCost_price_mono k eat h p p' hp) _) _) pre m
+theorem price_mono (scale eat maxHp r h c p p' : Nat) (post : List Food) (hp : p' ≤ p)
+    (pre : List Food) (m q s : Nat) :
+    recovery scale eat maxHp (pre ++ (r, some p', h, c) :: post) m q s
+      ≤ recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m q s :=
+  replace_mono scale eat maxHp _ _ post (fun m q s => by
+    show minUpTo (jointBound m r (some p') h c q s)
+        (fun k => eatCost k eat (some p') h
+          + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+      ≤ minUpTo (jointBound m r (some p) h c q s)
+        (fun k => eatCost k eat (some p) h
+          + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+    exact minUpTo_le_of _ _ _ _ (Nat.le_refl _)
+      (fun k _ => Nat.add_le_add_right (eatCost_price_mono k eat h p p' hp) _)) pre m q s
 
 /-- A FREE FOOD NEVER SLOWS RECOVERY: price 0 is the cheapest price. -/
-theorem free_food_le (scale eat maxHp r h p : Nat) (pre post : List Food) (m : Nat) :
-    recovery scale eat maxHp (pre ++ (r, some 0, h) :: post) m
-      ≤ recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
-  price_mono scale eat maxHp r h p 0 post (Nat.zero_le p) pre m
+theorem free_food_le (scale eat maxHp r h c p : Nat) (pre post : List Food) (m q s : Nat) :
+    recovery scale eat maxHp (pre ++ (r, some 0, h, c) :: post) m q s
+      ≤ recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m q s :=
+  price_mono scale eat maxHp r h c p 0 post (Nat.zero_le p) pre m q s
 
 /-- MORE HELD NEVER SLOWS RECOVERY (USER "free until used up"): a held unit is
 free, and a food with no replacement can be eaten up to its held count. -/
-theorem held_free_le (scale eat maxHp r h h' : Nat) (p : Option Nat) (post : List Food)
-    (hh : h ≤ h') (pre : List Food) (m : Nat) :
-    recovery scale eat maxHp (pre ++ (r, p, h') :: post) m
-      ≤ recovery scale eat maxHp (pre ++ (r, p, h) :: post) m :=
-  replace_mono scale eat maxHp _ _ post (fun m => by
-    show minUpTo (foodBound m r p h')
-        (fun k => eatCost k eat p h' + recovery scale eat maxHp post (m - k * r))
-      ≤ minUpTo (foodBound m r p h)
-        (fun k => eatCost k eat p h + recovery scale eat maxHp post (m - k * r))
-    exact minUpTo_le_of _ _ _ _ (foodBound_held_mono m r h h' p hh)
-      (fun k _ => Nat.add_le_add_right (eatCost_held_anti k eat h h' p hh) _)) pre m
+theorem held_free_le (scale eat maxHp r h h' c : Nat) (p : Option Nat) (post : List Food)
+    (hh : h ≤ h') (pre : List Food) (m q s : Nat) :
+    recovery scale eat maxHp (pre ++ (r, p, h', c) :: post) m q s
+      ≤ recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m q s :=
+  replace_mono scale eat maxHp _ _ post (fun m q s => by
+    show minUpTo (jointBound m r p h' c q s)
+        (fun k => eatCost k eat p h' + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+      ≤ minUpTo (jointBound m r p h c q s)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+    exact minUpTo_le_of _ _ _ _
+      (jointBound_le_of m r h h' c c q s p p (foodBound_held_mono m r h h' c p hh))
+      (fun k _ => Nat.add_le_add_right (eatCost_held_anti k eat h h' p hh) _)) pre m q s
+
+/-- MORE ROOM FOR A FOOD NEVER SLOWS RECOVERY (Task 8c): a cap that lets the
+search eat more of it, at the same price per unit. -/
+theorem room_mono (scale eat maxHp r h c c' : Nat) (p : Option Nat) (post : List Food)
+    (hc : c ≤ c') (pre : List Food) (m q s : Nat) :
+    recovery scale eat maxHp (pre ++ (r, p, h, c') :: post) m q s
+      ≤ recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m q s :=
+  replace_mono scale eat maxHp _ _ post (fun m q s => by
+    show minUpTo (jointBound m r p h c' q s)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+      ≤ minUpTo (jointBound m r p h c q s)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+    exact minUpTo_le_of _ _ _ _
+      (jointBound_le_of m r h h c c' q s p p (foodBound_room_mono m r h c c' p hc))
+      (fun _ _ => Nat.le_refl _)) pre m q s
+
+/-- NO ROOM, NO FOOD (Task 8c, the fallback): a food capped at no units is
+never eaten, so the recovery is the one over the other foods, down to Rest —
+a priced alternative, not a veto. -/
+theorem no_room_skips (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Food)
+    (m q s : Nat) :
+    recovery scale eat maxHp ((r, p, h, 0) :: fs) m q s = recovery scale eat maxHp fs m q s := by
+  show minUpTo (jointBound m r p h 0 q s)
+      (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (q - k) (slotsAfter k s))
+    = _
+  have hb : jointBound m r p h 0 q s = 0 := by
+    unfold jointBound; cases p <;> simp [foodBound]
+  rw [hb]
+  simp [minUpTo, eatCost_zero, slotsAfter]
+
+/-- NO STACK LEFT, REST (Task 8c fix round 1): a bag with no stack for a food
+eats none, so the recovery is Rest. -/
+theorem no_slot_rests (scale eat maxHp : Nat) :
+    ∀ (fs : List Food) (m q : Nat),
+      recovery scale eat maxHp fs m q 0 = scale * restPart m maxHp
+  | [], _, _ => rfl
+  | (r, p, h, c) :: fs, m, q => by
+    show minUpTo (jointBound m r p h c q 0)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (q - k) (slotsAfter k 0))
+      = _
+    have hb : jointBound m r p h c q 0 = 0 := by simp [jointBound]
+    rw [hb]
+    simp only [minUpTo, eatCost_zero, Nat.zero_mul, Nat.zero_add, Nat.sub_zero, slotsAfter, if_true]
+    exact no_slot_rests scale eat maxHp fs m q
+
+/-- NO ROOM LEFT, REST (Task 8c fix round 1): a bag with no units of room eats
+nothing, so the recovery is Rest. -/
+theorem no_qty_rests (scale eat maxHp : Nat) :
+    ∀ (fs : List Food) (m s : Nat),
+      recovery scale eat maxHp fs m 0 s = scale * restPart m maxHp
+  | [], _, _ => rfl
+  | (r, p, h, c) :: fs, m, s => by
+    show minUpTo (jointBound m r p h c 0 s)
+        (fun k => eatCost k eat p h + recovery scale eat maxHp fs (m - k * r) (0 - k) (slotsAfter k s))
+      = _
+    have hb : jointBound m r p h c 0 s = 0 := by unfold jointBound; split <;> simp
+    rw [hb]
+    simp only [minUpTo, eatCost_zero, Nat.zero_mul, Nat.zero_add, Nat.sub_zero, slotsAfter, if_true]
+    exact no_qty_rests scale eat maxHp fs m s
 
 /-- A REPLACEMENT NEVER SLOWS RECOVERY: with a price, the held units are still
 free and more can be bought past them. -/
-theorem priced_le_unpriced (scale eat maxHp r h q : Nat) (pre post : List Food) (m : Nat) :
-    recovery scale eat maxHp (pre ++ (r, some q, h) :: post) m
-      ≤ recovery scale eat maxHp (pre ++ (r, none, h) :: post) m :=
-  replace_mono scale eat maxHp _ _ post (fun m => by
-    show minUpTo (countBound m r)
-        (fun k => eatCost k eat (some q) h + recovery scale eat maxHp post (m - k * r))
-      ≤ minUpTo (min (countBound m r) h)
-        (fun k => eatCost k eat none h + recovery scale eat maxHp post (m - k * r))
-    refine minUpTo_le_of _ _ _ _ (Nat.min_le_left _ _) (fun k hk => ?_)
-    have hkh : k ≤ h := Nat.le_trans hk (Nat.min_le_right _ _)
+theorem priced_le_unpriced (scale eat maxHp r h c q' : Nat) (pre post : List Food) (m q s : Nat) :
+    recovery scale eat maxHp (pre ++ (r, some q', h, c) :: post) m q s
+      ≤ recovery scale eat maxHp (pre ++ (r, none, h, c) :: post) m q s :=
+  replace_mono scale eat maxHp _ _ post (fun m q s => by
+    show minUpTo (jointBound m r (some q') h c q s)
+        (fun k => eatCost k eat (some q') h
+          + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+      ≤ minUpTo (jointBound m r none h c q s)
+        (fun k => eatCost k eat none h + recovery scale eat maxHp post (m - k * r) (q - k) (slotsAfter k s))
+    refine minUpTo_le_of _ _ _ _ (jointBound_le_of m r h h c c q s none (some q')
+      (by show min (min (countBound m r) h) c ≤ min (countBound m r) c; omega)) (fun k hk => ?_)
+    have hkh : k ≤ h := (jointBound_feasible m r h c q s k none hk).1 rfl
     have hz : k - h = 0 := by omega
-    show (if k = 0 then 0 else eat) + (k - h) * q + _ ≤ (if k = 0 then 0 else eat) + _
+    show (if k = 0 then 0 else eat) + (k - h) * q' + _ ≤ (if k = 0 then 0 else eat) + _
     rw [hz, Nat.zero_mul, Nat.add_zero]
-    exact Nat.le_refl _) pre m
+    exact Nat.le_refl _) pre m q s
 
 /-- OPTIMALITY: recovery is at most the cost of every feasible count vector, so
-the bounded search loses no plan. -/
+the bounded joint search loses no plan the bag can hold. -/
 theorem recovery_le_planCost (scale eat maxHp : Nat) :
-    ∀ (fs : List Food), (∀ f ∈ fs, 0 < f.1) → ∀ (ks : List Nat) (m : Nat), feasible fs ks →
-      recovery scale eat maxHp fs m ≤ planCost scale eat maxHp fs ks m
-  | [], _, _, _, _ => Nat.le_refl _
-  | (r, p, h) :: fs, hpos, [], m, hf => by
+    ∀ (fs : List Food), (∀ f ∈ fs, 0 < f.1) → ∀ (ks : List Nat) (m q s : Nat),
+      feasible fs ks q s → recovery scale eat maxHp fs m q s ≤ planCost scale eat maxHp fs ks m
+  | [], _, _, _, _, _, _ => Nat.le_refl _
+  | (r, p, h, c) :: fs, hpos, [], m, q, s, hf => by
     have htail : ∀ f ∈ fs, 0 < f.1 := fun f hf => hpos f (List.mem_cons_of_mem _ hf)
-    refine Nat.le_trans (add_food_le scale eat maxHp r h p fs m) ?_
-    exact recovery_le_planCost scale eat maxHp fs htail [] m hf
-  | (r, p, h) :: fs, hpos, k :: ks, m, hf => by
-    have hr : 0 < r := hpos (r, p, h) (List.mem_cons_self ..)
+    refine Nat.le_trans (add_food_le scale eat maxHp r h c p fs m q s) ?_
+    exact recovery_le_planCost scale eat maxHp fs htail [] m q s hf
+  | (r, p, h, c) :: fs, hpos, k :: ks, m, q, s, hf => by
+    have hr : 0 < r := hpos (r, p, h, c) (List.mem_cons_self ..)
     have htail : ∀ f ∈ fs, 0 < f.1 := fun f hf => hpos f (List.mem_cons_of_mem _ hf)
     have ih := recovery_le_planCost scale eat maxHp fs htail ks
-    obtain ⟨hk, hks⟩ : (p = none → k ≤ h) ∧ feasible fs ks := hf
-    show minUpTo (foodBound m r p h)
-        (fun j => eatCost j eat p h + recovery scale eat maxHp fs (m - j * r))
+    obtain ⟨hk, hkc, hkq, hks, hrest⟩ :
+        (p = none → k ≤ h) ∧ k ≤ c ∧ k ≤ q ∧ (k ≠ 0 → 0 < s)
+          ∧ feasible fs ks (q - k) (slotsAfter k s) := hf
+    show minUpTo (jointBound m r p h c q s)
+        (fun j => eatCost j eat p h + recovery scale eat maxHp fs (m - j * r) (q - j) (slotsAfter j s))
       ≤ eatCost k eat p h + planCost scale eat maxHp fs ks (m - k * r)
-    by_cases hb : k ≤ foodBound m r p h
-    · exact Nat.le_trans (minUpTo_le _ _ k hb) (Nat.add_le_add_left (ih _ hks) _)
-    · refine Nat.le_trans (minUpTo_le _ _ (foodBound m r p h) (Nat.le_refl _)) ?_
-      have hzero := foodBound_cover m r h k p hr (by omega) hk
-      show eatCost (foodBound m r p h) eat p h
-          + recovery scale eat maxHp fs (m - foodBound m r p h * r) ≤ _
-      rw [hzero]
-      exact Nat.add_le_add (eatCost_mono _ _ _ _ _ (by omega))
-        (Nat.le_trans (recovery_mono_missing scale eat maxHp fs htail 0 _ (Nat.zero_le _))
-          (ih _ hks))
+    by_cases hb : k ≤ jointBound m r p h c q s
+    · exact Nat.le_trans (minUpTo_le _ _ k hb) (Nat.add_le_add_left (ih _ _ _ hrest) _)
+    · refine Nat.le_trans (minUpTo_le _ _ (jointBound m r p h c q s) (Nat.le_refl _)) ?_
+      obtain ⟨hj, hzero⟩ := jointBound_cover m r h c q s k p hr (by omega) ⟨hk, hkc, hkq, hks⟩
+      show eatCost (jointBound m r p h c q s) eat p h
+          + recovery scale eat maxHp fs (m - jointBound m r p h c q s * r)
+              (q - jointBound m r p h c q s) (slotsAfter (jointBound m r p h c q s) s) ≤ _
+      rw [hj, hzero, recovery_zero, Nat.add_zero]
+      exact Nat.le_trans (eatCost_mono _ _ _ _ _ (by omega)) (Nat.le_add_right _ _)
+
+/-! ## The bag's shares (Task 8c fix round 1, `chosen_loadout.food_shares`)
+
+ONE room for all the loadout's foods. A food is `(eaten, bag)`: the units one
+fight eats of it and the units of it the bag holds. The room is the foods' own
+units plus the free quantity `qFree`. The foods the bag holds no stack of need a
+new stack each, and a bag without a free slot for every one of them admits none
+of them; the admitted foods share the room in proportion to `eaten`, rounded
+down. -/
+
+/-- The foods eaten that the bag holds no stack of: one new stack each. -/
+def newStacks : List (Nat × Nat) → Nat
+  | [] => 0
+  | (e, b) :: fs => (if 0 < e ∧ b = 0 then 1 else 0) + newStacks fs
+
+/-- The units of the foods the bag already holds. -/
+def bagSum : List (Nat × Nat) → Nat
+  | [] => 0
+  | (_, b) :: fs => b + bagSum fs
+
+/-- A food is admitted when it is eaten and its stack is held or every new
+stack has a slot (`ok`). -/
+def admits (ok : Bool) (f : Nat × Nat) : Bool := decide (0 < f.1) && (decide (0 < f.2) || ok)
+
+/-- The units one fight eats of the admitted foods. -/
+def admittedTotal (ok : Bool) : List (Nat × Nat) → Nat
+  | [] => 0
+  | f :: fs => (if admits ok f then f.1 else 0) + admittedTotal ok fs
+
+/-- One admitted food's share of room `q` out of total `t`. -/
+def foodShareOf (ok : Bool) (q t : Nat) (f : Nat × Nat) : Nat := if admits ok f then f.1 * q / t else 0
+
+/-- Each food's share of the one room. -/
+def shares (fs : List (Nat × Nat)) (slots qFree : Nat) : List Nat :=
+  let ok := decide (newStacks fs ≤ slots)
+  fs.map (foodShareOf ok (bagSum fs + qFree) (admittedTotal ok fs))
+
+theorem foodShareOf_mul_le (ok : Bool) (q t : Nat) (f : Nat × Nat) :
+    foodShareOf ok q t f * t ≤ (if admits ok f then f.1 else 0) * q := by
+  unfold foodShareOf
+  split
+  · exact Nat.div_mul_le_self _ _
+  · simp
+
+theorem sum_foodShareOf_mul_le (ok : Bool) (q t : Nat) :
+    ∀ fs : List (Nat × Nat), (fs.map (foodShareOf ok q t)).sum * t ≤ admittedTotal ok fs * q
+  | [] => by simp [admittedTotal]
+  | f :: fs => by
+    have ih := sum_foodShareOf_mul_le ok q t fs
+    have hf := foodShareOf_mul_le ok q t f
+    simp only [List.map_cons, List.sum_cons, admittedTotal, Nat.add_mul]
+    omega
+
+theorem sum_map_zero : ∀ fs : List (Nat × Nat), (fs.map (fun _ => (0 : Nat))).sum = 0
+  | [] => rfl
+  | _ :: fs => by simp only [List.map_cons, List.sum_cons, sum_map_zero fs]
+
+/-- THE SHARES FIT: they sum to at most the room. -/
+theorem shares_sum_le (fs : List (Nat × Nat)) (slots qFree : Nat) :
+    (shares fs slots qFree).sum ≤ bagSum fs + qFree := by
+  unfold shares
+  generalize decide (newStacks fs ≤ slots) = ok
+  show (fs.map (foodShareOf ok (bagSum fs + qFree) (admittedTotal ok fs))).sum ≤ _
+  have h := sum_foodShareOf_mul_le ok (bagSum fs + qFree) (admittedTotal ok fs) fs
+  by_cases ht : admittedTotal ok fs = 0
+  · have hz : ∀ f ∈ fs, foodShareOf ok (bagSum fs + qFree) (admittedTotal ok fs) f = 0 := by
+      intro f _; unfold foodShareOf; rw [ht]; split <;> simp
+    rw [List.map_congr_left hz, sum_map_zero]
+    exact Nat.zero_le _
+  · exact Nat.le_of_mul_le_mul_right (by rw [Nat.mul_comm (bagSum fs + qFree)]; exact h)
+      (Nat.pos_of_ne_zero ht)
+
+theorem admitted_le_total (ok : Bool) :
+    ∀ (fs : List (Nat × Nat)) (f : Nat × Nat), f ∈ fs → admits ok f = true →
+      f.1 ≤ admittedTotal ok fs
+  | [], _, hm, _ => absurd hm (List.not_mem_nil)
+  | g :: fs, f, hm, ha => by
+    simp only [admittedTotal]
+    rcases List.mem_cons.mp hm with he | hm'
+    · subst he; simp [ha]
+    · have := admitted_le_total ok fs f hm' ha; omega
+
+/-- A ROOM THAT HOLDS A FIGHT GIVES EVERY ADMITTED FOOD ITS FIGHT: when the
+room holds one fight's units of every admitted food, each admitted food's share
+is at least the units one fight eats of it — so the loop never prices eating a
+food the bag does not carry. -/
+theorem share_covers (fs : List (Nat × Nat)) (slots qFree : Nat) (f : Nat × Nat) (hm : f ∈ fs)
+    (ha : admits (decide (newStacks fs ≤ slots)) f = true)
+    (hroom : admittedTotal (decide (newStacks fs ≤ slots)) fs ≤ bagSum fs + qFree) :
+    f.1 ≤ foodShareOf (decide (newStacks fs ≤ slots)) (bagSum fs + qFree)
+      (admittedTotal (decide (newStacks fs ≤ slots)) fs) f := by
+  generalize hok : decide (newStacks fs ≤ slots) = ok at ha hroom ⊢
+  have hle := admitted_le_total ok fs f hm ha
+  have hpos : 0 < f.1 := by
+    unfold admits at ha; simp only [Bool.and_eq_true, decide_eq_true_eq] at ha; exact ha.1
+  unfold foodShareOf
+  rw [if_pos ha]
+  exact (Nat.le_div_iff_mul_le (by omega)).mpr (Nat.mul_le_mul_left _ hroom)
 
 /-- The increment-3 consumed price: nothing held, every drink at its price. -/
 theorem potionCost_held_zero (u q : Nat) : potionCost u 0 (some q) = some (u * q) := by
@@ -456,28 +703,51 @@ theorem xpRate_antitone (xp scale f f' r r' c c' : Nat)
 /-- MORE HP LOST NEVER RAISES THE RATE: a fight that ends lower recovers no
 faster, so the loop is no faster. -/
 theorem rate_antitone_missing (xp scale eat maxHp f c : Nat) (fs : List Food)
-    (hpos : ∀ g ∈ fs, 0 < g.1) (m m' : Nat) (h : m ≤ m') :
-    qle (xpRate xp scale f (recovery scale eat maxHp fs m') c)
-        (xpRate xp scale f (recovery scale eat maxHp fs m) c) :=
+    (hpos : ∀ g ∈ fs, 0 < g.1) (m m' q s : Nat) (h : m ≤ m') :
+    qle (xpRate xp scale f (recovery scale eat maxHp fs m' q s) c)
+        (xpRate xp scale f (recovery scale eat maxHp fs m q s) c) :=
   xpRate_antitone xp scale f f _ _ c c (Nat.le_refl _)
-    (recovery_mono_missing scale eat maxHp fs hpos m m' h) (Nat.le_refl _)
+    (recovery_mono_missing scale eat maxHp fs hpos m m' q s h) (Nat.le_refl _)
 
 /-! ## Witnesses -/
 
 -- 60 of 100 HP missing: Rest is 60 s. One free 50-HP food (eat 3 s) then rest
 -- 10 HP (10 s) = 13 s; two of them = 3 s.
-example : recovery 1 3 100 [] 60 = 60 := by decide
-example : recovery 1 3 100 [(50, some 0, 0)] 60 = 3 := by decide
+example : recovery 1 3 100 [] 60 10 1 = 60 := by decide
+example : recovery 1 3 100 [(50, some 0, 0, 2)] 60 10 1 = 3 := by decide
 -- A dear food (40 s a unit): one of them (43 s) then rest 10 HP = 53 s.
-example : recovery 1 3 100 [(50, some 40, 0)] 60 = 53 := by decide
+example : recovery 1 3 100 [(50, some 40, 0, 2)] 60 10 1 = 53 := by decide
 -- Dearer still (60 s a unit): never eaten, Rest wins.
-example : recovery 1 3 100 [(50, some 60, 0)] 60 = 60 := by decide
+example : recovery 1 3 100 [(50, some 60, 0, 2)] 60 10 1 = 60 := by decide
 -- ...unless two are held: both free, one use, 3 s.
-example : recovery 1 3 100 [(50, some 60, 2)] 60 = 3 := by decide
+example : recovery 1 3 100 [(50, some 60, 2, 2)] 60 10 1 = 3 := by decide
 -- One held, no replacement: eat it (3 s) and rest 10 HP (10 s).
-example : recovery 1 3 100 [(50, none, 1)] 60 = 13 := by decide
+example : recovery 1 3 100 [(50, none, 1, 2)] 60 10 1 = 13 := by decide
 -- Nothing missing: nothing to do (no three-second floor).
-example : recovery 1 3 100 [(50, some 0, 0)] 0 = 0 := by decide
+example : recovery 1 3 100 [(50, some 0, 0, 2)] 0 10 1 = 0 := by decide
+-- Task 8c: room for one free unit only: eat it (3 s) and rest 10 HP (10 s);
+-- room for none: Rest, the fallback (`no_room_skips`), 60 s.
+example : recovery 1 3 100 [(50, some 0, 0, 1)] 60 10 1 = 13 := by decide
+example : recovery 1 3 100 [(50, some 0, 0, 0)] 60 10 1 = 60 := by decide
+-- Task 8c fix round 1, ONE room. Scenario A: 3 held no-replacement 10-HP
+-- crumbs and a 30-HP pie at 5 s, 80 HP missing. Two stacks: 2 crumbs and 2
+-- pies, 16 s. One stack: the pies alone (3 + 3 × 5 = 18 s), never both.
+example : recovery 1 3 100 [(10, none, 3, 100), (30, some 5, 0, 100)] 80 100 2 = 16 := by decide
+example : recovery 1 3 100 [(10, none, 3, 100), (30, some 5, 0, 100)] 80 100 1 = 18 := by decide
+-- Scenario B: two 10-HP foods at 1 s, 80 missing, 5 units of room: five of one
+-- (3 + 5) and rest 30, 38 s — never eight units a fight.
+example : recovery 1 3 100 [(10, some 1, 0, 100), (10, some 1, 0, 100)] 80 5 2 = 38 := by decide
+-- No stack, no units: Rest (`no_slot_rests`, `no_qty_rests`).
+example : recovery 1 3 100 [(50, some 0, 0, 2)] 60 10 0 = 60 := by decide
+example : recovery 1 3 100 [(50, some 0, 0, 2)] 60 0 1 = 60 := by decide
+-- The shares: 3 and 5 a fight of two new stacks in 16 units and 2 slots: 6 and
+-- 10; with one slot neither is admitted; a held stack is admitted with no slot.
+example : shares [(3, 0), (5, 0)] 2 16 = [6, 10] := by decide
+example : shares [(3, 0), (5, 0)] 1 16 = [0, 0] := by decide
+example : shares [(3, 4), (5, 0)] 0 12 = [16, 0] := by decide
+-- The theorems at those shapes, their hypotheses satisfied.
+example : admittedTotal (decide (newStacks [(3, 0), (5, 0)] ≤ 2)) [(3, 0), (5, 0)]
+    ≤ bagSum [(3, 0), (5, 0)] + 16 := by decide
 -- Five drinks, three held, 7 s each past them: 14 s; an unpriced sixth: none.
 example : consumedPrice [(5, some 7, 3)] = some 14 := by decide
 example : consumedPrice [(5, some 7, 3), (6, none, 5)] = none := by decide

@@ -13,17 +13,19 @@ from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.status_schema import StatusSchema
 
-from artifactsmmo_cli.ai.best_loadout import BestLoadout
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
+    ACTION_LOGS,
     FIGHT_LOGS,
     FleetBootstrap,
     log_fights,
     offline_context,
 )
-from artifactsmmo_cli.ai.loop_rate import LoopRate
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.progression.objective import feasible_now, near_term_model
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -31,9 +33,12 @@ _ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]
 BOOTSTRAP = FleetBootstrap(
     fights=tuple(log_fights(_ROBBY["haste"], [(kind, cooldown, turns) for kind, cooldown, turns
                                               in _ROBBY["entries"][:100]])),
-    cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]))
-"""Robby's newest 100 `/my/logs` entries in the committed live capture, at his
-captured haste: the account-log bootstrap a player driven through
+    cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]),
+    kinds=tuple((kind, cooldown, item, quantity) for kind, cooldown, item, quantity
+                in json.loads(ACTION_LOGS.read_text())["entries"]))
+"""Robby's newest 100 `/my/logs` fights in the committed live capture, at his
+captured haste, and the account's action-log capture's entries for the
+per-kind seconds: the account-log bootstrap a player driven through
 `_initialize` against a mocked client is handed (ruling ZD)."""
 
 def patched_logs() -> Any:
@@ -43,10 +48,12 @@ def patched_logs() -> Any:
                  return_value=BOOTSTRAP)
 
 
-NO_DROPS_CONTEXT = replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty())
+NO_DROPS_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
 """`NO_PROFILE_CONTEXT` with nothing observed passed explicitly: every drop at
 its API prior (ruling T16b). `NO_PROFILE_CONTEXT` itself carries no evidence
-and refuses to price a drop."""
+and refuses to price a drop. It carries the committed capture's seconds too
+(`offline_context`): every route is priced in measured seconds (ruling
+"seconds inside", 2026-10-31), so a price with none to read refuses."""
 
 TIMED_NO_PROFILE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
 """`NO_PROFILE_CONTEXT` carrying the committed live capture's fight and action
@@ -66,6 +73,37 @@ rung for a catalogue with no equipment. That refusal is correct — the project
 rule is to use API data or fail — so the fixtures stop asserting a world the
 API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 `decide_tree` call will see needs at least this."""
+
+
+def obtainable_now(code: str, state: WorldState, gd: GameData) -> bool:
+    """One `code` obtainable from `state`: production's `feasible_now`, the
+    question `classify_target` asks of its target and materials."""
+    return feasible_now(near_term_model(state, gd, cycle_now()), code)
+
+
+def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionContext:
+    """`ctx` with a gear objective whose `L*` misses `pieces` ((slot, code)
+    pairs, in that order); no pieces is an objective whose `L*` is held."""
+    missing = tuple(GearPiece(slot, code, 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
+                    for slot, code in pieces)
+    return replace(ctx, gear_objective=GearObjective(
+        "chicken", {slot: code for slot, code in pieces}, Fraction(1), missing))
+
+
+def cycle_now() -> datetime:
+    """The cycle clock a test hands to decision code that takes one (ruling
+    T8b), read at CALL time: the instant `GamePlayer._stamp_cycle` would read
+    for a cycle run now. A test about a wall-clock-relative window (an event
+    expiring an hour from now) keeps the meaning it had when the code read the
+    wall itself; a test about the clock passes its own fixed instant."""
+    return datetime.now(tz=timezone.utc)
+
+
+def stamped(ctx: SelectionContext) -> SelectionContext:
+    """`ctx` stamped with the cycle clock at CALL time (`cycle_now`), for a
+    test that runs a decision outside any cycle. `NO_PROFILE_CONTEXT` itself
+    carries the module's import instant, which a test must never decide at."""
+    return replace(ctx, now=cycle_now())
 
 
 def coordination_now() -> datetime:
@@ -187,26 +225,6 @@ def make_state(**overrides) -> WorldState:
     return WorldState(**defaults)
 
 
-def make_loop(*, xp: int = 0, win: bool = False, recovery: int = 0, consumed: int = 0,
-              p_win: Fraction | None = None, used: tuple[tuple[str, int], ...] = ()) -> LoopRate:
-    """One modelled fight loop (`loop_rate.LoopRate`): a 30 s fight, `recovery`
-    and `consumed` seconds, `xp` per kill on a win."""
-    fight = Fraction(30)
-    seconds = fight + recovery + consumed
-    odds = Fraction(int(win)) if p_win is None else p_win
-    return LoopRate(xp_per_second=odds * xp / seconds,
-                    xp_per_kill=xp, win=win, p_win=odds, fight_seconds=fight,
-                    recovery_seconds=Fraction(recovery), consumed_seconds=Fraction(consumed),
-                    max_hp=100, hp_end=50, used=used, eaten=(), runnable=True)
-
-
-def make_best_loadout(loadout: tuple[str, ...] = (), **loop: object) -> BestLoadout:
-    """A `best_loadout.BestLoadout` whose pick is `make_loop(**loop)` wearing
-    `loadout`."""
-    loop_rate = make_loop(**loop)  # type: ignore[arg-type]
-    return BestLoadout(loadout, loop_rate, loop_rate)
-
-
 def season_8_status() -> StatusSchema:
     """The server status page (`GET /`): season 8, begun 2026-06-27, as the
     live server reported it on 2026-10-21."""
@@ -215,3 +233,13 @@ def season_8_status() -> StatusSchema:
         "max_skill_level": 50, "characters_online": 1, "rate_limits": [],
         "season": {"name": "God of the Sun", "number": 8,
                    "start_date": "2026-06-27T00:00:00+00:00", "rewards": []}})
+
+
+def served_game_data() -> GameData:
+    """An empty catalogue that has read the server status page
+    (`season_8_status`): the season start and the level caps every live
+    catalogue loads from `GET /`. A hand-built catalogue starts here, since a
+    catalogue without the status page has no level cap to read."""
+    game_data = GameData()
+    game_data._build_server(season_8_status())
+    return game_data

@@ -9,7 +9,6 @@ from artifactsmmo_cli.ai.actions.equip import (
     ITEM_TYPE_TO_SLOT,
     ITEM_TYPE_TO_SLOTS,
 )
-from artifactsmmo_cli.ai.tiers.objective import _DUPLICATE_FILL_TYPES
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS
 
 _HISTORICAL_TYPE_TO_SLOTS = {
@@ -44,8 +43,7 @@ def test_every_slot_field_maps_to_exactly_one_type():
     assert len(flat) == len(set(flat))
 
 
-def test_dup_fill_is_single_source():
-    assert _DUPLICATE_FILL_TYPES is DUPLICATE_SLOT_TYPES
+def test_dup_fill_is_rings_only():
     # RING ONLY. "artifact" was in this set 2026-07-03..2026-08-22 on an
     # assertion; the live probe it asked for returned HTTP 485 (Lor, 2nd
     # lich_race_medal into an EMPTY artifact2_slot). See equip.py.

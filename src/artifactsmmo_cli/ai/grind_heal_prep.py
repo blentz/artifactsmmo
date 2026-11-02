@@ -15,8 +15,10 @@ the cycle's own when it was chosen against it), handed in by the caller, which
 reads the same pick for the fight's bag-room verdict, so the pick is computed
 once (ruling T14d-R m4); when that recovery eats nothing — Rest
 is the cheaper recovery — nothing is stocked. The stock is the food's carry
-(`chosen_loadout.food_carry`: one recovery's units × `CARRY_HORIZON_FIGHTS`),
-the bag's units counting toward it. The grind's prep (`craft_plan_gen`) and
+(`chosen_loadout.food_carry`: one recovery's units × `CARRY_HORIZON_FIGHTS`,
+bounded by its share of the bag's room, one room for all the loadout's foods,
+and, when only held units are fetched, by them), the bag's units counting
+toward it. The grind's prep (`craft_plan_gen`) and
 every fight step (`strategy_driver._fight_step_prep`) build the SAME goal (the
 MAINTAIN_CONSUMABLES rung that also built it retired 2026-10-10).
 
@@ -29,9 +31,8 @@ vampire with an empty slot — 17 of 34 lost.
 """
 
 from dataclasses import replace
-from datetime import UTC, datetime
 
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.food_producer import may_make_food
 from artifactsmmo_cli.ai.game_data import GameData
@@ -65,25 +66,28 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
     held (bag and bank: held stock is free, USER 2026-10-09 "free until used
     up") — a banked unit is withdrawn by the walk like any banked copy of its
     target (Phase 2c-2b). A food with neither is skipped for the next one."""
-    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    model = ObtainModel(state, game_data, ctx, ctx.now)
     made = dict(loadout.made_food)
-    for code, eaten in loadout.food:
-        carry = food_carry(eaten)
+    # The bag takes only what it has room for (a new stack needs a free
+    # slot): a carry past it plans a Withdraw the server refuses, and the
+    # step waited (live HAL 2026-10-14, Withdraw(cooked_chicken×100) into
+    # 67 units of room, 1.5 h of Wait). One room for all the foods: each
+    # carries its share (`food_shares`), so the first stocked leaves the
+    # others theirs.
+    shares = food_shares([(eaten, state.inventory.get(code, 0)) for code, eaten in loadout.food],
+                         state.inventory_slots_free, state.inventory_free)
+    for (code, eaten), room in zip(loadout.food, shares, strict=True):
         bag = state.inventory.get(code, 0)
         held = bag + (state.bank_items or {}).get(code, 0)
-        # The bag takes only what it has room for (a new stack needs a free
-        # slot): a carry past it plans a Withdraw the server refuses, and the
-        # step waited (live HAL 2026-10-14, Withdraw(cooked_chicken×100) into
-        # 67 units of room, 1.5 h of Wait).
-        room = bag + state.inventory_free if bag or state.inventory_slots_free else 0
-        carry = min(carry, room)
         # Spec 2026-10-13 §1/§4: units past the held ones are MADE only when
         # the food beats Rest at replacement price and this character makes
         # the fleet's food; otherwise only what is held is fetched.
         makes = made.get(code, 0) > 0 and may_make_food(code, ctx.role, ctx.fleet_roles, game_data)
-        for target in ((carry, min(carry, held)) if makes else (min(carry, held),)):
+        fetched = food_carry(eaten, room, held)
+        for target in ((food_carry(eaten, room, None), fetched) if makes else (fetched,)):
             if target > bag and model.feasible(code, target, HEAL_PREP_POLICY):
-                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)
+                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True,
+                                           now=ctx.now)
     return None
 
 
@@ -102,7 +106,8 @@ def potion_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionConte
     for code, used in loadout.potions:
         needed = potion_carry(used) - equipped_potion_qty(state, code)
         if (needed > state.inventory.get(code, 0)
-                and not ladder_supplies(code, needed, state, game_data)
+                and not ladder_supplies(code, needed, state, game_data, ctx.now)
                 and prep_supplies(code, needed, state, game_data, ctx)):
-            return GatherMaterialsGoal(target_item=code, needed={code: needed}, carry=True)
+            return GatherMaterialsGoal(target_item=code, needed={code: needed}, carry=True,
+                                       now=ctx.now)
     return None

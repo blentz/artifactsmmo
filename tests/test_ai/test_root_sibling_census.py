@@ -31,9 +31,9 @@ from artifactsmmo_cli.ai.decisions.root import RootResolution
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_sibling_census import root_sibling_verdicts
 from artifactsmmo_cli.audit.sibling_route_census import sibling_route_verdicts
@@ -56,6 +56,10 @@ class _Store:
 
     def fleet_skill_grind_rate(self, skill: str) -> float | None:
         return None
+
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
 
 
 def _resolution(root: object, alternatives: tuple = (),

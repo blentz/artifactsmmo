@@ -107,8 +107,8 @@ class MonsterCatalog:
         Returns 0 if monster is unknown (no level on file).
 
         EXACT integer arithmetic (mechanical-extraction discipline — this value
-        is in the decision path: band and loop rates rank by it, combat_picker gates
-        on it being positive). The documented formula is evaluated as a single
+        is in the decision path: loop rates rank by it, and the gear objective's
+        candidates gate on it being positive). The documented formula is evaluated as a single
         rational num/den with round-half-UP (a tie goes to the larger award), so
         the Lean mirror (`Formal.XpValue.xpPerKill`) is bit-identical and no
         float rounding can flip a ranking. penalty and multiplier are carried
@@ -295,7 +295,7 @@ class MonsterCatalog:
         """Level of a monster, or 0 when unknown.
 
         Invariant-OK silent default: every caller (FightAction.is_applicable,
-        task_feasibility, unlock_bank, reach_unlock_level, tiers/guards) treats
+        task_feasibility, unlock_bank, reach_unlock_level, progression/guards) treats
         `0` as a documented "not a known monster" probe. Changing this to
         raise would force adding try/except in 5 places (multiple-error-handling
         antipattern). The probe semantics is the contract."""

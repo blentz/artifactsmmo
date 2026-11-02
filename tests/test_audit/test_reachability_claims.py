@@ -7,11 +7,9 @@ production modules imported it and both plan producers ran through it. Acting
 on that comment takes out the planner. Every case below is written against
 that shape: a claim, a subject, and a graph that either agrees or does not.
 
-The census must also LEAVE TRUE CLAIMS ALONE. `player._tree_band_adequate`
-("nothing calls this method any more — a deliberate deferral") and
-`tiers/progression_tree_core.potion_type_weight` (retained on purpose with its
-Lean mirror) are both true and both must stay green, so the last tests here
-drive the real tree.
+The census must also LEAVE TRUE CLAIMS ALONE.
+`ge_order_config.AVG_CYCLE_SECONDS` ("nothing reads `AVG_CYCLE_SECONDS`") is
+true and must stay green, so the last tests here drive the real tree.
 """
 
 from pathlib import Path
@@ -88,7 +86,7 @@ def test_a_function_referenced_only_inside_its_own_body_stays_true() -> None:
 
 def test_an_attribute_on_a_plain_object_is_not_a_caller() -> None:
     """`RequirementGraph.is_obtainable` must not count as a caller of
-    `tiers/skill_grind_target.is_obtainable`. Attribute names collide; only a
+    `progression/skill_grind_target.is_obtainable`. Attribute names collide; only a
     reference through an imported MODULE counts for a module-level name."""
     sources = {
         "src/pkg/a.py": 'def is_obtainable() -> int:\n    """NO PRODUCTION CALLER."""\n    return 1\n',
@@ -179,6 +177,85 @@ def test_an_explicitly_named_subject_is_used_instead_of_containment() -> None:
     verdict = _verdicts(sources)["pkg.a:6"]
     assert verdict.claim.subject == "helper"
     assert not verdict.is_false
+
+
+def test_a_module_constant_with_a_real_reader_is_a_false_claim() -> None:
+    """A module-scope constant is a subject: a load of it elsewhere refutes
+    "nothing reads" it."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "from pkg.a import RATE\n\nX = RATE * 2\n",
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert verdict.is_false
+
+
+def test_a_constant_named_only_in_another_docstring_is_a_true_claim() -> None:
+    """Prose that names a constant does not read it, and neither does a store
+    of the same name."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": '"""Convert with `a.RATE`, at the call site."""\n\nRATE = 1\n',
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert not verdict.is_false
+
+
+def test_a_same_named_constant_in_another_module_is_not_a_reader() -> None:
+    """A constant is read through its own module: another module's constant
+    of the same name, and that module's own uses of it, read nothing here."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "RATE = 1\n\nX = RATE * 2\n",
+        "src/pkg/c.py": "from pkg.b import RATE\nfrom pkg import b\n\nY = RATE + b.RATE\n",
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
+
+
+def test_rebinding_a_constant_does_not_read_it() -> None:
+    """A store binds the name; it is no reader, even in the constant's own
+    module."""
+    sources = {
+        "src/pkg/a.py": ('"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n\n\n'
+                         "def reset() -> None:\n    global RATE\n    RATE = 1.0\n"),
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
+
+
+def test_a_constant_read_through_its_module_alias_is_a_false_claim() -> None:
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "from pkg import a\n\nX = a.RATE * 2\n",
+    }
+    assert _verdicts(sources)["pkg.a:1"].is_false
+
+
+def test_a_constant_read_through_its_dotted_module_is_a_false_claim() -> None:
+    """`import pkg.a` binds `pkg`, so the read is the attribute chain
+    `pkg.a.RATE`, whose base is itself an attribute. It reads `RATE` all the
+    same, and the claim that nothing does is false (plan C Task 6 re-review)."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "import pkg.a\n\nX = pkg.a.RATE * 2\n",
+    }
+    verdict = _verdicts(sources)["pkg.a:1"]
+    assert verdict.claim.subject == "RATE"
+    assert verdict.reached_by == ("pkg.b:3",)
+
+
+def test_a_dotted_read_of_another_modules_constant_is_not_a_reader() -> None:
+    """The dotted origin is the module the chain names: `pkg.b.RATE` reads
+    `pkg.b`'s constant, not `pkg.a`'s, and an attribute on a local object
+    names no module at all."""
+    sources = {
+        "src/pkg/a.py": '"""Nothing reads `RATE`."""\n\nRATE = 30.0\n"""The rate."""\n',
+        "src/pkg/b.py": "RATE = 1\n",
+        "src/pkg/c.py": ("import pkg.b\n\n\ndef f(obj: object) -> object:\n"
+                         "    return pkg.b.RATE, obj.cfg.RATE, f().RATE\n"),
+    }
+    assert not _verdicts(sources)["pkg.a:1"].is_false
 
 
 def test_a_named_subject_that_no_longer_exists_is_skipped() -> None:
@@ -280,11 +357,10 @@ def test_the_real_sweep_meets_its_lower_bound() -> None:
 
 
 def test_the_known_true_claims_are_swept_and_verified() -> None:
-    """The deliberate keeps: a deferred method and the retained potion pair.
+    """The deliberate keep: an uncalled method.
 
     If subject resolution regressed, these would vanish from the register and
     the census would go quietly blind on exactly the shape it exists for.
     """
     subjects = {v.claim.subject: v for v in run_census(_real_sources())}
-    assert not subjects["_tree_band_adequate"].is_false
-    assert not subjects["potion_type_weight"].is_false
+    assert not subjects["AVG_CYCLE_SECONDS"].is_false

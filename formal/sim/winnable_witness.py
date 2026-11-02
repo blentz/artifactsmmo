@@ -1,12 +1,14 @@
 """Per-level WITNESS builder for the kernel `winnableAcrossBand_grounded` proof.
 
-The Task-1 sweep (`formal/diff/test_winnable_across_band_diff.py`) already
-verified, with production's real `is_winnable`, that `WinnableAcrossBand` holds
-49/49 over the live catalog under the best-full-obtainable-loadout + full-HP
-model. This module re-runs that exact production chain and, for each band level
+The Task-1 sweep (`formal/diff/test_winnable_across_band_diff.py`, retired in
+plan C Task 4) verified, with production's real `is_winnable`, that
+`WinnableAcrossBand` holds 49/49 over the live catalog under the
+best-full-obtainable-loadout + full-HP model. This module runs that production
+chain and, for each band level
 `L in [1, 49]`, records the WITNESS the kernel proof verifies:
 
-  * the winning monster code chosen by `pick_winnable_monster_pure`;
+  * the winning monster code chosen by `witness_monster` (a candidate for the
+    gear objective's `m*`);
   * the `pick_loadout` loadout item codes (every item `level <= L`);
   * the production-projected player combat scalars from `project_loadout_stats`
     (`p.attack` per element, `p.critical_strike`, `p.max_hp`, `p.initiative`,
@@ -42,10 +44,13 @@ The witness rows are consumed by `generate_lean_fixture.py` to emit
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
+from pathlib import Path
 from typing import Any
 
+from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.combat import (
     _crit_hit,
     _element_damage,
@@ -56,7 +61,6 @@ from artifactsmmo_cli.ai.combat import (
     moves_first,
     worn_restore,
 )
-from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.level_loadout import (
     obtainable_hp_bonus_ceiling,
@@ -81,6 +85,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # Leveling band from `GearTierLeveling.InLevelingBand`: 1 <= L < 50.
 BAND_LO = 1
 BAND_HI = 50  # exclusive
+
+# The captured fixtures the witness reads (`snapshot_game_data.py`,
+# `capture_base_stats.py`).
+SIM_DIR = Path(__file__).resolve().parent
+BASE_STATS_PATH = SIM_DIR / "character_base_stats.json"
+SNAPSHOT_PATH = SIM_DIR / "game_data_snapshot.json"
 
 # item_stats keys that prove the snapshot carries combat fields (an OLD snapshot
 # has only level/type/crafting_* — no `attack`).
@@ -366,6 +376,35 @@ def _base_world_state(
     )
 
 
+def witness_monster(
+    char_level: int,
+    monsters: Sequence[tuple[str, int]],
+    wins: Callable[[str], bool],
+    xp_positive: Callable[[str], bool],
+) -> str | None:
+    """The witness row's monster: a candidate for the gear objective's `m*` —
+    production's candidate filter (`gear_objective._candidates`: at most
+    `FIGHT_LEVEL_GAP_CEILING` above the character, paying XP) that wins
+    (`wins`) — the highest-level one, the earlier catalogue entry on a tie.
+
+    It is the `∃ m` of `GearTierLeveling.WinnableAcrossBand` (winnable on the
+    band's witness loadout, XP-positive, under the suicide guard). That it
+    transfers to production's `L*` is a named residual. `gear_objective` itself
+    is not called: the snapshot this
+    witness reads has no maps or monster types, so `_candidates`' spawn and
+    party-type filters cannot be evaluated here. The highest-level rule is the
+    one the witness table was built with (the deleted windowed picker, whose
+    window tier is this rule restricted to `[L-1, L+2]`, where XP is always
+    positive), so the committed rows are unchanged."""
+    ceiling = char_level + FIGHT_LEVEL_GAP_CEILING
+    best: tuple[str, int] | None = None
+    for code, level in monsters:
+        if (level <= ceiling and xp_positive(code) and wins(code)
+                and (best is None or level > best[1])):
+            best = (code, level)
+    return best[0] if best is not None else None
+
+
 def build_witness_row(
     level: int, base_row: dict[str, Any], stats_by_code: dict[str, ItemStats],
     game_data: GameData,
@@ -374,7 +413,7 @@ def build_witness_row(
     in-band target exists (a real `WinnableAcrossBand` gap).
 
     Runs the SAME chain as the Task-1 sweep: full obtainable inventory ->
-    faithful WorldState -> `pick_winnable_monster_pure` over the live catalog
+    faithful WorldState -> `witness_monster` over the live catalog
     with the real `is_winnable`, narrowed to the monsters whose `crit_bound` is
     at least `WITNESS_THETA` (the verdict the kernel decides). For the chosen
     monster it then runs `pick_loadout` + `project_loadout_stats` (production),
@@ -384,7 +423,7 @@ def build_witness_row(
     inventory = obtainable_inventory_for_level(stats_by_code, level)
     hp_ceiling = obtainable_hp_bonus_ceiling(stats_by_code, level)
     state = _base_world_state(level, base_row, inventory, hp_ceiling)
-    monster_code = pick_winnable_monster_pure(
+    monster_code = witness_monster(
         level,
         list(game_data.monster_levels.items()),
         lambda code: (is_winnable(state, game_data, code)

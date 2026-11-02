@@ -18,7 +18,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, or_, select
 
-from artifactsmmo_cli.ai.learning.fight_upkeep_core import FightUpkeep
 from artifactsmmo_cli.ai.learning.models import (
     Blocker,
     CombatLoadoutOutcome,
@@ -50,12 +49,10 @@ from artifactsmmo_cli.ai.learning.schema_init import (
     schema_lock_connect_args,
 )
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
-    WARMUP_MIN_SAMPLES,
     warmup_gated_median,
     warmup_gated_success_rate,
 )
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
-from artifactsmmo_cli.ai.learning.yield_reprs import grind_xp_repr
 
 _T = TypeVar("_T")
 
@@ -389,9 +386,8 @@ class LearningStore:
         reuses the outer cache; the original cache is restored on exit.
 
         The player opens it around the WHOLE `StrategyEngine.decide` (not just the
-        planner) because the unified objective runs one `cheapest_path_to_level`
-        walk per candidate and each walk asks `is_winnable` about every monster at
-        or above a level — ~3.6k reads per walk uncached."""
+        planner) because the decision's walks ask `is_winnable` about many
+        monsters, each a store read when uncached."""
         prev = self._search_cache
         if prev is None:
             self._search_cache = {}
@@ -451,79 +447,6 @@ class LearningStore:
             return warmup_gated_median(non_null)
         except SQLAlchemyError:
             return None
-
-    def action_class_cost(self, action_class: str, default: float,
-                          window: int = WINDOW_ACTION) -> float:
-        """Median actual_cooldown_seconds over the last `window` ok cycles of a
-        given ACTION TYPE (e.g. "FightAction", "MovementAction",
-        "DepositAllAction"), or `default` if < 5 samples.
-
-        Per-action-TYPE cooldown is what the #16 strategic_value weights consume:
-        the cooldown-seconds-saved commensuration reads the learned typical fight
-        / move / deposit cooldown from gameplay rather than assuming a static
-        figure (no fight-cooldown formula exists in the API). Companion to
-        `action_cost`, which keys on the specific `action_repr`."""
-        median = self.cached(
-            ("action_class_cost", action_class, window),
-            lambda: self._action_class_cost_median(action_class, window),
-        )
-        return median if median is not None else default
-
-    def _action_class_cost_median(self, action_class: str, window: int) -> float | None:
-        try:
-            with SqlSession(self._engine) as s:
-                stmt = (
-                    select(Cycle.actual_cooldown_seconds)
-                    .where(
-                        Cycle.character == self._character,
-                        Cycle.action_class == action_class,
-                        Cycle.outcome == "ok",
-                        col(Cycle.actual_cooldown_seconds).is_not(None),
-                    )
-                    .order_by(col(Cycle.ts).desc())
-                    .limit(window)
-                )
-                rows = list(s.exec(stmt))
-            non_null = [r for r in rows if r is not None]
-            return warmup_gated_median(non_null)
-        except SQLAlchemyError:
-            return None
-
-    def action_class_fraction(self, action_class: str,
-                              window: int = WINDOW_ACTION) -> float:
-        """Fraction of the last `window` ok cycles whose `action_class` matches —
-        the observed ACTION-MIX frequency. 0.0 when no ok cycles are recorded.
-
-        #16 strategic_value frequency-weighting: a wisdom point helps on every
-        FIGHT cycle, a bag on every BANK-TRIP cycle, so their cooldown-seconds-
-        saved rates must be weighted by HOW OFTEN each action type actually runs.
-        That frequency is learned here from the action mix rather than derived
-        from an (untracked) char-level xp curve."""
-        return self.cached(
-            ("action_class_fraction", action_class, window),
-            lambda: self._action_class_fraction_uncached(action_class, window),
-        )
-
-    def _action_class_fraction_uncached(self, action_class: str, window: int) -> float:
-        try:
-            with SqlSession(self._engine) as s:
-                stmt = (
-                    select(Cycle.action_class)
-                    .where(
-                        Cycle.character == self._character,
-                        Cycle.outcome == "ok",
-                        col(Cycle.action_class).is_not(None),
-                    )
-                    .order_by(col(Cycle.ts).desc())
-                    .limit(window)
-                )
-                rows = list(s.exec(stmt))
-            if not rows:
-                return 0.0
-            match = sum(1 for r in rows if r == action_class)
-            return match / len(rows)
-        except SQLAlchemyError:
-            return 0.0
 
     def success_rate(self, action_repr: str, window: int = WINDOW_ACTION) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
@@ -642,35 +565,6 @@ class LearningStore:
         except SQLAlchemyError:
             return []
         return attribute_forced_recovery(stream, goal_repr, window)
-
-    def fight_upkeep(self, monster_code: str, window: int = WINDOW_RECENT) -> FightUpkeep | None:
-        """What one kill of `monster_code` has cost this character, measured over
-        its grind's recent cycles; None below WARMUP_MIN_SAMPLES kills.
-
-        `actions_per_kill` counts every cycle of the grind per kill — fights won
-        and lost, moves, and the recovery the fighting forced, which
-        `recent_goal_cycles` attributes to the grind. `consumed_per_kill` is
-        what every fight of it used (`consumables_expended_json`), lost fights
-        included: a potion spent on a loss was still spent."""
-        return self.cached(
-            ("fight_upkeep", monster_code, window),
-            lambda: self._fight_upkeep_uncached(monster_code, window),
-        )
-
-    def _fight_upkeep_uncached(self, monster_code: str, window: int) -> FightUpkeep | None:
-        rows = self.recent_goal_cycles(grind_xp_repr(monster_code), window)
-        fight = f"Fight({monster_code})"
-        fights = [r for r in rows if r.action_repr == fight]
-        kills = sum(1 for r in fights if r.outcome == "ok")
-        if kills < WARMUP_MIN_SAMPLES:
-            return None
-        consumed: Counter[str] = Counter()
-        for r in fights:
-            consumed.update(json.loads(r.consumables_expended_json or "{}"))
-        return FightUpkeep(
-            actions_per_kill=Fraction(len(rows), kills),
-            consumed_per_kill={code: Fraction(qty, kills) for code, qty in consumed.items()},
-        )
 
     def recent_cycles(self, window: int) -> list[Cycle]:
         """This character's most recent `window` cycles, newest first, UNFILTERED.
@@ -968,6 +862,28 @@ class LearningStore:
                 select(func.avg(Cycle.actual_cooldown_seconds))
                 .where(col(Cycle.actual_cooldown_seconds) > 0)).one()
         return None if mean is None else float(mean)
+
+    def fleet_action_cooldowns(self, classes: frozenset[str], after_id: int,
+                               through_id: int) -> list[tuple[str, str, float, int]]:
+        """`(action_class, action_repr, total cooldown seconds, cycles)` of every
+        character's successful cycles of an action class in `classes` with a
+        positive cooldown and `after_id < id <= through_id`, one row per repr:
+        the recorded server cooldowns the pricer times each priced action kind
+        by (`fight_seconds_model.store_kind_seconds`, the user's I2 ruling
+        2026-10-31). The table is append-only, so a reader holds the sums and
+        asks only the rows past the last id it read. Empty when none."""
+        with SqlSession(self._engine) as s:
+            rows = s.exec(
+                select(Cycle.action_class, Cycle.action_repr,
+                       func.sum(Cycle.actual_cooldown_seconds), func.count())
+                .where(col(Cycle.action_class).in_(sorted(classes)),
+                       Cycle.outcome == "ok",
+                       col(Cycle.actual_cooldown_seconds) > 0,
+                       col(Cycle.id) > after_id, col(Cycle.id) <= through_id)
+                .group_by(col(Cycle.action_class), col(Cycle.action_repr))).all()
+        # The positive-cooldown filter makes every group's sum a number.
+        return [(str(action_class), str(action_repr), float(cast(float, seconds)), int(cycles))
+                for action_class, action_repr, seconds, cycles in rows]
 
     def last_cycle_id(self) -> int:
         """The id of the newest cycle any character recorded, 0 on an empty

@@ -52,12 +52,13 @@ pure cores — they mirror the Lean `Formal.AccumulationSell` defs byte-for-byte
 the differential gate.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -100,7 +101,7 @@ def accumulation_excess(held: int, cap: int) -> int:
 
 def _is_sellable(code: str, game_data: GameData) -> bool:
     """An item with a REACHABLE NPC buyer that is tradeable — the per-item rule
-    behind `tiers/guards._has_sellable`. A buyer in the price table whose
+    behind `progression/guards._has_sellable`. A buyer in the price table whose
     `npc_location` is None (a dormant event merchant) does NOT count, matching
     `NpcSellAction.is_applicable`."""
     stats = game_data.item_stats(code)
@@ -181,11 +182,11 @@ def sell_targets(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return sellable_accumulation(state, game_data, ctx)
 
 
-def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
+def sellable_tradeable_now(state: WorldState, game_data: GameData, now: datetime) -> bool:
     """A held item a buyer can actually take RIGHT NOW.
 
     THE PREDICATE ALL THREE SELL RUNGS ASK — SELL_PRESSURED, SELL_IDLE and the
-    SELL_RELIEF guard. It replaces `tiers/guards._has_sellable`, which asked only
+    SELL_RELIEF guard. It replaces `progression/guards._has_sellable`, which asked only
     whether some held code had a LOCATED buyer and a tradeable flag, and was blind
     to whether that buyer's event window is OPEN.
 
@@ -206,13 +207,16 @@ def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
     match each would need a SECOND opaque Bool in the Lean ladder state, and that
     vector is the 33-slot one `cycle_step_d` reuses by index for the composed
     liveness capstone. So the licence half stays out until that slot exists, and
-    SELL_IDLE can still fire on a surplus below its ratio gate."""
-    now = datetime.now(timezone.utc)
+    SELL_IDLE can still fire on a surplus below its ratio gate.
+
+    `now` is the caller's cycle clock (`SelectionContext.now`, ruling T8b): the
+    buyer's window is judged at the instant the rest of the decision is."""
     for code, quantity in state.inventory.items():
         if quantity <= 0 or not _is_sellable(code, game_data):
             continue
         for npc_code, _price in game_data.npcs_buying_item(code):
-            if game_data.npc_location(npc_code) is None:
+            if (game_data.npc_location(npc_code) is None
+                    or not vendor_reached(npc_code, state, game_data)):
                 continue
             if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
                                    active_events=state.active_events, now=now):

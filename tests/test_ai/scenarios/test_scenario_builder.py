@@ -96,8 +96,9 @@ def test_derive_combat_stats_unknown_item_raises() -> None:
 
 
 def test_derive_combat_stats_sums_equipped_catalog_stats() -> None:
-    """Server totals = base 0 + gear sum: a two-item loadout's derived state
-    must carry exactly the item-stat sums from the catalog."""
+    """Server totals = base + gear sum, and the base attack and critical
+    strike are 0: a two-item loadout's derived state must carry exactly the
+    item-stat sums from the catalog."""
     gd = load_bundle_game_data(BUNDLE)
     sc = ScenarioCharacter(
         name="t", level=10, derive_combat_stats=True,
@@ -115,6 +116,22 @@ def test_derive_combat_stats_sums_equipped_catalog_stats() -> None:
     bare = scenario_state(ScenarioCharacter(
         name="t", level=10, equipment={"weapon_slot": "iron_dagger"}))
     assert bare.attack == {} and bare.dmg == 0
+
+
+def test_a_derived_scenario_starts_at_base_initiative_100() -> None:
+    """Base stats are the live base sheet's (`formal/sim/character_base_stats.json`),
+    not zero: a character stripped of its gear reads initiative 100 at every
+    level (live sheets 2026-10-19; read-only subtraction 2026-10-31 at L36-L41).
+    So a derived state's initiative is 100 plus its gear's, and 100 naked."""
+    gd = load_bundle_game_data(BUNDLE)
+    naked = scenario_state(ScenarioCharacter(name="t", level=10, derive_combat_stats=True), gd)
+    assert naked.initiative == 100
+    ring = gd.item_stats("steel_ring")
+    assert ring is not None and ring.initiative == 75
+    worn = scenario_state(ScenarioCharacter(
+        name="t", level=20, derive_combat_stats=True,
+        equipment={"ring1_slot": "steel_ring", "ring2_slot": "steel_ring"}), gd)
+    assert worn.initiative == 100 + 2 * 75
 
 
 def test_slots_max_defaults_to_quantity_cap_not_stack_count() -> None:

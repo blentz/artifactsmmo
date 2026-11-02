@@ -1,11 +1,11 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
     owned_count,
 )
-from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
 from tests.test_ai.fixtures import make_state
 
 GD = GameData()

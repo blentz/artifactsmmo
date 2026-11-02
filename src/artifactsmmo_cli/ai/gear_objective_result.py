@@ -69,3 +69,17 @@ class GearObjective:
     def held(self) -> bool:
         """Every slot holds its `L*` item or one the picker ranks equal (§2.4.1)."""
         return objective_held(frozenset(piece.slot for piece in self.missing))
+
+
+def gear_objective_report(objective: GearObjective | None) -> str:
+    """The `gear_objective:` line: m*, whether L* is held, and each missing
+    piece in the objective's own order as slot:code(layer, gain/price), gain to
+    4 significant figures, price in whole planner actions
+    (`gear_objective._price`: `cheapest_route` plus the equip;
+    `decisions/route.py`'s unit contract). The `plan` command's detailed report; the TUI shows the short per-cycle line
+    (`gear_objective_context.gear_objective_line`) instead."""
+    if objective is None:
+        return "gear_objective: None"
+    pieces = ", ".join(f"{p.slot}:{p.code}({p.layer}, {float(p.gain):.4g}/{float(p.price):.0f})"
+                       for p in objective.missing)
+    return f"gear_objective: monster={objective.monster}, held={objective.held}, missing=[{pieces}]"

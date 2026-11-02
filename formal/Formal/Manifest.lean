@@ -3,6 +3,7 @@ import Formal.OwnedCount
 import Formal.GearPolicy
 import Formal.PurposeRouting
 import Formal.CombatTargetExistence
+import Formal.GearObjectiveWalk
 import Formal.ActionApplicability
 import Formal.StepDispatch
 import Formal.LivenessChain
@@ -192,8 +193,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.Objective.groundedByN_sound           -- saturation SOUND wrt Grounded
 #check @Formal.Objective.grounded_groundedByN        -- saturation COMPLETE wrt Grounded
 #check @Formal.Objective.attainAux_sound             -- recursion accept ⇒ Grounded (any path/fuel)
-#check @Formal.Objective.best_gear_argmax            -- first-slot pick = argmax over attainable
-#check @Formal.Objective.bestGear_optimal            -- bestGear dominates every member by (-value,code)
 -- StrategyTraversal required roles:
 #check @Formal.StrategyTraversal.is_reachable_eq_grounding  -- is_reachable = grounding fixpoint (sound+complete)
 #check @Formal.StrategyTraversal.groundedByN_sound          -- saturation SOUND wrt Grounded
@@ -573,6 +572,12 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.rate_antitone_missing     -- more HP lost never raises the rate
 #check @Formal.LoopRate.held_free_le              -- more held food never slows recovery
 #check @Formal.LoopRate.priced_le_unpriced        -- a replacement never slows recovery
+#check @Formal.LoopRate.room_mono                 -- more bag room never slows recovery (Task 8c)
+#check @Formal.LoopRate.no_room_skips             -- a food with no room falls back to the rest (Task 8c)
+#check @Formal.LoopRate.no_slot_rests             -- no stack left for a food: Rest (Task 8c fix 1)
+#check @Formal.LoopRate.no_qty_rests              -- no room left in the bag: Rest (Task 8c fix 1)
+#check @Formal.LoopRate.shares_sum_le             -- the foods' shares fit the one room (Task 8c fix 1)
+#check @Formal.LoopRate.share_covers              -- a room holding a fight gives each food its fight
 #check @Formal.LoopRate.recovery_le_planCost      -- recovery is the minimum over feasible plans
 #check @Formal.LoopRate.eatCost_held_zero         -- nothing held: the increment-3 eat cost
 #check @Formal.LoopRate.potionCost_held_zero      -- nothing held: every drink at its price
@@ -771,27 +776,6 @@ open Formal.PriorityBand
 #check @Formal.Phase8Invariants.bank_expansion_post_fix_witness           -- 30-cap witness (1 apply → satisfied)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_projection_gap     -- regression anchor (pre-fix is the bug)
 #check @Formal.Phase8Invariants.bank_expansion_pre_fix_gap_witness        -- regression anchor (BLOCKED counterexample pinned)
--- CheapestPath required roles (Phase 12 Target A — greedy contract, NOT-A-BUG):
-#check @Formal.CheapestPath.cheapest_target_met               -- target ≤ current ⇒ empty plan
-#check @Formal.CheapestPath.stepLevel_empty                    -- empty monsters ⇒ no step
-#check @Formal.CheapestPath.pickBest_nil                       -- pickBest on [] = none
-#check @Formal.CheapestPath.pickBest_mem                       -- returned monster is in input
-#check @Formal.CheapestPath.pickBest_beatable                  -- returned monster passes +1 gate
-#check @Formal.CheapestPath.pickBest_max                       -- greedy maximality (xpPerCycle)
-#check @Formal.CheapestPath.isBeatable_plus_one                -- +1 margin matches FightAction
-#check @Formal.CheapestPath.isBeatable_off_boundary            -- simLevel+2 NOT beatable
-#check @Formal.CheapestPath.isBeatable_level_zero              -- level-0 NOT beatable
-#check @Formal.CheapestPath.cheapest_empty_monsters_blocks     -- empty input ⇒ blocked
-#check @Formal.CheapestPath.stepLevel_all_zero_blocks          -- all-zero xpPerCycle ⇒ none
-#check @Formal.CheapestPath.foldMax_ge_init                    -- helper: result ≥ initial
-#check @Formal.CheapestPath.foldMax_ge_mem                     -- helper: result ≥ every member
-#check @Formal.CheapestPath.foldMax_mem                        -- helper: result ∈ list
-#check @Formal.CheapestPath.tie_break_first_wins_witness       -- tie ⇒ first picked
-#check @Formal.CheapestPath.strict_greater_replaces_witness    -- strict > ⇒ later replaces
-#check @Formal.CheapestPath.greedy_filters_unbeatable_witness  -- unbeatable filtered out
-#check @Formal.CheapestPath.single_step_witness                -- 1-level success
-#check @Formal.CheapestPath.two_step_witness                   -- 2-level chain
-#check @Formal.CheapestPath.greedy_pick_witness                -- picks higher xpPerCycle
 -- GoalValueBands required roles (Phase-17 — scalar_yield wired into discretionary goal value()):
 #check @Formal.GoalValueBands.pursueTask_floor_le_ceiling           -- band sanity: 35 ≤ 50
 #check @Formal.GoalValueBands.gatherMaterials_floor_le_ceiling      -- band sanity: 1 ≤ 50
@@ -881,15 +865,17 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
 
--- CombatTargetExistence (Phase G3; P0 2026-06-09 window-preferred + fallback):
-#check @Formal.CombatTargetExistence.pickWinnable_some_of_exists
-#check @Formal.CombatTargetExistence.pickBest_some_of_acc_some
-#check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_prefers_window
-#check @Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
+-- GearObjectiveWalk (ruling C4-b/C4-R: the root walk and grind target over the gear objective):
+#check @Formal.GearObjectiveWalk.fight_armed_of_held                 -- L* held: level-up root, grind target m*
+#check @Formal.GearObjectiveWalk.no_xp_fight_of_not_held             -- L* not held: no XP grind target
+#check @Formal.GearObjectiveWalk.piece_root_of_not_held              -- L* not held: the first served missing piece is the root
+#check @Formal.GearObjectiveWalk.no_root_when_every_piece_declined   -- every piece declined: no root
+#check @Formal.GearObjectiveWalk.missing_nonempty_of_not_held        -- well formed and not held: a piece is missing
+-- CombatTargetExistence (Phase G3; the two-arm grind target since plan C Task 4):
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
+#check @Formal.CombatTargetExistence.winnableFarmTarget_none_no_task
+#check @Formal.CombatTargetExistence.winnableFarmTarget_eq_cascade
 
 -- ActionApplicability (Phase G4):
 #check @Formal.ActionApplicability.fightApplicable_false_of_no_locations
@@ -929,7 +915,8 @@ open Formal.PriorityBand
 
 -- LivenessChain (Phase G6 capstone):
 #check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
-#check @Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
+#check @Formal.LivenessChain.chain_none_implies_target_or_applicability_blocked
+#check @Formal.LivenessChain.chain_emits_fight_nonvacuous
 
 -- RankingComposition / PersonalityGrounding rows RETIRED (Phase 4b Task 3):
 -- the composite `_value = base_prior * marginal * balancing` ranker they bridged
@@ -1098,7 +1085,6 @@ open Formal.PriorityBand
 -- scripts/extract_lean.py; these hand-written bridges prove them equal to the
 -- hand models, so every hand theorem transfers and Python drift turns the gate red.
 #check @Extracted.Bridges.nearest_tile_bridge                         -- extracted = hand, pointwise
-#check @Extracted.Bridges.combat_picker_bridge                        -- extracted ∘ encode = encode ∘ hand
 #check @Extracted.Bridges.npc_buy_is_applicable_bridge                -- pointwise under used ≤ cap (hwf)
 #check @Extracted.Bridges.npc_buy_apply_delta                         -- dict update mints exactly +quantity
 #check @Extracted.Bridges.npc_buy_apply_bridge                        -- commutes with slot-projection apply
@@ -1212,7 +1198,7 @@ open Formal.PriorityBand
 -- src/artifactsmmo_cli/ai/equip_value.py and proved against the hand
 -- models (Formal/Extracted/Bridges7.lean). The element-keyed score bridges
 -- are universal over an arbitrary INJECTIVE Int→String element embedding
--- (the CombatPicker code-embedding precedent). The augmented Rank value
+-- (the retired CombatPicker code-embedding precedent). The augmented Rank value
 -- (`equip_value_pure`) was retired onto the unified GearValue hand pins
 -- below; only the live `tool_value_pure` duality remains extracted here.
 #check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings
@@ -1232,38 +1218,6 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.tool_value_abs_gather                       -- tool_value = |gather_score| (cross-core duality)
 #check @Extracted.Bridges.tool_value_neg_gather_on_tools              -- tool domain: max tool_value ≡ min gather_score
 
--- StrategicValue: efficiency-weighted cross-slot priority scorer (#16,
--- PLAN_acquisition_timing.md); extracted from
--- src/artifactsmmo_cli/ai/tiers/strategic_value.py, proved against the hand
--- model Formal/StrategicValue.lean and bridged in Formal/Extracted/Bridges9.lean.
--- Separate from equip_value (combat scorer) — re-weights non-combat efficiency
--- stats so bags/runes get a meaningful, non-1:1 cross-slot value.
-#check @Formal.StrategicValue.combatOf                                -- combat input = GearValue.rankCombat (a TERM of the one ruler)
-#check @Formal.StrategicValue.combatOf_eq_rankCombat                  -- combatOf is definitionally GearValue.rankCombat
-#check @Formal.StrategicValue.combatOf_add_efficiency_eq_rankValue    -- combat input + efficiency term reconstruct the ruler exactly
-#check @Formal.StrategicValue.clampEff                                -- symmetric efficiency bound (live items carry NEGATIVE efficiency)
-#check @Formal.StrategicValue.clampEff_mem                            -- the bound holds: |clampEff| ≤ budget
-#check @Formal.StrategicValue.clampEff_id                             -- inside the budget the bound is the identity
-#check @Formal.StrategicValue.pursuitValue                            -- pursuit_value: the ruler's two terms read lexicographically
-#check @Formal.StrategicValue.pursuit_combat_dominates                -- STRUCTURAL cross-slot combat dominance (∀ integer inputs)
-#check @Formal.StrategicValue.pursuit_efficiency_orders               -- no regression: efficiency still totally orders on a combat tie
-#check @Formal.StrategicValue.live_pursuit_span_ok                    -- the live (1000, 499) parameters satisfy the span hypothesis
-#check @Formal.StrategicValue.strategicValue_nonneg                   -- hand: nonneg stats+weights ⇒ nonneg (gap-bound precond)
-#check @Formal.StrategicValue.strategicValue_mono_combatRaw           -- hand: monotone in combat_raw
-#check @Formal.StrategicValue.strategicValue_mono_wisdom              -- hand: monotone in wisdom
-#check @Formal.StrategicValue.strategicValue_mono_prospecting         -- hand: monotone in prospecting
-#check @Formal.StrategicValue.strategicValue_mono_inventorySpace      -- hand: monotone in inventory_space (bags)
-#check @Formal.StrategicValue.strategicValue_mono_haste               -- hand: monotone in haste
-#check @Formal.StrategicValue.pure_bag_scores_positive               -- witness: pure bag (inv 35) → 1750
-#check @Formal.StrategicValue.combat_weight_dominates_efficiency     -- witness: combat ×1000 outranks bag ×1
-#check @Extracted.Bridges.strategic_value_bridge                      -- extracted = hand strategicValue, ∀ inputs
-#check @Extracted.Bridges.strategic_value_nonneg_extracted            -- nonneg transferred onto extracted def
-#check @Extracted.Bridges.strategic_value_mono_combatRaw_extracted    -- combat_raw monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_wisdom_extracted       -- wisdom monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_prospecting_extracted  -- prospecting monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted -- inventory_space monotone (transferred)
-#check @Extracted.Bridges.strategic_value_mono_haste_extracted        -- haste monotone (transferred)
-
 -- RefusalFact required roles (categorical refusals as model facts, Phase 5-1;
 -- src/artifactsmmo_cli/ai/refusal_fact_core.py):
 #check @Formal.RefusalFact.equipped_holds_iff_worn          -- 485 holds exactly while worn
@@ -1273,7 +1227,7 @@ open Formal.PriorityBand
 #check @Formal.RefusalFact.game_fact_voids_on_redefinition  -- a redefined item re-opens it
 
 -- LeafAttainable required roles (acquisition-leaf attainability;
--- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):
+-- src/artifactsmmo_cli/ai/progression/leaf_attainable_core.py + progression/objective.py is_attainable):
 #check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
 #check @Formal.LeafAttainable.leafAttainable_task_earnable   -- task source alone ⇒ attainable
 #check @Formal.LeafAttainable.leafAttainable_monotone_task   -- monotone in the task source
@@ -1402,10 +1356,6 @@ open Formal.PriorityBand
 -- so nothing asserted their axiom hygiene. Added when cross_check gained its
 -- reverse direction. Manifest is a CURATED list of headline roles, so large
 -- modules contribute their concluding results, not every internal lemma.
--- EquipmentProfile (the constant COMBAT-axis selector):
-#check @Formal.EquipmentProfile.planGate_forces_combat       -- combat-inadequate ⇒ COMBAT, for every root category
-#check @Formal.EquipmentProfile.never_utility                -- the selector never chooses the retired UTILITY axis
-#check @Formal.EquipmentProfile.isUtilityObjective_false     -- is_utility_objective is a constant false
 -- InventoryRoom (slot-vs-quantity admission; the 497-livelock core):
 #check @InventoryRoom.hasRoom_false_of_no_slot        -- no free slot ⇒ blocked, whatever the quantity room
 #check @InventoryRoom.hasRoom_false_of_no_qty         -- no quantity room ⇒ blocked, whatever the slots
@@ -1435,14 +1385,6 @@ open Formal.PriorityBand
 #check @Formal.PotionProvisionQty.provision_le_max           -- never more than a full stack
 #check @Formal.PotionProvisionQty.provision_le_held          -- never more than actually held
 #check @Formal.PotionProvisionQty.provision_nonneg           -- never negative
--- ProgressionTree (trunk milestones and potion weights — what `ai/decisions/root.py`
--- calls):
-#check @Formal.ProgressionTree.milestone_gt_level            -- the milestone strictly exceeds the level below the cap
-#check @Formal.ProgressionTree.milestone_le_cap              -- the milestone never exceeds the cap
-#check @Formal.ProgressionTree.milestone_band_aligned        -- milestones are band boundaries (divisible by 10)
-#check @Formal.ProgressionTree.milestone_advances            -- crossing a milestone strictly advances it (trunk descent)
-#check @Formal.ProgressionTree.potionWeight_health_maximal   -- health dominates every potion family (tuning decision, pinned)
-#check @Formal.ProgressionTree.potionWeight_unknown_floor    -- unknown families never outrank anything
 -- Synergy (the pool-overlap multiplier pinned into [sMin, 1]):
 #check @Formal.Synergy.synergyRatio_nonneg                   -- the overlap ratio is nonneg
 #check @Formal.Synergy.synergyRatio_le_one                   -- with shared ≤ total the ratio is ≤ 1
@@ -1468,19 +1410,11 @@ open Formal.PriorityBand
 #check @Formal.PlanModel.canonicalPlan_valid                 -- CONSTRUCTIVE witness: the canonical plan obtains AND equips
 #check @Formal.PlanModel.length_eq_counts                    -- a plan's length is its gather + craft + equip counts
 #check @Formal.PlanModel.gear_obtainable_of_perActionLength_le -- OBTAINABILITY under the per-action length budget
--- The 112 declarations below were listed ONLY in Audit.lean: their axioms
+-- The 101 declarations below were listed ONLY in Audit.lean: their axioms
 -- were scanned but they had no traceability row. Audit.lean is generated
 -- from this file, so they are recorded here to keep them scanned.
 -- ArbiterSelect (1):
 #check @Formal.ArbiterSelect.findCommitted_some_props
--- CheapestPath (7):
-#check @Formal.CheapestPath.all_zero_blocks_witness
-#check @Formal.CheapestPath.beatable_level_zero_refused_witness
-#check @Formal.CheapestPath.beatable_plus_one_witness
-#check @Formal.CheapestPath.beatable_plus_two_refused_witness
-#check @Formal.CheapestPath.empty_blocks_witness
-#check @Formal.CheapestPath.target_below_witness
-#check @Formal.CheapestPath.target_met_witness
 -- InventoryChainSafe (2):
 #check @Formal.InventoryChainSafe.deposit_watermark_boundary_witness
 #check @Formal.InventoryChainSafe.gather_overflows_full_witness
@@ -1586,11 +1520,10 @@ open Formal.PriorityBand
 #check @Formal.StrategyTraversal.actStepShared_none_preserves_unvisited
 #check @Formal.StrategyTraversal.actStepShared_sound
 #check @Formal.StrategyTraversal.actionable_step_shared_sound
--- WinnableCascade (6):
+-- WinnableCascade (5):
+#check @Formal.WinnableCascade.none_when_path_not_winnable
 #check @Formal.WinnableCascade.path_result_was_winnable
 #check @Formal.WinnableCascade.path_wins_when_winnable
-#check @Formal.WinnableCascade.pick_wins_when_no_path
-#check @Formal.WinnableCascade.pick_wins_when_path_not_winnable
 #check @Formal.WinnableCascade.task_wins
 #check @Formal.WinnableCascade.totality
 -- GearObjective (spec 2026-10-18 §2.3/§2.4 — the achievable-set fixed point and the

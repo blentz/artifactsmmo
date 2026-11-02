@@ -2,8 +2,8 @@
 
 Binds the Lean liveness ladder (`Formal.Liveness.ProductionLadder.fires` /
 `productionLadder`, evaluated through the `ladder_fires` oracle entry) to the
-REAL production firing predicates `_guard_fires` (tiers/guards.py) and
-`_means_fires` (tiers/means.py), reached through the real-import bridge
+REAL production firing predicates `_guard_fires` (progression/guards.py) and
+`_means_fires` (progression/means.py), reached through the real-import bridge
 `formal/sim/production_ladder.py`. This closes the trust gap flagged in the
 2026-06-18 SELECT audit: every liveness theorem reasons over the Lean ladder,
 but nothing had ever asserted the Lean ladder MIRRORS production.
@@ -59,8 +59,7 @@ computes from the supplied inputs under an empty-catalog `GameData`:
   * sellPressured       — fill>=0.85 AND a sellable item (NPC buyer present).
   * sellIdle            — fill<0.85 AND a sellable item.
   * taskExchange        — tasks_coin total (inv+bank) >= ctx.min_coins.
-  * acceptTask          — no task_code (≡ phase none); empty target_gear keeps
-                          production's predicate == `not task_code`.
+  * acceptTask          — no task_code (≡ phase none) and a draw owed.
   * objectiveStep       — opaque Bool passed identically to both sides, OR a
                           held task in phase accepted / inProgress (c-2 #4)
                           / complete (c-2 #6: the retired completeTask rung's
@@ -165,11 +164,11 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -181,6 +180,7 @@ from formal.sim.production_ladder import (
     fires as production_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import cycle_now, served_game_data
 
 PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
@@ -279,7 +279,7 @@ def _phase_task_fields(phase: str) -> dict[str, object]:
 
 
 def _make_game_data(scn: Scenario) -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {}
     gd._monster_level = (
         {scn_unlock_name(): scn.unlock_monster_level}
@@ -366,8 +366,6 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         task_exchange_min_coins=scn.task_exchange_min_coins,
         combat_monster=None,
         gold_reserve=scn.gold_reserve,
-        target_gear=frozenset(),
-        target_tools=frozenset(),
      learned_drops=LearnedDrops.empty())
 
 
@@ -445,7 +443,7 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # by production's REAL `craft_potions_fires` on the same (w, gd) the
         # ladder reads, for the loadout the sweep's context chooses — none
         # (`ctx.loadout` None, no fight ahead) ⇒ False.
-        1 if craft_potions_fires(w, _make_game_data(scn), None) else 0,  # 32 craftPotionsFires
+        1 if craft_potions_fires(w, _make_game_data(scn), None, now=cycle_now()) else 0,  # 32 craftPotionsFires
         # 33 goldReserve: the SAME drawn reserve the production guard reads
         # via ctx.gold_reserve (should_expand_bank's safety gate, 2026-07-06)
         # — one value, two sides, exact lockstep.
@@ -529,7 +527,7 @@ def _currency_turn_in_active(ctx: SelectionContext) -> int:
 def _party_join_active(ctx: SelectionContext) -> int:
     """The Lean `State.partyJoinActive` slot read off production's own ctx:
     `ctx.party_hold is not None` — the SAME condition
-    `tiers/guards.py::_fires(PARTY_JOIN, …)` tests, so the flag cannot drift
+    `progression/guards.py::_fires(PARTY_JOIN, …)` tests, so the flag cannot drift
     between the oracle and production."""
     return 1 if ctx.party_hold is not None else 0
 
@@ -981,7 +979,7 @@ def _rich_oracle_args(
         1 if discardable_surplus(w, gd, ctx) else 0,  # 19 hasOverstockItems
         1 if select_bank_deposits(w, gd) else 0,     # 20 selectBankDepositsNonempty
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
-        1 if sellable_tradeable_now(w, gd) else 0,   # 22 sellableInventoryNonempty
+        1 if sellable_tradeable_now(w, gd, now=cycle_now()) else 0,   # 22 sellableInventoryNonempty
         1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
         1,                                           # 24 taskFeasibleProjected (no rung reads it)
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
@@ -1105,7 +1103,7 @@ def drive_and_contest(
 # ---------------------------------------------------------------------------
 # Slot 1 — craftRelief (arg[27]).  Production CRAFT_RELIEF guard fires iff
 # `used_fraction >= 0.70` AND `craft_relief_candidates(...)` non-empty
-# (tiers/guards.py + craft_relief.py). Net-relief gate requires a multi-input
+# (progression/guards.py + craft_relief.py). Net-relief gate requires a multi-input
 # recipe (input units consumed > 1 output). The items-task deliverable is the
 # priority-0 relief candidate; the production ladder reaches CRAFT_RELIEF via
 # the items-task path (the sim calls `_guard_fires` with an empty step profile,
@@ -1114,7 +1112,7 @@ def drive_and_contest(
 
 
 def _craft_relief_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "plank": ItemStats(code="plank", level=1, type_="resource",
                            crafting_skill="woodcutting", crafting_level=1),
@@ -1126,7 +1124,7 @@ def _craft_relief_gd() -> GameData:
 def _single_input_relief_gd() -> GameData:
     """Same as `_craft_relief_gd` but a 1:1 recipe (net relief 0) — the
     net-relief gate (craft_relief.py `_net_relief_per_craft`) rejects it."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "plank": ItemStats(code="plank", level=1, type_="resource",
                            crafting_skill="woodcutting", crafting_level=1),
@@ -1139,7 +1137,6 @@ def _craft_relief_ctx() -> SelectionContext:
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
 
@@ -1195,7 +1192,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 # ---------------------------------------------------------------------------
 # Slot 2 — recycleSurplus (arg[23]).  Production RECYCLE_SURPLUS means fires
 # iff `used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
-# (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
+# (progression/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
 # authority licenses for destruction (held above BOTH `keep_in_bag` and
 # `keep_owned` — for a bare weapon that is EQUIPPABLE_KEEP=1), skill at recipe
 # level, workshop known.
@@ -1212,7 +1209,7 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 
 
 def _recycle_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "dagger": ItemStats(code="dagger", level=1, type_="weapon",
                             crafting_skill="weaponcrafting", crafting_level=1),
@@ -1224,21 +1221,16 @@ def _recycle_gd() -> GameData:
 
 
 def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
-    # Protect via GEAR_KEEP, not target_gear/target_tools: since the keep
-    # authority took over the recycle path (item-protection-authority epic,
-    # Task 7) `recyclable_surplus` protects QUANTITIES, and the code-SETS
-    # `target_gear`/`target_tools` are PURSUIT targets that shield nothing. A
-    # gear_keep demand of 2 against the 2 held daggers is the near-miss: nothing
-    # destroyable. It also leaves `target_gear` empty, which keeps the
-    # (separately-deferred) acceptTask gear-deferral over-approximation quiet, so
-    # acceptTask stays == Lean (phase none) here.
+    # Protect via GEAR_KEEP: since the keep authority took over the recycle
+    # path (item-protection-authority epic, Task 7) `recyclable_surplus`
+    # protects QUANTITIES. A gear_keep demand of 2 against the 2 held daggers is
+    # the near-miss: nothing destroyable.
     # bank_accessible=True + bank has room → RECYCLE_RELIEF is quiet (bank has
     # room, so the bank-full pressure condition is False). Without room the
     # RECYCLE_RELIEF guard would preempt ACCEPT_TASK and win selection.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"dagger": 2} if protect_dagger else {},
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
@@ -1297,7 +1289,7 @@ def test_recycle_surplus_near_miss_at_cap() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 3 — drainBankJunk (arg[31]).  Production DRAIN_BANK_JUNK fires iff
-# `used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (tiers/means.py
+# `used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (progression/means.py
 # + bank_drain.py): a non-objective code held in the BANK above its useful cap.
 # Like recycleSurplus it sits below the lifecycle slots and can only fire-and-
 # lose; the contest drives it TRUE under phase=none where BOTH ladders select
@@ -1310,7 +1302,7 @@ def _drain_gd() -> GameData:
     # Empty catalog: the banked "sap" has no stats ⇒ useful_quantity_cap 0 ⇒
     # every banked unit is over-cap junk. bank_capacity large ⇒ bank has room ⇒
     # RECYCLE_RELIEF / SELL_RELIEF quiet so DRAIN_BANK_JUNK wins the slot contest.
-    gd = GameData()
+    gd = served_game_data()
     gd._bank_capacity = 50
     return gd
 
@@ -1318,13 +1310,11 @@ def _drain_gd() -> GameData:
 def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
     # Protect via the keep authority's GEAR_DEMAND quantity (`gear_keep`), NOT a
     # code-set: `bank_drain_excess` is bounded by `destroyable` (= owned - keep_owned)
-    # since the Task-9 migration, and `target_gear`/`target_tools` are ACQUISITION
-    # roles only. `gear_keep` is read by no other ladder slot at phase none, so the
-    # acceptTask gear-deferral (which reads target_gear) stays == Lean.
+    # since the Task-9 migration. `gear_keep` is read by no other ladder slot at
+    # phase none, so acceptTask stays == Lean.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         gear_keep={"sap": 5} if protect_sap else {},
         draw_owed=True, learned_drops=LearnedDrops.empty())
 
@@ -1391,7 +1381,7 @@ def test_drain_bank_junk_fill_boundary() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 4 — geBid (arg[34]).  Production GE_BID fires iff `ge_bid_candidates(...)`
-# is non-empty (tiers/means.py + ge_bid.py): an objective-step material that is
+# is non-empty (progression/means.py + ge_bid.py): an objective-step material that is
 # needed, not held, slow-to-self-craft, has a live GE buy-anchor + an NPC
 # alternative, no open order, and a `GE_POST` venue verdict. NO pressure gate
 # (geBidFires reads the candidate signal directly). Like drainBankJunk it sits
@@ -1422,7 +1412,7 @@ def _gebid_gd() -> GameData:
     #
     # Grand Exchange present so a post can land. bank_capacity large ⇒
     # RECYCLE_RELIEF / SELL_RELIEF quiet so acceptTask cleanly wins the contest.
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"steel": {"iron": 25}}
     gd._npc_stock = {"shop": {"steel": 5000, "iron": 1}}
     gd._npc_locations = {"shop": (1, 0)}
@@ -1433,11 +1423,13 @@ def _gebid_gd() -> GameData:
 
 
 def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
-    return SelectionContext(
+    # The bid prices routes in measured seconds, so the world carries the
+    # committed capture's timing, as every offline world does.
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         step_profile=step_profile,
-        draw_owed=True, learned_drops=LearnedDrops.empty())
+        draw_owed=True, learned_drops=LearnedDrops.empty()))
 
 
 def _gebid_world(*, open_steel_order: bool = False) -> WorldState:
@@ -1570,7 +1562,7 @@ def test_party_join_near_miss_no_lease() -> None:
 
 # ---------------------------------------------------------------------------
 # Slot 1 — restForCombat (arg[25]).  Production `_guard_fires(REST_FOR_COMBAT)`
-# (tiers/guards.py ~136) fires iff: combat_monster set AND state.hp < max_hp AND
+# (progression/guards.py ~136) fires iff: combat_monster set AND state.hp < max_hp AND
 # NOT predict_win(state @ current hp) AND predict_win(state @ hp=max_hp). It is
 # ladder idx 1 (only hpCritical above), so a firing restForCombat WINS selection
 # on both ladders when hpCritical stays quiet — a STRONG contest: a wrong Lean
@@ -1595,7 +1587,7 @@ def test_party_join_near_miss_no_lease() -> None:
 def _rest_combat_gd() -> GameData:
     """A single monster `mob` with a plain {fire:50} attack and no exotic
     abilities — the symmetric fight the predict_win arithmetic above assumes."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_hp = {"mob": 100}
     gd._monster_attack = {"mob": {"fire": 50}}
     gd._monster_resistance = {"mob": {}}
@@ -1623,7 +1615,6 @@ def _rest_combat_ctx() -> SelectionContext:
     return offline_context(SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=True, learned_drops=LearnedDrops.empty()))
 
 
@@ -1732,7 +1723,6 @@ def _plain_ctx(*, combat_monster: str | None = None,
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=combat_monster,
-        target_gear=frozenset(), target_tools=frozenset(),
         draw_owed=draw_owed, learned_drops=LearnedDrops.empty())
 
 
@@ -1772,7 +1762,7 @@ def _feasible_items_gd() -> GameData:
     Task completion rewards are seeded for the `widget` task code so any
     task-reward read (`task_gold_reward` / `task_coin_reward`) gets real API
     amounts instead of raising on missing task-reward data."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {}
     gd._crafting_recipes = {}
     gd._task_gold_rewards = {"widget": 150}
@@ -1830,7 +1820,7 @@ def test_task_phase_selects_objective_step_for_an_out_of_reach_items_task() -> N
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="gizmo", task_type="items",
         task_progress=0, task_total=5)
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "gizmo": ItemStats(code="gizmo", level=30, type_="weapon",
                            crafting_skill="weaponcrafting", crafting_level=30),
@@ -1878,7 +1868,6 @@ def _supply_ctx(demand: int, *, asymmetric: bool = False) -> SelectionContext:
     return SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         supply_target=("copper_ore", 999, demand),
         asymmetric_demand=frozenset({"copper_ore"}) if asymmetric else frozenset(),
         draw_owed=False, learned_drops=LearnedDrops.empty())
@@ -1931,6 +1920,5 @@ def test_currency_recall_fires_objective_step() -> None:
     ctx = SelectionContext(
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(), target_tools=frozenset(),
         recall=("lich_race_medal", 2), draw_owed=False, learned_drops=LearnedDrops.empty())
     _assert_objective_step(ctx, fires=True)

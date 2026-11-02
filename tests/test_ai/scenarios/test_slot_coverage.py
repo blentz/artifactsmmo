@@ -175,6 +175,12 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     ScenarioCharacter,
@@ -182,16 +188,8 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    ObtainItem,
-    ReachCharLevel,
-    ReachSkillLevel,
-)
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
-from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, obtainable_now
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 from tests.test_ai.shared_world import shared_world
 
@@ -206,47 +204,6 @@ NEW_SCENARIOS = [
 ]
 
 ARTIFACT_SLOTS = {"artifact1_slot", "artifact2_slot", "artifact3_slot"}
-
-EVENT_ONLY_CANDIDATES = {
-    "helmet_slot": "corrupted_crown",
-    "artifact1_slot": "corrupted_skull",
-    "artifact2_slot": "perfect_pearl",
-}
-"""What the corrupted_ogre event adds to l48_event_active's candidate
-surface: the L20 ogre (winnable at this loadout) drops corrupted_gem, and
-the permanent cultist_wizard sells crown + skull for it — with the event
-down those monsters have no known spawn and the currency leaf is closed.
-
-RE-DERIVED 2026-07-08 (Task-3 pursuit_value): under combat-dominant
-pursuit_value corrupted_skull (combat_raw 8 -> pursuit_value 8000) strictly
-outranks perfect_pearl (prospecting-only, combat_raw 0 -> pursuit_value 100) —
-exactly the class of bug being fixed (a combat item must beat an all-efficiency
-item). So with the event UP artifact1 targets corrupted_skull; with it DOWN it
-falls back to perfect_pearl (the best NON-event artifact).
-
-RE-DERIVED AGAIN 2026-08-22 (artifact duplicate-slot revert): artifacts left
-`DUPLICATE_SLOT_TYPES` when the live probe answered a 2nd-copy artifact equip
-with HTTP 485, so `_slot_assignments` gives artifact slots ranked DISTINCT items
-instead of repeating the best one. The event delta is therefore no longer
-"corrupted_skull three times". It is:
-  * helmet_slot    corrupted_crown  (event item, was white_knight_helmet)
-  * artifact1_slot corrupted_skull  (event item, was perfect_pearl)
-  * artifact2_slot perfect_pearl    (NOT an event item — it is DISPLACED here
-                                    by the skull taking artifact1. Only when the
-                                    event is up are there two distinct
-                                    attainable artifacts at all, so this entry
-                                    really is event-only.)
-artifact3_slot is absent from BOTH states: with the event up the catalogue
-offers exactly two attainable artifacts, and a third distinct one does not
-exist, so the slot is honestly untargeted rather than filled with a duplicate.
-
-HISTORICAL (equip_value era, now superseded by pursuit_value): under the flat
-equip_value ruler perfect_pearl (value 201, all prospecting) outranked
-corrupted_skull (value 17) so the artifact slots read perfect_pearl in BOTH
-states and were dropped from this table (GAP-2 fix 2026-07-07 +
-duplicate-slot-best-fill fix Task-2 2026-07-08). pursuit_value's combat
-dominance flips that comparison, which is the intended correction."""
-
 
 def _bundle() -> GameData:
     return shared_world(BUNDLE)
@@ -351,60 +308,12 @@ def test_slot_scenario_search_is_bounded(name: str) -> None:
 
 # --- Deliverable 1: event-gear pursuit across the L48 wall -----------------
 
-def test_l48_event_candidates_are_event_gated() -> None:
-    """The exact candidate delta the corrupted_ogre event buys, measured on
-    the SAME state with only the game-data event overlay toggled (the very
-    seeding seed_offline performs from state.active_events): with the event
-    down the event items are absent (the ONE attainable artifact, perfect_pearl,
-    sits in artifact1); with it up, corrupted_crown appears at helmet_slot,
-    corrupted_skull takes artifact1, and perfect_pearl is displaced into
-    artifact2 (RE-DERIVED 2026-07-08 for pursuit_value and again 2026-08-22 for
-    the artifact duplicate-slot revert — see EVENT_ONLY_CANDIDATES's docstring).
-    This is the attribution test — the full-stack test below can't distinguish
-    'event opened the leaf' from 'the leaf was open anyway' on its own."""
-    gd = _bundle()
-    state = _state("l48_event_active", gd)
-    objective = CharacterObjective.from_game_data(gd)
-
-    gd.active_event_codes = set()
-    without = objective.near_term_gear(state)
-    gd.active_event_codes = set(state.active_events)
-    with_event = objective.near_term_gear(state)
-
-    for slot, code in EVENT_ONLY_CANDIDATES.items():
-        assert with_event.get(slot) == code, (slot, with_event)
-        assert without.get(slot) != code, (slot, without)
-    # the event only CHANGES the EVENT_ONLY_CANDIDATES slots — every other
-    # slot's candidate is unaffected by the toggle (compare both sides with
-    # those slots excluded, since a slot can have a real non-event default
-    # candidate the event candidate outranks, not merely an absent one).
-    excluded = set(EVENT_ONLY_CANDIDATES)
-    assert {s: c for s, c in with_event.items() if s not in excluded} == \
-           {s: c for s, c in without.items() if s not in excluded}
-
-
 def test_l48_event_active_pursues_event_gear() -> None:
     """With the event up the planner must NOT Wait: an event-sourced candidate
     is on the gear sheet and the full stack plans the event-monster farm for its
     corrupted_gem currency — the attainability leaf the event opened. This is
     the wall-crossing behaviour l48_band_adequate proves impossible without
     events.
-
-    WAVE 3a re-derived WHICH event candidate. `corrupted_crown` (helmet) is off
-    the sheet: `gear_targets_with_blockers` gears for `gear_target_tier`, which
-    is 30 here, and the crown sits above it — the helmet target is
-    `obsidian_helmet`. The event's contribution is `corrupted_skull` at
-    artifact1_slot, and it is ATTAINABLE (`blocker is None`) precisely because
-    the event opened its corrupted_gem route. RE-DERIVED 2026-08-22: it is the
-    ONE artifact slot, not all three — artifacts are no longer duplicate-allowed
-    (a 2nd copy 485s), so the siblings take blocked distinct artifacts instead.
-    The selected goal and the first action are UNCHANGED, which is the pursuit
-    this test exists for.
-
-    (An earlier fix-round draft of this docstring claimed `demon_horn` was
-    `corrupted_crown`'s blocker. It is not — it blocks `gold_shield` and
-    `conjurer_cloak`. The assertions below read the blocker map rather than
-    restating it, so the claim and the code cannot drift again.)
 
     RE-DERIVED Task 5 (global gear objective): with the event up its gear is
     ON the argmax (spec 2026-10-18 §5.3) — `L*` for hellhound wears
@@ -413,49 +322,34 @@ def test_l48_event_active_pursues_event_gear() -> None:
     `goblin_guard_shield`, whose acquisition the cycle plans. The event
     changed `L*`; it did not jump the queue."""
     report = _run("l48_event_active")
-    # Read the sheet off the SAME event-overlaid game data the run used
+    # The `L*` off the SAME event-overlaid game data the run used
     # (`seed_offline` applies the overlay from `state.active_events`).
     gd_event = load_bundle_game_data(BUNDLE)
     overlay = GamePlayer(character="l48_event_active", history=None)
     overlay._offline_timing = committed_timing()
     overlay._learned_drops = LearnedDrops.empty()
     overlay.seed_offline(_state("l48_event_active", gd_event), gd_event)
-    assert overlay._objective is not None
-    targets = overlay._objective.gear_targets_with_blockers(overlay.state, None)
-    # THE EVENT'S OWN CONTRIBUTION, by name and by attainability — not "any
-    # corrupted-anything root", which the previous form degenerated to.
-    assert targets["artifact1_slot"].code == "corrupted_skull", targets["artifact1_slot"]
-    assert targets["artifact1_slot"].blocker is None, targets["artifact1_slot"]
-    # ...and ONLY artifact1. Artifacts left `DUPLICATE_SLOT_TYPES` on 2026-08-22
-    # (2nd-copy equip = HTTP 485), so the sibling slots take the next-ranked
-    # DISTINCT artifacts — both of which are blocked at this tier. That is the
-    # honest sheet: a 2nd corrupted_skull could never be equipped, so naming it
-    # here would have manufactured two unreachable targets that LOOK attainable.
-    for slot in ("artifact2_slot", "artifact3_slot"):
-        assert targets[slot].code != "corrupted_skull", (slot, targets[slot])
-        assert targets[slot].blocker is not None, (slot, targets[slot])
-    assert any(r.root_repr == "ObtainItem(code='corrupted_skull', quantity=1, "
-               "slot='artifact1_slot')" for r in report.decision.ranking), \
-        report.decision.ranking
     assert overlay.state is not None and overlay.game_data is not None
     objective = attach_gear_objective(overlay.state, overlay.game_data,
                                       TIMED_NO_PROFILE_CONTEXT, None).gear_objective
     assert objective is not None
     assert objective.loadout["artifact1_slot"] == "corrupted_skull"
     assert objective.loadout["helmet_slot"] == "corrupted_crown"
-    assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
     # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
     # rune is priced through gold earned by fighting, so it orders between the
     # event's two pieces. RE-DERIVED plan B Task 3 (ruling T2m M1): its gold
     # is farmed at the monster whose exact win cost per gold is least, and its
     # wins are rounded up once, so it prices at 4142 and heads the
-    # event's two pieces (7054, 20684).
+    # event's two pieces (7054, 20684). RE-DERIVED ruling "seconds inside"
+    # (2026-10-31): priced at its actions' measured seconds the rune is 1224,
+    # ahead of the shield's 2473-action drop farm too, so it is the root.
+    assert report.decision.chosen_root == ObtainItem(
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
         ObtainItem(code="corrupted_crown", quantity=1, slot="helmet_slot")]
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
 
 
@@ -498,10 +392,14 @@ def test_l48_no_event_witness_pursues_no_event_gear() -> None:
     the same first piece as the event pole (`goblin_guard_shield`) heads the
     walk, and no `corrupted_*` row is offered at all."""
     report = _run("l48_band_adequate")
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert not [r.root_repr for r in report.decision.ranking if "corrupted" in r.root_repr]
 
 
@@ -575,8 +473,8 @@ def test_bag_slot_banked_stock_credited() -> None:
     assert not is_winnable(state, gd, "chicken")  # feather's only dropper
     assert (state.bank_items or {}).get("cowhide", 0) >= 5  # fully banked
     assert (state.bank_items or {}).get("feather", 0) >= 2  # fully banked
-    assert is_attainable_now("cowhide", state, gd)  # GAP-1 fix, directly
-    assert is_attainable_now("feather", state, gd)  # GAP-1 fix, directly
+    assert obtainable_now("cowhide", state, gd)  # GAP-1 fix, directly
+    assert obtainable_now("feather", state, gd)  # GAP-1 fix, directly
     # satchel does NOT propagate upward — and the docstring's parenthetical above
     # is why: it assumed jasper_crystal was "independently task-earnable, the C4
     # funding loop always available". It is bought with tasks_coin from
@@ -587,8 +485,8 @@ def test_bag_slot_banked_stock_credited() -> None:
     # The two asserts below are what keep this a GAP-1 test rather than a
     # jasper_crystal test: the banked-stock credit still answers YES for both
     # materials it is about, and the ONLY thing missing upward is the third.
-    assert not is_attainable_now("satchel", state, gd)
-    assert not is_attainable_now("jasper_crystal", state, gd)
+    assert not obtainable_now("satchel", state, gd)
+    assert not obtainable_now("jasper_crystal", state, gd)
     assert gd.npc_location("tasks_trader") is None
 
 
@@ -631,19 +529,13 @@ def test_l10_bag_pursuit_satchel_gated_and_iron_is_the_fixed_point() -> None:
     grind below has a live fight to plan."""
     gd = _bundle()
     state = _state("l10_bag_pursuit", gd)
-    objective = CharacterObjective.from_game_data(gd)
     assert (state.bank_items or {}).get("cowhide", 0) >= 5  # mats really banked
     assert is_winnable(state, gd, "cow")
     # The satchel chain is shut at its THIRD material, not at cow/cowhide: the
     # monster-drop leaf this scenario is built on is still winnable above.
-    assert not is_attainable_now("satchel", state, gd)
+    assert not obtainable_now("satchel", state, gd)
     assert gd.npc_location("tasks_trader") is None
-    assert objective.near_term_gear(state) == {}
-    # The attribution: the equipped vest is not merely unranked, it is the
-    # RULER's own argmax for the slot — and the acquisition ruler agrees, which
-    # is the property that stops the two authorities fighting over it.
-    assert pursuit_value(gd.item_stats("adventurer_vest")) \
-        > pursuit_value(gd.item_stats("iron_armor"))
+    # The equipped vest is the RULER's own argmax for the slot.
     assert equip_value(gd.item_stats("adventurer_vest")) \
         > equip_value(gd.item_stats("iron_armor"))
 
@@ -707,11 +599,9 @@ def test_l12_bag_pursuit_satchel_chain_gated() -> None:
     artifact — the underlying chain itself is healthy end-to-end."""
     gd = _bundle()
     state = _state("l12_bag_pursuit", gd)
-    objective = CharacterObjective.from_game_data(gd)
     # Gate SHUT on the real account: the isolation leaves nothing behind, because
     # the sole candidate this scenario isolates is itself unreachable.
-    assert objective.near_term_gear(state) == {}
-    assert not is_attainable_now("satchel", state, gd)
+    assert not obtainable_now("satchel", state, gd)
     assert gd.npc_location("tasks_trader") is None
 
 
@@ -740,11 +630,9 @@ def test_l12_bag_pursuit_satchel_becomes_attainable_and_has_a_gain() -> None:
     uncovered until someone completed 100 tasks."""
     gd = _bundle_with_tasks_farmer_completed()
     state = _state("l12_bag_pursuit", gd)
-    objective = CharacterObjective.from_game_data(gd)
     assert gd.achievement_completed("tasks_farmer")
     assert gd.npc_location("tasks_trader") == (5, 11)
-    assert objective.near_term_gear(state) == {"bag_slot": "satchel"}
-    assert is_attainable_now("satchel", state, gd)
+    assert obtainable_now("satchel", state, gd)
 
     report = _run_with("l12_bag_pursuit", gd)
     # WAVE 3a LOST THE DECISION HALF OF THIS TEST, and the loss is pinned here
@@ -817,16 +705,12 @@ def test_l35_artifact_perfect_pearl_targeted_others_closed() -> None:
     novice_guide has no acquisition path at all."""
     gd = _bundle()
     state = _state("l35_artifact_fill", gd)
-    objective = CharacterObjective.from_game_data(gd)
     for slot in ARTIFACT_SLOTS:
         assert state.equipment[slot] is None  # scenario construction
-    targets = objective.near_term_gear(state)
-    assert {slot: targets[slot] for slot in ARTIFACT_SLOTS if slot in targets} == {
-        "artifact1_slot": "perfect_pearl"}
     artifacts = [code for code, stats in gd.all_item_stats.items()
                  if stats.type_ == "artifact"]
     assert artifacts  # the bundle really has artifacts to miss
-    assert {code for code in artifacts if is_attainable_now(code, state, gd)} == {
+    assert {code for code in artifacts if obtainable_now(code, state, gd)} == {
         "perfect_pearl"}
 
 
@@ -846,8 +730,8 @@ def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
     state = _state("l35_artifact_fill", gd)
     assert "small_pearls" in gd.gatherable_drop_items()      # truly gatherable
     assert "small_pearls" not in set(gd.resource_drops.values())  # primary-map blind
-    assert is_attainable_now("small_pearls", state, gd)       # the fixed leaf
-    assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
+    assert obtainable_now("small_pearls", state, gd)       # the fixed leaf
+    assert obtainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
 def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
@@ -942,18 +826,30 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the rune's 20000
     # gold is earned by fighting, a finite price, so it orders ahead of the
     # jewelrycrafting climb, which has no grind rate offline and so no price.
+    #
+    # RE-DERIVED plan C Task 7 (a derived character starts at the base sheet's
+    # initiative 100): `R` without the sword, re-picked from what the character
+    # owns, rose from 0.3545 to 0.3772 against `rat`, so the sword's gain per
+    # unit of price (0.3015 / 2316) fell below the `steel_boots`' (0.0402 /
+    # 297), which head the objective now; the sword is the first alternative.
+    # The cycle plans the boots' first gather.
+    #
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at their actions'
+    # measured seconds (a craft 13 s, a withdraw 3 s, against one 36-second
+    # planner action each before), the crafted hat (gain 0.024 for 125) and
+    # boots (0.040 for 272) order ahead of the death_knight sword's drop farm
+    # (0.324 for 2267); the hat's plan starts at its cowhide.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
-        code="death_knight_sword", quantity=1, slot="weapon_slot")
+        code="mushmush_wizard_hat", quantity=1, slot="helmet_slot")
     assert report.decision.fallback_roots == [
         ObtainItem(code="steel_boots", quantity=1, slot="boots_slot"),
-        ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
+        ObtainItem(code="death_knight_sword", quantity=1, slot="weapon_slot"),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
-    assert [repr(a) for a in report.plan] == [
-        "Fight(death_knight)", "Equip(death_knight_sword->weapon_slot)"]
+    assert [repr(a) for a in report.plan] == ["Fight(cow)"]
     goal, plan, _declined = _plan_root("l35_artifact_fill", pearl)
     assert goal.startswith("GatherMaterials(small_pearls"), goal
     assert len(plan) == 1 and plan[0].startswith("Gather(bass_spot->small_pearls"), plan
@@ -1009,23 +905,14 @@ def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
 # --- Deliverable 4: rune slot ------------------------------------------------
 
 def test_l30_rune_candidate_armed() -> None:
-    """The GOOD half: near_term_gear covers rune_slot. With 25000 gold
-    against the permanent rune_vendor's 20000 lifesteal_rune, the
-    gold-purchase leaf opens and the empty rune slot gets its candidate —
-    the tree-level slot coverage the fixed-point loadout isolates.
-
-    Since 2026-10-10 the drop gate wears a potion loadout
-    (docs/PLAN_drop_fight_loadout.md), so three more slots have a near-term
-    candidate from a drop this character now wins (the death_knight_sword,
-    slime_shield and dreadful_amulet the live fleet wears at level 30); the
-    rune is still the rune slot's."""
+    """The GOOD half: with 25000 gold against the permanent rune_vendor's
+    20000 lifesteal_rune, the gold-purchase leaf opens and the rune is
+    obtainable now. (Plan C Task 6 deleted the near-term gear sheet this test
+    also read; the rune root itself is pinned by
+    test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root.)"""
     gd = _bundle()
     state = _state("l30_rune_fill", gd)
-    objective = CharacterObjective.from_game_data(gd)
-    assert objective.near_term_gear(state) == {
-        "rune_slot": "lifesteal_rune", "weapon_slot": "death_knight_sword",
-        "shield_slot": "slime_shield", "amulet_slot": "dreadful_amulet"}
-    assert is_attainable_now("lifesteal_rune", state, gd)
+    assert obtainable_now("lifesteal_rune", state, gd)
 
 
 def test_l30_rune_gold_buy_chain_plans() -> None:
@@ -1121,40 +1008,15 @@ def test_l20_one_stocked_utility2_is_a_candidate_but_not_a_decision_root() -> No
     """RENAMED IN WAVE 3a fix-round 1. LOST: utility potions are not equipment
     slots, so no potion reaches `fallback_roots` at all.
 
-    GAP-5 FIXED 2026-07-07 (renamed from ..._never_targeted, whose
-    LIMITATION pin this flips): stock utility1 with the bootstrap target and
-    utility2 is now REACHABLE. utility_potion_targets emits BOTH slots
-    unconditionally (utility1: the effect-best craftable-now heal,
-    minor_health_potion; utility2: the catalog's SECOND-best,
-    small_health_potion, via bootstrap_potion_target's new `exclude`
-    parameter — same-code dual utility slots are not server-legal). That
-    emission (asserted below) is unchanged and still bites.
-
-    `_utility_candidates` used to apply a PER-SLOT stock check on top of that
-    emission (utility1's own quantity > 0 skipped; utility2's own quantity 0
-    let it through into a fallback root, GAP-5's actual claim), but wave 3b
-    deleted `_utility_candidates` and its caller `objective_candidates` —
-    zero production callers, since decide_tree stopped reading them in wave
-    3a and the last diagnostic reader was retired in wave 3b. The per-slot
-    check has no surviving reader: no consumer in `src/` distinguishes
-    utility1-stocked from utility2-stocked any more (the only live stock
-    gate, `equipped_potion_qty`, sums both slots). GAP-5's decision-level
-    half was already gone (see
-    `test_l20_dual_utility_empty_utility_slots_are_not_decision_candidates`);
-    this was the last place any half of it was still measured, so this test
-    now only pins the emission — `utility_potion_targets` — and the
-    decision-level fact that no potion, stocked or not, reaches
-    `fallback_roots`."""
+    GAP-5's emission half (the utility-potion sheet that named both slots) had
+    no production caller and was deleted in plan C Task 6; the utility slots
+    are served by the potion-supply path. This test pins the decision-level
+    fact that no potion, stocked or not, reaches `fallback_roots`."""
     gd = _bundle()
     state = _state("l20_dual_utility_one_stocked", gd)
-    objective = CharacterObjective.from_game_data(gd)
     # the target is stocked in slot 1, slot 2 is empty
     assert state.equipment["utility1_slot"] == "minor_health_potion"
     assert state.equipment["utility2_slot"] is None
-    assert objective.utility_potion_targets(state) == {
-        "utility1_slot": "minor_health_potion",
-        "utility2_slot": "small_health_potion",
-    }
 
     report = _run("l20_dual_utility_one_stocked")
     # RE-DERIVED Task 5: the weaponcrafting climb in front of `L*`'s first

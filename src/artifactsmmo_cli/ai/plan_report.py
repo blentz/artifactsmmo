@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 
 
 @dataclass(frozen=True)

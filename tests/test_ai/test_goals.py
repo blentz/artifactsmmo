@@ -42,7 +42,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.task_coins import tasks_coin_total
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def make_game_data(item_stats=None) -> GameData:
@@ -878,27 +878,27 @@ class TestUpgradeEquipmentGoalPriority:
 
 class TestGatherMaterialsGoal:
     def test_value_40_when_materials_needed(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={}, bank_items={})
         assert goal.value(state, make_game_data()) == 40.0
 
     def test_value_zero_when_satisfied(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 6}, bank_items={})
         assert goal.value(state, make_game_data()) == 0.0
 
     def test_satisfied_with_bank_materials(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={}, bank_items={"copper_ore": 6})
         assert goal.is_satisfied(state) is True
 
     def test_satisfied_with_mixed_inventory_and_bank(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 3}, bank_items={"copper_ore": 3})
         assert goal.is_satisfied(state) is True
 
     def test_not_satisfied_when_short(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 5}, bank_items={})
         assert goal.is_satisfied(state) is False
 
@@ -908,13 +908,13 @@ class TestGatherMaterialsGoal:
         only tracked the recipe materials, never the finished item. Owning the
         finished target (here in the bank) must satisfy the goal so the redundant
         craft is dropped (the objective withdraws the existing copy)."""
-        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
+        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6}, now=cycle_now())
         # No materials at all, but a finished fishing_net sits in the bank.
         state = make_state(inventory={}, bank_items={"fishing_net": 1})
         assert goal.is_satisfied(state) is True
 
     def test_satisfied_when_finished_target_in_inventory(self):
-        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
+        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6}, now=cycle_now())
         state = make_state(inventory={"fishing_net": 1}, bank_items={})
         assert goal.is_satisfied(state) is True
 
@@ -924,12 +924,12 @@ class TestGatherMaterialsGoal:
         inventory short-circuited the finished-item rule and the goal was
         skipped as satisfied all run — zero mining. When the target IS the
         needed material, the quantity check must govern."""
-        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 1}, bank_items={})
         assert goal.is_satisfied(state) is False
 
     def test_raw_material_target_satisfied_at_full_quantity(self):
-        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 4}, bank_items={"copper_ore": 6})
         assert goal.is_satisfied(state) is True
 
@@ -939,12 +939,12 @@ class TestGatherMaterialsGoal:
 
     def test_desired_state_returns_needed(self):
         needed = {"copper_ore": 6}
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed=needed)
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed=needed, now=cycle_now())
         state = make_state()
         assert goal.desired_state(state, make_game_data()) == {"inventory": needed}
 
     def test_repr(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         assert repr(goal) == "GatherMaterials(copper_dagger, {copper_ore:6})"
 
     def test_buy_gate_respects_progression_reserve(self):
@@ -1002,7 +1002,7 @@ class TestGatherMaterialsGoal:
         assert floor_for_iron_armor == 100
 
     def test_value_gradient_with_partial_collection(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 3}, bank_items={})
         value = goal.value(state, make_game_data())
         assert 1.0 <= value < 40.0
@@ -1017,7 +1017,7 @@ class TestGatherMaterialsGoal:
             store = LearningStore(db_path=path, character="testchar")
             store.start_session()
             goal = GatherMaterialsGoal(
-                target_item="copper_dagger", needed={"copper_ore": 6})
+                target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
             # Materials already on hand -> is_satisfied True -> base 0.
             state = make_state(inventory={"copper_ore": 6}, bank_items={})
             assert goal.value(state, make_game_data(), history=store) == 0.0
@@ -1033,7 +1033,7 @@ class TestGatherMaterialsGoal:
         # inv lacks the positive entry so the goal is NOT satisfied, but the
         # mixed-sign quantities sum to zero.
         goal = GatherMaterialsGoal(
-            target_item="copper_dagger", needed={"copper_ore": 5, "slag": -5})
+            target_item="copper_dagger", needed={"copper_ore": 5, "slag": -5}, now=cycle_now())
         state = make_state(inventory={}, bank_items={})
         assert goal.is_satisfied(state) is False
         assert goal.value(state, make_game_data()) == 0.0
@@ -1042,7 +1042,7 @@ class TestGatherMaterialsGoal:
         # If copper_bar needs 2 copper_ore and we have 4 copper_ore, 2 bars are craftable
         gd = make_game_data()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 2}}
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 2})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 2}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 4}, bank_items={})
         value = goal.value(state, gd)
         assert value == 1.0  # fully covered by intermediates → min value 1.0
@@ -1080,7 +1080,7 @@ class TestGatherMaterialsGoal:
                                        crafting_skill="gearcrafting", crafting_level=1),
         }
         # needed = one wooden_shield's worth of planks (matches the live step).
-        goal = GatherMaterialsGoal(target_item="wooden_shield", needed={"ash_plank": 6})
+        goal = GatherMaterialsGoal(target_item="wooden_shield", needed={"ash_plank": 6}, now=cycle_now())
         # Char stands ON the ash_tree; bank holds 40 of the 48 ash_wood needed.
         state = make_state(
             level=3, x=6, y=1,
@@ -1137,7 +1137,7 @@ class TestGatherMaterialsGoal:
                                       crafting_skill="gearcrafting", crafting_level=5),
         }
         goal = GatherMaterialsGoal(target_item="feather_coat",
-                                   needed={"feather_coat": 1})
+                                   needed={"feather_coat": 1}, now=cycle_now())
         state = make_state(
             level=6,
             skills={"woodcutting": 4, "gearcrafting": 5, "mining": 9},
@@ -1175,7 +1175,7 @@ class TestGatherMaterialsGoal:
                                       crafting_skill="gearcrafting", crafting_level=5),
         }
         goal = GatherMaterialsGoal(target_item="feather_coat",
-                                   needed={"feather_coat": 1})
+                                   needed={"feather_coat": 1}, now=cycle_now())
         state = make_state(
             level=6, x=2, y=0,
             skills={"woodcutting": 4, "gearcrafting": 5, "mining": 9},
@@ -1199,7 +1199,7 @@ class TestGatherMaterialsGoal:
         gd = make_game_data()
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         gd._resource_skill = {"copper_rocks": ("mining", 1)}
-        goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state()
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
@@ -1229,7 +1229,7 @@ class TestGatherMaterialsGoal:
         stats = ItemStats(code="copper", level=1, type_="resource",
                           crafting_skill="mining", crafting_level=1)
         gd._item_stats = {"copper": stats}
-        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper": 4})
+        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper": 4}, now=cycle_now())
         state = make_state()
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
@@ -1269,7 +1269,7 @@ class TestGatherMaterialsGoal:
             "staff": ItemStats(code="staff", level=5, type_="weapon",
                                crafting_skill="weaponcrafting", crafting_level=1),
         }
-        goal = GatherMaterialsGoal(target_item="greater_staff", needed={"staff": 1})
+        goal = GatherMaterialsGoal(target_item="greater_staff", needed={"staff": 1}, now=cycle_now())
         state = make_state()
         actions = [
             GatherAction(resource_code="wood_grove", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
@@ -1296,7 +1296,7 @@ class TestGatherMaterialsGoal:
     def test_relevant_actions_when_no_resource_drops_mapped(self):
         gd = make_game_data()
         # No _resource_drops, no recipes → only Rest and Deposit kept
-        goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="sword", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state()
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]),
@@ -1313,32 +1313,32 @@ class TestGatherMaterialsGoal:
         assert "Fight(chicken)" not in repr_set
 
     def test_max_depth_scales_with_needed_quantity(self):
-        assert GatherMaterialsGoal(target_item="x", needed={"copper_bar": 6}).max_depth == 600
-        assert GatherMaterialsGoal(target_item="x", needed={"a": 1}).max_depth == 100
-        assert GatherMaterialsGoal(target_item="x", needed={"a": 2, "b": 3}).max_depth == 500
+        assert GatherMaterialsGoal(target_item="x", needed={"copper_bar": 6}, now=cycle_now()).max_depth == 600
+        assert GatherMaterialsGoal(target_item="x", needed={"a": 1}, now=cycle_now()).max_depth == 100
+        assert GatherMaterialsGoal(target_item="x", needed={"a": 2, "b": 3}, now=cycle_now()).max_depth == 500
 
     def test_value_is_40_when_not_satisfied(self):
         """value() is dynamic: 40.0 * fraction_remaining. With nothing gathered, returns 40.0.
         The old priority() returned a fixed 50.0; that override is retired."""
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={}, bank_items={})
         assert goal.value(state, make_game_data()) == 40.0
 
     def test_value_decreases_with_partial_progress(self):
         """value() scales down as materials are gathered."""
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 3}, bank_items={})
         val = goal.value(state, make_game_data())
         assert 1.0 <= val < 40.0
 
     def test_value_is_zero_when_satisfied(self):
-        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
+        goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6}, now=cycle_now())
         state = make_state(inventory={"copper_ore": 6}, bank_items={})
         assert goal.value(state, make_game_data()) == 0.0
 
     def test_value_positive_when_not_satisfied(self):
         """value() is always > 0 when materials still needed."""
-        goal = GatherMaterialsGoal(target_item="x", needed={"copper_ore": 1})
+        goal = GatherMaterialsGoal(target_item="x", needed={"copper_ore": 1}, now=cycle_now())
         state = make_state(inventory={}, bank_items={})
         assert goal.value(state, make_game_data()) > 0.0
 
@@ -1348,7 +1348,7 @@ class TestGatherMaterialsGoal:
         stats = ItemStats(code="copper_ring", level=1, type_="ring",
                           crafting_skill="jewelrycrafting", crafting_level=5)
         gd = make_game_data(item_stats={"copper_ring": stats})
-        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
+        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6}, now=cycle_now())
         state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 1})
         assert goal.value(state, gd) > 0.0
 
@@ -1356,7 +1356,7 @@ class TestGatherMaterialsGoal:
         stats = ItemStats(code="copper_ring", level=1, type_="ring",
                           crafting_skill="jewelrycrafting", crafting_level=5)
         gd = make_game_data(item_stats={"copper_ring": stats})
-        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6})
+        goal = GatherMaterialsGoal(target_item="copper_ring", needed={"copper_bar": 6}, now=cycle_now())
         state = make_state(inventory={}, bank_items={}, skills={"jewelrycrafting": 5})
         assert goal.value(state, gd) > 0.0
 
@@ -1763,7 +1763,7 @@ class TestUnlockBankGoal:
 
 def test_gather_materials_goal_unchanged_when_history_none():
     """history=None preserves v1 behaviour."""
-    goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
+    goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60}, now=cycle_now())
     state = make_state(inventory={}, inventory_max=104, bank_items={})
     gd = make_game_data()
     assert goal.value(state, gd) == goal.value(state, gd, history=None)
@@ -1776,7 +1776,7 @@ def test_gather_materials_goal_value_penalty_when_slow_to_satisfy():
     try:
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
-        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
+        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60}, now=cycle_now())
         for i in range(5):
             store.record_cycle(Cycle(
                 ts=f"2026-05-17T00:00:{i:02d}+00:00",

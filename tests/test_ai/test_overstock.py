@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.inventory_caps import (
 )
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data
 
 
 class TestLevelDistanceKeepCeiling:
@@ -66,7 +66,7 @@ class TestUsefulCapAppliesCeiling:
     def test_far_consumable_capped_to_five(self):
         """A non-unique consumable (base cap 999) 10+ levels below the character
         is clamped to 5 — 'only keep currently useful items'."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {"old_potion": ItemStats(code="old_potion", level=1,
                                                    type_="consumable", hp_restore=20)}
         gd._crafting_recipes = {}
@@ -79,7 +79,7 @@ class TestUsefulCapAppliesCeiling:
 
     def test_unique_consumable_not_clamped(self):
         """A bound consumable keeps its base cap regardless of level distance."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {"bound_potion": ItemStats(code="bound_potion", level=1,
                                                      type_="consumable", hp_restore=20,
                                                      tradeable=False)}
@@ -116,7 +116,7 @@ def test_gear_value_counts_utility_stats_so_artifact_not_discarded():
 
 
 def _gd_with_sap_recipes() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "sap": ItemStats(code="sap", level=1, type_="resource"),
         "small_antidote": ItemStats(
@@ -151,7 +151,7 @@ class TestUsefulQuantityCap:
         of count, so capping low frees zero slots while throwing away
         healing stock. Post-fix CONSUMABLE_KEEP = 999 so any plausible
         accumulation is protected — symmetric to the tasks_coin fix."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "apple": ItemStats(code="apple", level=1, type_="consumable", hp_restore=20),
             "cooked_chicken": ItemStats(code="cooked_chicken", level=1,
@@ -178,7 +178,7 @@ class TestUsefulQuantityCap:
         ash_plank<-ash_wood at 1:1, task needs 10 more ash_planks => need
         10 ash_wood to complete the task without re-gathering. Cap should
         be max(recipe_cap=5, task_chain=10) = 10."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
             "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
@@ -202,7 +202,7 @@ class TestUsefulQuantityCap:
         """Deeper chain: wooden_shield<-ash_plank x6, ash_plank<-ash_wood x1.
         Task=wooden_shield(0/2) means 2 shields => 12 ash_plank => 12 ash_wood.
         Cap on ash_wood must scale to 12, not the 5 recipe_max*batch baseline."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
             "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
@@ -223,7 +223,7 @@ class TestUsefulQuantityCap:
         """Self-referential recipe (a uses b, b uses a) must terminate
         without infinite recursion. Returns 0 chain demand for any item
         not reachable from the root via a non-cyclic path."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "a": ItemStats(code="a", level=1, type_="resource"),
             "b": ItemStats(code="b", level=1, type_="resource"),
@@ -245,7 +245,7 @@ class TestUsefulQuantityCap:
         as junk. API `type`-driven keep-floor (CONSUMABLE_KEEP), so the cap is
         999 even with hp_restore=0 — the prior `== 0` was the bug (recall_potion
         / forest_bank_potion / bag_of_gold fell to cap 0 and were delete-eligible)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "buff_dust": ItemStats(code="buff_dust", level=1,
                                    type_="consumable", hp_restore=0),
@@ -260,7 +260,7 @@ class TestUsefulQuantityCap:
         corrupted_gem, sandwhisper_coin — all economic currency that must never
         be auto-deleted/bank-drained. API `type`-driven so future currencies are
         covered too."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "event_ticket": ItemStats(code="event_ticket", level=1, type_="currency"),
             "sandwhisper_coin": ItemStats(code="sandwhisper_coin", level=1, type_="currency"),
@@ -278,7 +278,7 @@ class TestUsefulQuantityCap:
         TaskExchange currency. Cap is now 999 so any plausible
         accumulation is protected — overstock filter should never strip
         them."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {}
         gd._crafting_recipes = {}
         state = make_state(inventory={TASKS_COIN_CODE: 50})
@@ -308,7 +308,7 @@ class TestUsefulQuantityCap:
         useful_quantity_cap is the SPACE-DRIVEN floor, not a dump trigger: with
         free slots (low pressure) the surplus is NOT overstock. The floor only
         decides excess once the bag is genuinely full."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {"copper_dagger": ItemStats(
             code="copper_dagger", level=1, type_="weapon",
             crafting_skill="weaponcrafting", crafting_level=1)}
@@ -328,7 +328,7 @@ class TestUsefulQuantityCap:
     def test_equippable_cap_yields_to_active_task(self):
         """...unless a task requires more — task_cap overrides the equippable
         floor so the bot keeps enough to complete an items task."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {"copper_dagger": ItemStats(
             code="copper_dagger", level=1, type_="weapon",
             crafting_skill="weaponcrafting", crafting_level=1)}
@@ -363,7 +363,7 @@ class TestOverstockedItems:
         the binding constraint. With the fix, zero free slots is treated as
         full pressure and every over-floor item (floor 0 for unknown junk)
         is reported."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {}
         gd._crafting_recipes = {}
         inventory = {f"junk_{i}": 1 for i in range(20)}
@@ -379,7 +379,7 @@ class TestOverstockedItems:
         fraction, but with enough slot room (slots_max=124) that slots are
         NOT full, must still report no overstock — the fix is additive, not
         a quantity-watermark regression."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {}
         gd._crafting_recipes = {}
         inventory = {f"junk_{i}": 1 for i in range(20)}
@@ -457,7 +457,7 @@ class TestDiscardOverstockGoal:
         must NOT appear in overstocked_items even at large counts — otherwise
         DiscardOverstock would race FarmItems and delete the gathered batch
         before TaskTrade fires."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {"gudgeon": ItemStats(code="gudgeon", level=1, type_="resource")}
         gd._crafting_recipes = {}  # no recipes — only task_cap protects it
         goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
@@ -519,7 +519,7 @@ class TestDiscardOverstockGoal:
     def test_sellable_overstock_not_deleted(self):
         """A reachable-buyer overstock item is NOT deleted (NpcSellAction emitted
         instead). A truly-worthless item (no buyer, no GE order) IS deleted."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "junk": ItemStats(code="junk", level=1, type_="resource"),
             "rock": ItemStats(code="rock", level=1, type_="resource"),
@@ -550,7 +550,7 @@ class TestDiscardOverstockGoal:
         NpcSellAction.is_applicable rejected npc_location=None; DISCARD refused
         to delete because `buyers` was truthy; bank full → DEPOSIT_FULL off).
         Fix: protect from deletion ONLY when npc_location is not None."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "festival_token": ItemStats(code="festival_token", level=1,
                                         type_="resource"),
@@ -574,7 +574,7 @@ class TestDiscardOverstockGoal:
         above the NPC floor -> choose_venue3 picks GE_POST, so a
         GePostSellOrderAction is offered, batched to the standing sell
         order's own quantity (capped at the excess)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
         }
@@ -606,7 +606,7 @@ class TestEquippableDominance:
         wooden_stick (attack 0) remains protected at EQUIPPABLE_KEEP=1.
         User asked: when forced to discard, drop the redundant one.
         Post-fix: dagger present → stick cap=0 → discard-eligible."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
                                        attack={}),
@@ -624,7 +624,7 @@ class TestEquippableDominance:
     def test_equipped_weapon_protected_from_discard_when_equipped(self):
         """Equipped items are floor-1 in useful_quantity_cap regardless of
         dominance — losing the item Robby is wearing is never OK."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
                                        attack={}),
@@ -644,7 +644,7 @@ class TestEquippableDominance:
         is NOT dominated by copper_dagger (weapon_slot, attack 12, no
         skill_effects) because the dagger doesn't cover the pickaxe's
         mining bonus. Each must stay protected."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                         attack={"fire": 12}),
@@ -660,7 +660,7 @@ class TestEquippableDominance:
     def test_tool_dominates_lower_magnitude_same_skill_tool(self):
         """iron_pickaxe (mining -20) dominates copper_pickaxe (mining -10)
         when iron has higher equip_value too."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
                                          attack={"fire": 3},
@@ -678,7 +678,7 @@ class TestEquippableDominance:
     def test_no_dominance_when_peer_lower_equip_value(self):
         """copper_helmet (level 1, attack defense 5) is NOT dominated by
         wooden_helmet (defense 0). Strictly-higher equip_value required."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_helmet": ItemStats(code="wooden_helmet", level=1, type_="helmet",
                                         resistance={}),
@@ -695,7 +695,7 @@ class TestEquippableDominance:
     def test_dominance_considers_bank_items(self):
         """Banked copper_dagger should dominate inventory wooden_stick
         same as inventory copper_dagger would — owned via bank counts."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
                                        attack={}),
@@ -718,7 +718,7 @@ class TestEquippableDominanceArmorAndAccessories:
 
     def test_armor_tier_dominance(self):
         """body_armor: iron (resistance 12) dominates copper (resistance 5)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_armor": ItemStats(code="copper_armor", level=1, type_="body_armor",
                                        resistance={"fire": 5}),
@@ -732,7 +732,7 @@ class TestEquippableDominanceArmorAndAccessories:
 
     def test_shield_tier_dominance(self):
         """shield: copper (resistance 5) dominates wooden (resistance 0)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
                                         resistance={}),
@@ -744,7 +744,7 @@ class TestEquippableDominanceArmorAndAccessories:
         assert useful_quantity_cap("wooden_shield", state, gd) == 0
 
     def test_boots_tier_dominance(self):
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
                                        resistance={"fire": 4}),
@@ -759,7 +759,7 @@ class TestEquippableDominanceArmorAndAccessories:
         """ring has TWO slots — bot wears 2 rings. 1 iron_ring + 1
         copper_ring: the copper is still needed to fill the 2nd slot.
         copper must NOT be dominated until 2+ iron_rings are owned."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                       hp_bonus=3),
@@ -781,7 +781,7 @@ class TestEquippableDominanceArmorAndAccessories:
 
     def test_artifact_multi_slot_dominance_requires_three(self):
         """artifact has THREE slots — need 3 dominator copies to flush."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_artifact": ItemStats(code="copper_artifact", level=1, type_="artifact",
                                           hp_bonus=2),
@@ -797,7 +797,7 @@ class TestEquippableDominanceArmorAndAccessories:
         assert useful_quantity_cap("copper_artifact", state3, gd) == 0
 
     def test_amulet_single_slot_dominance(self):
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_amulet": ItemStats(code="copper_amulet", level=1, type_="amulet",
                                         hp_bonus=3),
@@ -814,7 +814,7 @@ class TestEquippableDominanceArmorAndAccessories:
         floor keeps it >= 1) but the dominance rule itself classifies it
         as dominated — once swapped to iron via OptimizeLoadout, the
         copper drops to inv and becomes discard-eligible."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
                                          attack={"fire": 3},
@@ -843,7 +843,7 @@ class TestDominanceEdgeCases:
     def test_not_dominated_when_item_has_no_stats(self):
         """An item with no game-data stats can't be reasoned about as
         equippable -> never dominated (line 102-103)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {}
         state = make_state(inventory={"unknown_item": 1})
         assert _is_equippable_dominated("unknown_item", state, gd) is False
@@ -851,7 +851,7 @@ class TestDominanceEdgeCases:
     def test_not_dominated_when_item_type_has_no_slots(self):
         """A non-equippable type (no entry in ITEM_TYPE_TO_SLOTS) is never
         dominated (line 104-106)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
         }
@@ -861,7 +861,7 @@ class TestDominanceEdgeCases:
     def test_peer_with_no_stats_is_skipped(self):
         """A peer code owned but absent from game data is skipped, so it can't
         count as a dominator (line 120-121); the item stays undominated."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
                                        attack={}),
@@ -874,7 +874,7 @@ class TestDominanceEdgeCases:
     def test_peer_in_different_slot_does_not_dominate(self):
         """A higher-value peer that fits a DIFFERENT slot can't substitute, so
         it isn't a dominator (line 122-125)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
                                        attack={}),
@@ -889,7 +889,7 @@ class TestDominanceEdgeCases:
     def test_overstocked_skips_zero_quantity_entries(self):
         """A zero-quantity inventory entry is skipped by overstocked_items
         (line 244-245) and never reported as excess."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "junk": ItemStats(code="junk", level=1, type_="resource"),
         }
@@ -925,7 +925,7 @@ class TestPureCores:
         """`useful_quantity_cap_excl_equipped` is the cap WITHOUT the
         equipped floor: an equipped no-demand item caps at 0 (the full cap
         floors it at 1)."""
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats = {
             "trinket": ItemStats(code="trinket", level=1, type_="resource"),
         }
@@ -949,7 +949,7 @@ class TestPureCores:
 
 def _gem_gd() -> GameData:
     """A gemstone (cut at mining@20) and a near-term bar (mining@1)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "topaz_stone": ItemStats(code="topaz_stone", level=20, type_="resource"),
         "topaz": ItemStats(code="topaz", level=20, type_="resource",

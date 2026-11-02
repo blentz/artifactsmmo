@@ -1,7 +1,7 @@
 """Differential (C0a): production's combat-xp positivity verdict ≡ proven gate.
 
-Production targeting gates on ``xp_per_kill(code, level) > 0`` (player.py:1574
-→ combat_picker), computed through the FLOAT xp formula in
+Production targeting gates on ``xp_per_kill(code, level) > 0``
+(``gear_objective._candidates``), computed through the FLOAT xp formula in
 ``monster_catalog.xp_per_kill`` (level_penalty bands + type multiplier +
 wisdom bonus + round). The Lean core ``Formal.XpPositive.xpPositiveGate``
 proves the verdict is EXACTLY the integer band ``1 ≤ monster_level ∧

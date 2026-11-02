@@ -16,6 +16,7 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_data, scenario_state
@@ -147,3 +148,35 @@ def test_a_fighter_per_monster_judges_each_dropper_on_its_own(gd: GameData) -> N
     assert model.in_bag("iron_sword") == 0
     assert not ObtainModel(state, gd, CTX, NOW, fighter=lambda _monster: state).feasible(
         "feather", 1, PIECE_POLICY)
+
+
+def test_the_winnable_verdict_is_asked_once_per_decision(gd: GameData, tmp_path: Path) -> None:
+    """Review I5: HAL's decision asked `drop_fight_winnable` 15,637 times of
+    255 distinct fighters and monsters. Inside the store's decision episode a
+    fighter's verdict against a monster is asked once, however many models
+    ask it; a different fighter is asked afresh, and so is every ask outside
+    an episode or without a store."""
+    state = _character(gd, equipment={"weapon_slot": "iron_sword"}, inventory={"iron_sword": 1})
+    other = replace(state, level=state.level + 1)
+    asked: list[tuple[int, str]] = []
+
+    def wins(rested, game_data, monster):  # type: ignore[no-untyped-def]
+        asked.append((rested.level, monster))
+        return True
+
+    store = LearningStore(db_path=str(tmp_path / "e.db"), character="fighter")
+    try:
+        with patch(WINS, side_effect=wins):
+            with store.search_cache():
+                for _ in range(3):
+                    ObtainModel(state, gd, CTX, NOW, store=store).routes("feather")
+                once = len(asked)
+                ObtainModel(other, gd, CTX, NOW, store=store).routes("feather")
+                assert len(asked) == 2 * once
+            ObtainModel(state, gd, CTX, NOW, store=store).routes("feather")
+            ObtainModel(state, gd, CTX, NOW).routes("feather")
+        assert once > 0 and len(asked) == 4 * once
+        assert {monster for _level, monster in asked} == {
+            row[0] for row in gd.monsters_dropping("feather")}
+    finally:
+        store.close()

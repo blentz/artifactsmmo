@@ -20,8 +20,8 @@ BOTH `keep_in_bag` (which is where WORKING_KIT lives — keep the ONE tool) and
 """
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai.fixtures import make_state
 
 
@@ -59,15 +59,13 @@ def test_grind_hoard_visible_with_cap_only_protection() -> None:
 
 
 def test_bis_target_code_is_capped_not_blanketed() -> None:
-    """The profile-less blanket is GONE: a `target_tools` / `target_gear` code is
-    a PURSUIT target, not a hoard licence. 18 pickaxes with no loadout profile
-    recorded → keep the 1 the re-arm will wear, reclaim 17."""
+    """The profile-less blanket is GONE: a best-in-slot code is not a hoard
+    licence. 18 pickaxes with no loadout profile recorded → keep the 1 the
+    re-arm will wear, reclaim 17."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_pickaxe": 18})
-    ctx = _ctx(target_tools=frozenset({"copper_pickaxe"}),
-               target_gear=frozenset({"copper_helmet"}))
-    assert recyclable_surplus(state, gd, ctx) == {"copper_pickaxe": 17}
+    assert recyclable_surplus(state, gd, _ctx()) == {"copper_pickaxe": 17}
 
 
 def test_best_gathering_tool_is_never_recyclable_surplus() -> None:

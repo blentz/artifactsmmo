@@ -5,7 +5,8 @@ character state through the walk. On crossing a rung it increments the level AND
 applies the growth the published rules grant for that level, before the next
 rung's admissibility, beatability and reward are evaluated."*
 
-WHY. `cheapest_path_to_level` advanced `sim_level` and nothing else, so the
+WHY. `cheapest_path_to_level` (since deleted, plan C Task 4) advanced
+`sim_level` and nothing else, so the
 beatability verdict at rung 40 was asked of the character's rung-12 body. That
 asks whether TODAY'S character can beat a monster it will not meet until it is
 twenty-eight levels stronger, and answers no — which is not pessimism, it is the

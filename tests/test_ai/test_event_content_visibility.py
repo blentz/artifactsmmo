@@ -12,9 +12,9 @@ from unittest.mock import MagicMock
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.strategy import _producible
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _winnable_state(**overrides):
@@ -109,9 +109,9 @@ def test_event_monster_drop_producible_only_when_active() -> None:
     gd.world.event_code_of_content["corrupted_ogre"] = "ogre_event"
     state = _winnable_state()
 
-    assert _producible("ogre_skin", state, gd) is False
+    assert _producible("ogre_skin", state, gd, now=cycle_now()) is False
     gd.active_event_codes = {"ogre_event"}
-    assert _producible("ogre_skin", state, gd) is True
+    assert _producible("ogre_skin", state, gd, now=cycle_now()) is True
 
 
 def test_monster_both_static_and_event_dedups_shared_tile() -> None:

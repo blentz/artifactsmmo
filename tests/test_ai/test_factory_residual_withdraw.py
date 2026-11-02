@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def _copper_chain_gd() -> GameData:
@@ -55,7 +55,7 @@ def _build(gd: GameData, state: WorldState) -> list:
         objective=None,
         bank_accessible=True,
         task_exchange_min_coins=6,
-     learned_drops=LearnedDrops.empty())
+     learned_drops=LearnedDrops.empty(), now=cycle_now())
 
 
 def _withdraws(actions: list, code: str) -> list[WithdrawItemAction]:
@@ -85,7 +85,7 @@ class TestTraceRegression:
             crafting_target="copper_helmet",
         )
         goal = GatherMaterialsGoal(target_item="copper_helmet",
-                                   needed={"copper_helmet": 1})
+                                   needed={"copper_helmet": 1}, now=cycle_now())
         actions = _build(gd, state)
         # The prune precondition really holds: net 0 ⇒ the gather is dropped.
         relevant = goal.relevant_actions(actions, state, gd)

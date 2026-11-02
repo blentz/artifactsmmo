@@ -9,23 +9,30 @@ from unittest.mock import patch
 
 import pytest
 
+import artifactsmmo_cli.ai.progression.skill_grind_target as sgt
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
-from artifactsmmo_cli.ai.tiers.skill_grind_target import (
+from artifactsmmo_cli.ai.progression.skill_grind_selection import GrindCandidate
+from artifactsmmo_cli.ai.progression.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
     GRIND_POLICY,
     _cache_key,
     build_selectable_grind_candidates,
+    chain_fight_actions,
     grind_model,
     has_grind_target,
     is_obtainable,
+    objective_gain,
+    semantic_order,
     skill_grind_target,
 )
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, with_missing
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -88,9 +95,9 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     Bank stock used to be added straight into `owned`, so a banked material cost
     NOTHING and this test asserted `copper_dagger` won outright on that basis.
     Under the route model only the BAG is free; the bank is a WITHDRAW route —
-    one hop plus one action per unit — which here costs exactly what gathering
-    the same bars costs, so a banked rung ties an unstocked one rather than
-    beating it.
+    one hop plus a withdraw's measured seconds per code — which here costs
+    less than gathering and smelting the same bars, so a banked rung beats an
+    unstocked one, though not a bagged one.
 
     That is why `wooden_staff` (4 `ash_plank`) now wins where `copper_dagger`
     (6 bars) used to: six withdraws are dearer than four gathers. The old model
@@ -106,9 +113,11 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     in_bag = steps(make_state(skills={"weaponcrafting": 3},
                               inventory={"copper_bar": 6}))
     assert in_bag < banked, "the bag must be free where the bank is not"
-    assert banked == empty, (
-        "here a withdraw and a gather are both one action per unit, so stocking "
-        "the bank buys nothing over gathering — the model saying so is correct")
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): a withdraw costs its
+    # measured 3 seconds and a gather its 34, no longer one planner action
+    # each, so stocking the bank now beats gathering (and smelting) the bars.
+    assert banked < empty, (
+        "a 3-second withdraw is cheaper than a 34-second gather and its smelt")
 
 
 def test_none_when_nothing_craftable_at_level():
@@ -279,8 +288,8 @@ def test_the_memo_key_notices_a_changed_threshold():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
-            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW))
+    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None, None))
+            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW, (None, None, None)))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
@@ -290,13 +299,13 @@ def test_the_memo_key_notices_a_changed_worn_stock():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW)
+    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility1_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW)
+                             LearnedDrops.empty(), _NOW, (None, None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility2_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW)
+                             LearnedDrops.empty(), _NOW, (None, None, None))
 
 def test_the_memo_misses_across_the_sandwhisper_crossing():
     """Final review I-1. `GRIND_POLICY` asks `SPAWN_KNOWN`, which reads the
@@ -336,7 +345,7 @@ def test_the_memo_key_notices_an_event_window_closing():
                                 active_events={"fair": opens + timedelta(hours=1)})
 
     def key(at: datetime) -> object:
-        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at)
+        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at, (None, None, None))
 
     assert key(opens) == key(opens + timedelta(minutes=5))
     assert key(opens) != key(opens + timedelta(hours=2))
@@ -457,18 +466,36 @@ def test_a_HELD_rung_is_not_free_because_the_grind_must_CRAFT_another():
         "holding copies changed the cost of crafting another")
 
 
-def test_a_gear_target_rung_is_marked_wanted_and_a_plain_one_is_not():
+def test_a_missing_piece_rung_is_marked_wanted_and_a_plain_one_is_not():
     """`wanted` was constructed as the literal False at the sole production
     producer, so the key added on 2026-06-24 had never been able to fire. This
     is the wiring that lets it."""
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                              near_term_targets=frozenset({"copper_dagger"}))
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     cands = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx)
     by_code = {c.code: c for c in cands}
     assert by_code["copper_dagger"].wanted is True
     assert by_code["wooden_staff"].wanted is False
+
+
+def test_wanted_prefers_a_missing_piece():
+    """Plan C Review Focus 2: the grind crafts a missing `L*` piece or a `T*`
+    tool over a non-target rung. Unwanted, `wooden_staff` wins (higher level,
+    fewer steps); with `copper_dagger` a missing piece of the objective, or a
+    tool a demanded skill climbs with, the dagger wins, and a held objective
+    with no tool leaves the plain ranking."""
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 3})
+    missing = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=missing) == "copper_dagger"
+    held = with_missing(TIMED_NO_PROFILE_CONTEXT)
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=held) == "wooden_staff"
+    tool = dataclasses.replace(held, objective_tools={"weaponcrafting": "copper_dagger"})
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=tool) == "copper_dagger"
+    no_objective = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
+                                       objective_tools={"weaponcrafting": "copper_dagger"})
+    assert skill_grind_target("weaponcrafting", state, gd, ctx=no_objective) == "copper_dagger"
 
 
 def test_a_siblings_supply_target_is_marked_wanted():
@@ -493,8 +520,7 @@ def test_the_candidate_cache_is_not_keyed_by_context():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx_a = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                                near_term_targets=frozenset({"copper_dagger"}))
+    ctx_a = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     ctx_b = TIMED_NO_PROFILE_CONTEXT
     first = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_a)
     second = build_selectable_grind_candidates("weaponcrafting", state, gd, ctx_b)
@@ -513,8 +539,7 @@ def test_context_changes_the_rank_but_never_whether_a_grind_exists():
     """
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
-    ctx = dataclasses.replace(TIMED_NO_PROFILE_CONTEXT,
-                              near_term_targets=frozenset({"copper_dagger"}))
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"))
     with_ctx = skill_grind_target("weaponcrafting", state, gd, ctx=ctx)
     without = skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert (with_ctx is None) == (without is None)
@@ -587,7 +612,7 @@ def test_has_grind_target_agrees_with_the_full_selection(skills, inventory, bank
     the whole search completes in 8.3s and the goal plans in 2,755."""
     gd = _gd()
     state = make_state(skills=skills, inventory=inventory, bank_items=bank)
-    assert has_grind_target("weaponcrafting", state, gd) is (
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is (
         skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is not None)
 
 
@@ -599,7 +624,7 @@ def test_has_grind_target_is_false_when_the_chain_is_ungettable():
     gd._resource_drops = {}          # no gatherable leaves at all
     gd._resource_drops_full = {}
     state = make_state(skills={"weaponcrafting": 3})
-    assert has_grind_target("weaponcrafting", state, gd) is False
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is False
     assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
@@ -614,9 +639,9 @@ def test_has_grind_target_skips_an_in_skill_item_with_no_recipe():
     state = make_state(skills={"weaponcrafting": 1})
     # copper_dagger (level 1, real recipe) still answers, so the phantom is
     # skipped rather than crashing or counting.
-    assert has_grind_target("weaponcrafting", state, gd) is True
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is True
     gd._crafting_recipes = {}          # now NOTHING has a recipe
-    assert has_grind_target("weaponcrafting", state, gd) is False
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is False
 
 
 def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
@@ -627,7 +652,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     grey = make_state(skills={"weaponcrafting": 20})
     # copper_dagger (1) and wooden_staff (3) are grey at 20; iron_dagger (10)
     # is not, so existence still holds and the grey ones were skipped.
-    assert has_grind_target("weaponcrafting", grey, gd) is True
+    assert has_grind_target("weaponcrafting", grey, gd, now=cycle_now()) is True
     assert skill_grind_target("weaponcrafting", grey, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "iron_dagger"
 
     # Drop the only paying rung: every survivor is grey, so nothing qualifies.
@@ -637,7 +662,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     # pass for the wrong reason. (Production never mutates loaded game data.)
     lean = _gd()
     del lean._item_stats["iron_dagger"]
-    assert has_grind_target("weaponcrafting", grey, lean) is False
+    assert has_grind_target("weaponcrafting", grey, lean, now=cycle_now()) is False
     assert skill_grind_target("weaponcrafting", grey, lean, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
@@ -773,3 +798,177 @@ def test_a_renewable_material_needs_no_stock():
     gd._resource_skill = {"gem_rocks": ("mining", 1)}
     gd._resource_locations = {"gem_rocks": [(1, 0)]}
     assert is_obtainable("ring", grind_model(_jeweller(), gd, datetime.now(UTC)))
+
+
+def _twin_rungs() -> GameData:
+    """`_gd()` plus `copper_knife`, the dagger's exact twin (level 1,
+    `{copper_bar: 6}`): every `_beats` key ties the two."""
+    gd = _gd()
+    gd._item_stats["copper_knife"] = ItemStats(code="copper_knife", level=1, type_="weapon",
+                                               crafting_skill="weaponcrafting", crafting_level=1)
+    gd._crafting_recipes["copper_knife"] = {"copper_bar": 6}
+    return gd
+
+
+def _reversed_catalogue(gd: GameData) -> GameData:
+    gd._item_stats = dict(reversed(list(gd._item_stats.items())))
+    return gd
+
+
+def _two_pieces(dagger_gain: Fraction, knife_gain: Fraction):
+    ctx = with_missing(TIMED_NO_PROFILE_CONTEXT, ("weapon_slot", "copper_dagger"),
+                       ("shield_slot", "copper_knife"))
+    objective = ctx.gear_objective
+    assert objective is not None
+    gains = {"copper_dagger": dagger_gain, "copper_knife": knife_gain}
+    missing = tuple(dataclasses.replace(p, gain=gains[p.code]) for p in objective.missing)
+    return dataclasses.replace(ctx, gear_objective=dataclasses.replace(objective, missing=missing))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_full_tie_goes_to_the_higher_objective_gain_in_either_catalogue_order(
+        reverse: bool) -> None:
+    """Plan C Task 7 review M1: `_beats` keeps the first of two tied rungs, so
+    the catalogue's order picked the grind. Two wanted twins tie on every
+    `_beats` key; the one whose `L*` piece gains more is crafted, whichever the
+    API lists first."""
+    state = make_state(skills={"weaponcrafting": 1})
+    gd = _twin_rungs()
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    assert skill_grind_target("weaponcrafting", state, gd,
+                              ctx=_two_pieces(Fraction(1), Fraction(3))) == "copper_knife"
+    gd = _twin_rungs()
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    assert skill_grind_target("weaponcrafting", state, gd,
+                              ctx=_two_pieces(Fraction(3), Fraction(1))) == "copper_dagger"
+
+
+def test_objective_gain_reads_the_missing_piece() -> None:
+    ctx = _two_pieces(Fraction(1), Fraction(3))
+    assert objective_gain("copper_knife", ctx) == 3
+    assert objective_gain("wooden_staff", ctx) == 0
+    assert objective_gain("copper_knife", TIMED_NO_PROFILE_CONTEXT) == 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order(reverse: bool) -> None:
+    """The live tie (plan C Task 7 review M1): at gearcrafting 5,
+    `copper_legs_armor` and `feather_coat` both price 73 actions, unwanted, at
+    one craft level, so `_beats` ties them and the API's catalogue order used
+    to pick. The legs need two chicken feathers, the coat five: fewer fight
+    actions in the chain wins, in the catalogue's order and reversed. (82 on
+    `l10_gearcrafting_gap` before the ticket-farm fix priced every route in
+    measured seconds; there the legs now price 60 and the coat 41, no tie, so
+    the tie is read on its combat-blocked sibling, which still ties.)"""
+    gd = load_bundle_game_data(BUNDLE)
+    if reverse:
+        gd = _reversed_catalogue(gd)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap_combat_blocked"], gd)
+    by_code = {c.code: c for c in build_selectable_grind_candidates(
+        "gearcrafting", state, gd, TIMED_NO_PROFILE_CONTEXT)}
+    legs, coat = by_code["copper_legs_armor"], by_code["feather_coat"]
+    assert (legs.acquire_steps, legs.craft_level, legs.wanted) == (
+        coat.acquire_steps, coat.craft_level, coat.wanted), "vacuous: the rungs do not tie"
+    legs_fights = chain_fight_actions("copper_legs_armor", state, gd, TIMED_NO_PROFILE_CONTEXT)
+    coat_fights = chain_fight_actions("feather_coat", state, gd, TIMED_NO_PROFILE_CONTEXT)
+    assert 0 < legs_fights < coat_fights
+    assert skill_grind_target("gearcrafting", state, gd,
+                              ctx=TIMED_NO_PROFILE_CONTEXT) == "copper_legs_armor"
+
+
+def test_a_gather_only_chain_has_no_fight_actions() -> None:
+    assert chain_fight_actions("copper_dagger", make_state(skills={"weaponcrafting": 1}),
+                               _gd(), TIMED_NO_PROFILE_CONTEXT) == 0
+
+
+@pytest.mark.parametrize(("scenario", "walks"), [("l10_gearcrafting_gap_combat_blocked", 2),
+                                                 ("l30_band_entry", 0)])
+def test_only_the_tied_top_class_pays_a_fight_walk(
+        monkeypatch: pytest.MonkeyPatch, scenario: str, walks: int) -> None:
+    """Review I1: the fight count is a `drop_work` walk, so it is paid only by
+    the eligible rungs tied at the top. At l10 gearcrafting (combat-blocked)
+    that is the legs and the coat; at l30 the top class is one rung and nothing is walked, although
+    many lower or ineligible rungs tie each other."""
+    gd = shared_world(BUNDLE)
+    state = scenario_state(SCENARIOS[scenario], gd)
+    calls: list[str] = []
+    real = sgt.drop_work
+
+    def counting(item: str, *args: object, **kwargs: object) -> object:
+        calls.append(item)
+        return real(item, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sgt, "drop_work", counting)
+    assert skill_grind_target("gearcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
+    assert len(calls) == walks, calls
+
+
+def _rung(code: str, steps: int, *, obtainable: bool = True) -> GrindCandidate:
+    return GrindCandidate(code=code, craft_skill="weaponcrafting", craft_level=1,
+                          acquire_steps=steps, obtainable=obtainable, wanted=False,
+                          xp_positive=True)
+
+
+def test_a_rung_the_core_cannot_choose_does_not_hide_a_tie() -> None:
+    """The tie is looked for only among the rungs the core can choose: an
+    unobtainable rung that would beat both twins is not the top class, so the
+    twins still tie at the top and meet the core by gain, the knife's `L*`
+    piece first though the dagger is listed first."""
+    dagger, knife = _rung("copper_dagger", 10), _rung("copper_knife", 10)
+    walled = _rung("iron_dagger", 1, obtainable=False)
+    order = semantic_order("weaponcrafting", 1, [walled, dagger, knife],
+                           make_state(skills={"weaponcrafting": 1}), _twin_rungs(),
+                           _two_pieces(Fraction(1), Fraction(3)))
+    assert order == [knife, dagger, walled]
+
+
+def test_the_fight_count_walks_the_rung_as_made(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rung's fight count is the work of MAKING it, as its price is
+    (`produce`, the rung itself): the walk is never asked to buy, withdraw or
+    farm a copy of the rung."""
+    asked: list[frozenset[str]] = []
+    real = sgt.drop_work
+
+    def spy(item: str, *args: object, **kwargs: object) -> object:
+        asked.append(kwargs["produce"])  # type: ignore[arg-type]
+        return real(item, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sgt, "drop_work", spy)
+    chain_fight_actions("copper_dagger", make_state(skills={"weaponcrafting": 1}), _gd(),
+                        TIMED_NO_PROFILE_CONTEXT)
+    assert asked == [frozenset({"copper_dagger"})]
+
+
+def test_the_memo_key_notices_changed_fight_and_action_seconds() -> None:
+    """Review M3: `_pricing_context` prices every rung with the context's fight
+    and action seconds, so two contexts differing ONLY in those must not share
+    a candidate list. The legs' chain fights chickens, so its price moves with
+    a fight's seconds; before the key held them the second call was served
+    the first call's list."""
+    gd = shared_world(BUNDLE)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+    timed = TIMED_NO_PROFILE_CONTEXT
+    assert timed.fight_seconds is not None and timed.action_seconds is not None
+    slower = dataclasses.replace(timed, fight_seconds=dataclasses.replace(
+        timed.fight_seconds, floor=timed.fight_seconds.floor * 10))
+    quicker = dataclasses.replace(timed, action_seconds=timed.action_seconds / 10)
+    # A kind's measured seconds time every route before its one conversion to
+    # actions (`acquisition_cost._in_actions`), so they key the memo too.
+    measured = dataclasses.replace(timed, kind_seconds=(("crafting", Fraction(99)),))
+
+    def steps(ctx: SelectionContext) -> int:
+        by_code = {c.code: c for c in build_selectable_grind_candidates(
+            "gearcrafting", state, gd, ctx)}
+        return by_code["copper_legs_armor"].acquire_steps
+
+    base = steps(timed)
+    assert steps(slower) != base
+    assert steps(timed) == base
+    # An action's seconds price a bought consumable (`consumable_price`), which
+    # no rung here reaches, so it is held to the key itself.
+    keys = {_cache_key("gearcrafting", state, gd, (), LearnedDrops.empty(), _NOW,
+                       (ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds))
+            for ctx in (timed, slower, quicker, measured)}
+    assert len(keys) == 4

@@ -39,7 +39,6 @@ import Formal.NearestTile
 import Formal.BankExpansionTiming
 import Formal.EventWindow
 import Formal.NpcBuyInventory
-import Formal.Extracted.CombatPicker
 import Formal.Extracted.NearestTile
 import Formal.Extracted.NpcBuyCore
 import Formal.Extracted.PriorityBand
@@ -63,8 +62,6 @@ import Formal.Extracted.Bridges4
 import Formal.Extracted.Bridges5
 import Formal.Extracted.Bridges6
 import Formal.Extracted.Bridges7
-import Formal.Extracted.Bridges9
-import Formal.Extracted.StrategicValue
 import Formal.Extracted.SkillGrindSelection
 import Formal.Extracted.SkillXpPositive
 import Formal.InventoryChainSafe
@@ -79,7 +76,6 @@ import Formal.StoreWarmup
 import Formal.GameDataAccessors
 import Formal.Phase10GoalLattices
 import Formal.WinnableCascade
-import Formal.CheapestPath
 import Formal.GoalValueBands
 import Formal.GoalSystem
 -- De-Mathlib'd safety modules (core-only; quarantine compliant).
@@ -87,13 +83,13 @@ import Formal.GuardCoverage
 import Formal.ActionSetCompleteness
 import Formal.ActionApplicability
 import Formal.CombatTargetExistence
+import Formal.GearObjectiveWalk
 import Formal.StepDispatch
 import Formal.CycleInvariants
 import Formal.NoActionDeadlock
 import Formal.MultiCycleLiveness
 import Formal.EquipValueAugmented
 import Formal.GearValue
-import Formal.StrategicValue
 import Formal.GearPolicy
 import Formal.PurposeRouting
 import Formal.FallbackChain
@@ -216,12 +212,9 @@ import Formal.Liveness.CurrencyFunding
 import Formal.GearTaxonomy
 import Formal.LoadoutProfiles
 import Formal.PotionProvisionQty
-import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
-import Formal.ProgressionTree
 import Formal.Synergy
-import Formal.EquipmentProfile
 import Formal.InventoryRoom
 import Formal.BagClear
 import Formal.InventoryKeep

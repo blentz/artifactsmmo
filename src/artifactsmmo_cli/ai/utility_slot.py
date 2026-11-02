@@ -35,8 +35,8 @@ def utility_slot_for(code: str, state: WorldState, keep: frozenset[str] = frozen
     2. **A free slot, `utility1_slot` first.**  Preferring free over occupied
        is the whole fix: nothing is displaced, so no stocked consumable is
        destroyed to make room for another.  Slot 1 first is deterministic and
-       agrees with `ObjectiveTiers.utility_potion_targets`, which designates
-       slot 1 for the primary heal and slot 2 for the secondary.
+       agreed with `utility_potion_targets` (deleted in plan C Task 6), which
+       designated slot 1 for the primary heal and slot 2 for the secondary.
     3. **Both occupied by OTHER codes — displace a code not in `keep`**, and
        among those the SMALLER stack, ties broken to `utility2_slot`.  `keep`
        is the chosen consumable loadout's potions

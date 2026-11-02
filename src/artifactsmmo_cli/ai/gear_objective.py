@@ -40,8 +40,7 @@ arithmetic in `project_loadout_stats`); level, skills and the learned record
 (`lost_fights`) stay the real character's.
 
 `R` IS THE BARE-GEAR RATE. Every gear decision judges bare gear, so a
-potion-propped win never hides a gear upgrade (USER 2026-10-10; `band_target`'s
-`BandTarget.bare_fight`): `R` is the no-potion fight loop (`loop_rate` with an
+potion-propped win never hides a gear upgrade (USER 2026-10-10): `R` is the no-potion fight loop (`loop_rate` with an
 empty utility loadout), recovering over the character's own food menu, which
 is read once (gear in the bag does not change what can be eaten). It is the
 MODELLED rate: a measured upkeep belongs to the worn gear, not to a projected
@@ -58,13 +57,13 @@ and a monster with heavy drops far from the bank values it more.
 from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.actions.combat import FIGHT_LEVEL_GAP_CEILING
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.combat import fight_loadout
+from artifactsmmo_cli.ai.combat import fight_loadout, secure_win
 from artifactsmmo_cli.ai.decompose_core import can_obtain
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, _ordered_slots
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats, with_totals
@@ -78,7 +77,7 @@ from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.heal_catalog import POTION
 from artifactsmmo_cli.ai.inventory_keep import carried_keep
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopInputs, food_menu, loop_rate
+from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopInputs, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.obtain_model.drop_routes import drop_fight_winnable
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
@@ -86,7 +85,7 @@ from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.objective import is_suppliable
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from artifactsmmo_cli.ai.utility_slot import UTILITY_SLOTS, utility_slot_quantity
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -230,7 +229,7 @@ def _targets(state: WorldState, game_data: GameData,
     return {code: _target(bare, game_data, code) for code in _candidates(state, game_data)}
 
 
-def _universe(state: WorldState, game_data: GameData) -> frozenset[str]:
+def _universe(state: WorldState, game_data: GameData, now: datetime) -> frozenset[str]:
     """Level-legal gear (every slot type but the consumables `best_loadout`
     owns) that this character holds, wears or banks, or can ever come to hold:
     `is_suppliable`, which counts a fixed-supply item only while a free copy is
@@ -240,7 +239,7 @@ def _universe(state: WorldState, game_data: GameData) -> frozenset[str]:
         code for code, stats in game_data.items.stats.items()
         if stats.type_ in ITEM_TYPE_TO_SLOTS and stats.type_ != POTION
         and stats.level <= state.level
-        and (code in held or is_suppliable(code, state, game_data)))
+        and (code in held or is_suppliable(code, state, game_data, now)))
 
 
 def _held(state: WorldState) -> frozenset[str]:
@@ -263,8 +262,9 @@ def achievable(state: WorldState, game_data: GameData,
     every WINNABLE gate open (`_reachable_by_some_fighter`) is out of reach of
     every later layer too, and later walks skip it: the layers are the ones
     walking it again would give."""
-    open_items = set(_universe(state, game_data))
-    now = datetime.now(UTC)
+    # The cycle clock (ruling T8b): every layer's walk reads one instant.
+    now = ctx.now
+    open_items = set(_universe(state, game_data, now))
 
     def unlock(owned: frozenset[str]) -> frozenset[str]:
         model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))
@@ -297,6 +297,17 @@ def _fighters(state: WorldState, owned: frozenset[str],
     return fighter
 
 
+def achievable_fighter(state: WorldState, game_data: GameData,
+                       ctx: SelectionContext) -> Callable[[str], WorldState]:
+    """The per-monster achievable fighter (§2.3) once the fixed point has
+    converged: owning every achievable item (`achievable`, through
+    `fighter_owning`) and, for each monster, wearing that monster's own `L*`
+    over them on bare gear at max HP (`_fighters`). It is who the objective
+    asks whether a drop's monster can be beaten, so "can this dropper be
+    beaten" is asked of it, never of the gear the character happens to wear."""
+    return _fighters(state, frozenset(layer_of(achievable(state, game_data, ctx))), game_data)
+
+
 def _winnable_gate(gate: Gate) -> bool:
     """A WINNABLE gate: the one some fighter's gear could open. Named, so the
     walk's door memo (`ObtainModel._door_open`) shares one entry across the
@@ -317,19 +328,35 @@ def _combat(game_data: GameData, monster: str, state: WorldState) -> Combat:
                   dict(state.attack))
 
 
+def xp_rate(rate: LoopRate) -> Fraction:
+    """The global objective's purpose: XP a second (`LoopRate.xp_per_second`)."""
+    return rate.xp_per_second
+
+
+def task_rate(rate: LoopRate) -> Fraction:
+    """A pinned monsters task's purpose: its progress a second, the same
+    loop's kills a second (`LoopRate.kills_per_second`, ruling C2-grey). A grey
+    task monster pays no XP, so its XP rate is 0 whatever is worn; its kills
+    still come faster in better gear."""
+    return rate.kills_per_second
+
+
 def _rate(fighter: WorldState, game_data: GameData, monster: str,
-          food: tuple[FoodOffer, ...], loop: LoopInputs) -> Fraction:
-    """`R`: XP per second of farming `monster` in `fighter`'s worn gear with no
-    potion, recovering over `food`, each fight lasting its learned seconds
-    (spec §2.9) and carrying its share of the bank trips its drops force
-    (§2.10; see the module doc's `R`). The no-potion loop drinks nothing, so it
-    has no potion price and always has a rate; with no room in the bag for its
-    drops it does not run and earns nothing (`LoopRate.runnable`, `R = 0`)."""
+          food: tuple[FoodOffer, ...], loop: LoopInputs,
+          per: Callable[[LoopRate], Fraction]) -> Fraction:
+    """`R`: the rate `per` reads (`xp_rate` or `task_rate`: one loop model,
+    the numerator chosen by the objective's purpose) of farming `monster` in
+    `fighter`'s worn gear with no potion, recovering over `food`, each fight
+    lasting its learned seconds (spec §2.9) and carrying its share of the bank
+    trips its drops force (§2.10; see the module doc's `R`). The no-potion loop
+    drinks nothing, so it has no potion price and always has a rate; with no
+    room in the bag for its drops it does not run and earns nothing
+    (`LoopRate.runnable`, `R = 0`)."""
     rate = loop_rate(fighter, game_data, monster, (), food, {}, loop.timing, loop.drops,
                      loop.carried)
     if rate is None:
         raise RuntimeError(f"the no-potion loop against {monster} did not run")
-    return rate.xp_per_second
+    return per(rate)
 
 
 def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: GameData,
@@ -363,7 +390,7 @@ def _rated(targets: Mapping[str, tuple[WorldState, dict[str, str]]], game_data: 
             break
         if not drop_fight_winnable(targets[code][0], game_data, code):
             continue
-        rates[code] = _rate(targets[code][0], game_data, code, food, loop)
+        rates[code] = _rate(targets[code][0], game_data, code, food, loop, xp_rate)
     return [(code, rates[code]) for code in targets if code in rates]
 
 
@@ -459,14 +486,15 @@ def _without(state: WorldState, target: WorldState, game_data: GameData,
 
 def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: str,
           food: tuple[FoodOffer, ...], loop: LoopInputs, rate: Fraction,
-          at: str) -> Fraction:
+          at: str, per: Callable[[LoopRate], Fraction]) -> Fraction:
     """A piece's gain (§2.8): `rate`, `R(L*)` on `target` (the fighter wearing
     `L*`), less `R` of `target` with `L*`'s slot `at` holding the best item the
     character owns for it, or nothing (`_without`), each fight lasting its
     learned seconds (§2.9: a faster kill is a gain) and carrying its bank trips
-    (§2.10: a bigger bag fills less often, so a bag is a gain)."""
+    (§2.10: a bigger bag fills less often, so a bag is a gain), in the unit
+    `per` reads."""
     return rate - _rate(_without(state, target, game_data, at), game_data, monster, food,
-                        loop)
+                        loop, per)
 
 
 def _candidate_ctx(ctx: SelectionContext, monster: str, loadout: dict[str, str],
@@ -501,6 +529,176 @@ def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return Fraction(price + EQUIP_ACTIONS), route
 
 
+def _inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
+            history: LearningStore | None) -> tuple[dict[str, int], tuple[FoodOffer, ...],
+                                                     LoopInputs]:
+    """What every `L*(m)` is read against, whichever `m`: each achievable
+    item's layer (§2.3, `achievable`), the food menu and the loop's timing,
+    drops and carried keep (see the module doc's `R`)."""
+    return (layer_of(achievable(state, game_data, ctx)),
+            *_food_and_loop(state, game_data, ctx, history))
+
+
+def _food_and_loop(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                   history: LearningStore | None) -> tuple[tuple[FoodOffer, ...], LoopInputs]:
+    """The food menu and the loop's timing, drops and carried keep: what `R`
+    reads beside the achievable set."""
+    food = food_menu(state, game_data, ctx, history)
+    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
+    return food, loop
+
+
+def _objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
+               history: LearningStore | None, monster: str,
+               target: tuple[WorldState, dict[str, str]], rate: Fraction,
+               depth: Mapping[str, int], food: tuple[FoodOffer, ...],
+               loop: LoopInputs, per: Callable[[LoopRate], Fraction]) -> GearObjective:
+    """`L*(monster)` as an objective: `target` is its fighter and loadout
+    (`_target`), `rate` its `R` in the unit `per` reads. A piece is missing per `_missing`, and only
+    while its gain (`_gain`) is above 0 (§2.8: a piece that adds nothing is
+    held-equivalent, so it is neither missing nor priced); the missing are
+    priced (`_price`) and put in pursuit order (`piece_order_key`)."""
+    fighter, loadout = target
+    own = _target(state, game_data, monster)[1]
+    pieces: list[GearPiece] = []
+    for slot, code, at in _missing(game_data, monster, fighter, loadout, own):
+        gain = _gain(state, fighter, game_data, monster, food, loop, rate, at, per)
+        if gain > 0:
+            price, route = _price(state, game_data, ctx, history, code)
+            pieces.append(GearPiece(slot, code, depth[code], gain, price, route))
+    rank = _ordered_slots()
+    pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
+                                                  rank.index(piece.slot)))
+    return GearObjective(monster, loadout, rate, tuple(pieces), fighter=fighter)
+
+
+def _task_free(state: WorldState, game_data: GameData) -> WorldState:
+    """`state` with its held task cleared when nothing `L*` reads can see it.
+
+    `L*` reads the task only through the keep (`inventory_keep._active_task`,
+    the copies of the task's code; an items task's root closure), and both
+    read an item code: a task whose code names no item (a monsters task)
+    reads 0 there. Such a task is cleared, so a task-worth probe of the same
+    character (`task_worth_for`) and the character itself are one key. A task
+    on an item code stays, so its probe is its own key."""
+    if state.task_code is not None and game_data.item_stats(state.task_code) is not None:
+        return state
+    return replace(state, task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def _pinned[T](name: str, monster: str | None, state: WorldState, game_data: GameData,
+               ctx: SelectionContext, history: LearningStore | None,
+               compute: Callable[[], T]) -> T:
+    """`compute()`, once per `search_cache` episode (ruling C2-perf) for one
+    task-free state (`_task_free`), catalogue and context. The episode's entry
+    for `(name, monster, character, level)` lists what it answered, each answer
+    pinned to its state by value and to its catalogue and context by
+    reference (memory: a cache key must pin its object): an answer is served
+    only to an equal state under the very catalogue and context it answered,
+    and any other asker's answer joins the list. Without a store, afresh."""
+    if history is None:
+        return compute()
+    key_state = _task_free(state, game_data)
+    answers: list[tuple[WorldState, GameData, SelectionContext, T]] = history.cached(
+        (name, monster, state.character, state.level), list)
+    for held_state, held_data, held_ctx, value in answers:
+        if held_data is game_data and held_ctx is ctx and held_state == key_state:
+            return value
+    value = compute()
+    answers.append((key_state, game_data, ctx, value))
+    return value
+
+
+def _cycle_inputs(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                  history: LearningStore | None
+                  ) -> tuple[dict[str, int], tuple[FoodOffer, ...], LoopInputs]:
+    """`_inputs`, once per episode for every monster a cycle pins: they do not
+    read the monster, and the task horizon pins one per task it reads. The
+    achievable set is `_cycle_depth`'s, shared with the readers that need no
+    loop (a fighter's pick reads no timing)."""
+    def compute() -> tuple[dict[str, int], tuple[FoodOffer, ...], LoopInputs]:
+        return (_cycle_depth(state, game_data, ctx, history),
+                *_food_and_loop(state, game_data, ctx, history))
+
+    return _pinned("gear_objective_inputs", None, state, game_data, ctx, history, compute)
+
+
+def _cycle_depth(state: WorldState, game_data: GameData, ctx: SelectionContext,
+                 history: LearningStore | None) -> dict[str, int]:
+    """Each achievable item's layer (`achievable`), once per episode."""
+    return _pinned("gear_objective_depth", None, state, game_data, ctx, history,
+                   lambda: layer_of(achievable(state, game_data, ctx)))
+
+
+def _pinned_target(depth: Mapping[str, int], monster: str, state: WorldState,
+                   game_data: GameData) -> tuple[WorldState, dict[str, str]]:
+    """`L*(monster)`'s fighter and loadout, picked over the achievable set
+    `depth` from the fighter wearing nothing: `gear_objective_for`'s own."""
+    return _target(_bare(state, frozenset(depth), game_data), game_data, monster)
+
+
+def gear_fighter_for(monster: str, state: WorldState, game_data: GameData,
+                     ctx: SelectionContext, history: LearningStore | None) -> WorldState:
+    """The fighter wearing `L*(monster)` on bare gear at max HP
+    (`gear_objective_for(...).fighter`), without pricing a piece (ruling
+    C2-perf). It reads no loop: only the achievable set and the picker."""
+    depth = _cycle_depth(state, game_data, ctx, history)
+    return _pinned_target(depth, monster, state, game_data)[0]
+
+
+def gear_closes_for(monster: str, state: WorldState, game_data: GameData,
+                    ctx: SelectionContext, history: LearningStore | None) -> bool:
+    """Whether gear closes the fight against `monster`: the fighter wearing
+    `L*(monster)` `secure_win`s (on bare gear at max HP, the bar
+    `combat_deficit.has_combat_deficit` reads) and `L*` has a missing piece
+    (`gear_objective_for(..., task_rate).missing` is not empty: an unheld
+    piece, `_missing`, whose gain in task progress a second is above 0,
+    `_gain`, ruling C2-grey). Gains are read only once the fighter secures the
+    fight and only until the first that is above 0; no piece is priced (ruling
+    C2-perf)."""
+    depth, food, loop = _cycle_inputs(state, game_data, ctx, history)
+    fighter, loadout = _pinned_target(depth, monster, state, game_data)
+    if not secure_win(fighter, game_data, monster):
+        return False
+    own = _target(state, game_data, monster)[1]
+    unheld = _missing(game_data, monster, fighter, loadout, own)
+    if not unheld:
+        return False
+    rate = _rate(fighter, game_data, monster, food, loop, task_rate)
+    return any(_gain(state, fighter, game_data, monster, food, loop, rate, at, task_rate) > 0
+               for _slot, _code, at in unheld)
+
+
+def gear_objective_for(monster: str, state: WorldState, game_data: GameData,
+                       ctx: SelectionContext, history: LearningStore | None,
+                       per: Callable[[LoopRate], Fraction]) -> GearObjective:
+    """`L*(monster)`: the objective `gear_objective` reads for a candidate
+    `m`, with `m` pinned (plan C Task 2). The same achievable fixed point, the
+    same loadout walk from the fighter wearing nothing and the same missing,
+    gained, priced and ordered pieces (`_objective`), so there is one
+    implementation; only the argmax over monsters is not asked.
+
+    `R` is read in the unit `per` names, the objective's purpose: `xp_rate`
+    for a candidate of the global objective, `task_rate` (kills a second) for
+    a held monsters task, which pays per kill (ruling C2-grey: a grey task
+    monster pays no XP, so in XP every piece of its `L*` gained 0).
+
+    `monster` need not be a candidate (`_candidates`, `_rated`): a held task's
+    monster is pinned whatever its level gap, XP or fight verdict, so its fighter
+    may still lose. Whether `L*(monster)` wins is the
+    caller's question, asked of `GearObjective.fighter`. Once per episode
+    for one monster, state and context (`_pinned`, ruling C2-perf)."""
+    def compute() -> GearObjective:
+        depth, food, loop = _cycle_inputs(state, game_data, ctx, history)
+        target = _pinned_target(depth, monster, state, game_data)
+        rate = _rate(target[0], game_data, monster, food, loop, per)
+        return _objective(state, game_data, ctx, history, monster, target, rate, depth, food,
+                          loop, per)
+
+    return _pinned(f"gear_objective_for:{per.__name__}", monster, state, game_data, ctx,
+                   history, compute)
+
+
 def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext,
                    history: LearningStore | None) -> GearObjective | None:
     """`(L*, m*)` and the missing pieces of `L*` in pursuit order, or None when
@@ -509,43 +707,22 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
 
     `m*` is the max-`R` monster; a tie goes to the higher monster level, then to
     the lower total acquisition price of its missing pieces, then to catalogue
-    order — never to a code. A piece's gain is `_gain`; a piece whose gain is
-    not above 0 is held-equivalent (§2.8), so it is neither missing nor priced."""
-    layers = achievable(state, game_data, ctx)
-    depth = layer_of(layers)
-    food = food_menu(state, game_data, ctx, history)
-    loop = LoopInputs(ctx.timing(), ctx.drops(), carried_keep(state, game_data, ctx))
+    order — never to a code. Each tied candidate's objective is `_objective`,
+    the one `gear_objective_for` gives with that candidate pinned."""
+    depth, food, loop = _inputs(state, game_data, ctx, history)
     targets = _targets(state, game_data, frozenset(depth))
     rated = _rated(targets, game_data, food, loop)
     if not rated or max(rate for _, rate in rated) <= 0:
         return None
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
-    tied = [code for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
-    loadouts = {code: targets[code][1] for code in tied}
-    pieces_of: dict[str, list[tuple[str, str, Fraction]]] = {}
-    for code in tied:
-        target = targets[code][0]
-        own = _target(state, game_data, code)[1]
-        gained = [(slot, item,
-                   _gain(state, target, game_data, code, food, loop, best[0], at))
-                  for slot, item, at in _missing(game_data, code, target, loadouts[code], own)]
-        pieces_of[code] = [piece for piece in gained if piece[2] > 0]
     # Each candidate's pieces are priced with ITS objective on the context, so
     # the gold they spend is charged at what a second of fighting it in its
     # `L*` earns (`gold_rate.gold_per_second`, ruling AL's `m*` fallback,
     # S-046): the rate the cycle prices gold at once that candidate is `m*`.
-    prices = {code: [_price(state, game_data, _candidate_ctx(ctx, code, loadouts[code], best[0],
-                                                             targets[code][0]),
-                            history, item)
-                     for _, item, _ in pieces_of[code]] for code in tied}
+    tied = [_objective(state, game_data,
+                       _candidate_ctx(ctx, code, targets[code][1], best[0], targets[code][0]),
+                       history, code, targets[code], best[0], depth, food, loop, xp_rate)
+            for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
-    monster = min(tied, key=lambda code: sum((price for price, _ in prices[code]),
-                                             Fraction(0)))
-    rank = _ordered_slots()
-    pieces = [GearPiece(slot, code, depth[code], gain, price, route)
-              for (slot, code, gain), (price, route) in zip(pieces_of[monster],
-                                                            prices[monster], strict=True)]
-    pieces.sort(key=lambda piece: piece_order_key(piece.layer, piece.gain, piece.price,
-                                                  rank.index(piece.slot)))
-    return GearObjective(monster, loadouts[monster], best[0], tuple(pieces),
-                         fighter=targets[monster][0])
+    return min(tied, key=lambda objective: sum((piece.price for piece in objective.missing),
+                                               Fraction(0)))

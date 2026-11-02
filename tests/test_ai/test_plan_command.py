@@ -14,9 +14,9 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from artifactsmmo_cli.commands import plan as plan_cmd
 from tests.test_ai.fixtures import make_state, patched_logs
 from tests.test_ai.test_player_run import _patch_game_data_load

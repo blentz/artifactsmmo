@@ -3,8 +3,8 @@
 `ai/drop_obtainability` is the single answer to "can this character obtain item
 X by killing something?". Two sides consult it:
 
-  * SELECTION — `tiers/skill_grind_target.is_obtainable`,
-    `tiers/objective.is_attainable_now`, `tiers/strategy._producible`: pure
+  * SELECTION — `progression/skill_grind_target.is_obtainable`,
+    `progression/objective.is_attainable_now`, `progression/strategy._producible`: pure
     game-data walks that decide WHAT to pursue, with no action list to consult.
   * EMISSION  — `ai/drop_fight_selection.select_drop_fight`: turns the verdict
     into the one `FightAction` a goal plans with.

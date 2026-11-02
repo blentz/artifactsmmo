@@ -1334,6 +1334,9 @@ def _status(season: dict | None = None) -> StatusSchema:  # type: ignore[type-ar
 _SEASON_8 = {"name": "God of the Sun", "number": 8,
              "start_date": "2026-06-27T00:00:00+00:00", "rewards": []}
 
+_EMPTY_BUNDLE = {"maps": [], "items": [], "resources": [], "monsters": [], "npcs": [],
+                 "tasks": [], "events": [], "effects": [], "bank": None}
+
 
 class TestGameDataLoad:
     def test_load_calls_all_sub_loaders(self, tmp_path):
@@ -1518,20 +1521,32 @@ def test_active_gathering_skills_terminates_on_cyclic_recipe():
     assert gd.active_gathering_skills("foo") == {"mining"}
 
 
-def test_max_character_level_is_documented_50():
-    """Documented cap per https://docs.artifactsmmo.com/concepts/stats_and_fights/.
-    Constant — does not depend on loaded monster data (events/bosses can
-    exceed 50)."""
+def test_max_level_comes_from_the_status_payload():
+    """Review Focus 4: a season may move the caps, so they are the server's
+    (`GET /`, `max_level` / `max_skill_level`), not a documented constant.
+    A moved cap reaches the catalogue, through the cached bundle too."""
+    raw = {**_status(_SEASON_8).to_dict(), "max_level": 55, "max_skill_level": 45}
     gd = GameData()
-    assert gd.max_character_level == 50
-    gd._monster_level = {"sea_marauder": 45, "boss_at_55": 55}
-    assert gd.max_character_level == 50  # still 50, not 55
+    gd._build_server(StatusSchema.from_dict(raw))
+    assert (gd.max_character_level, gd.max_skill_level) == (55, 45)
+    bundle = GameData._hydrate_bundle({**_EMPTY_BUNDLE, "server": raw})
+    assert bundle["server"].max_level == 55
+    assert bundle["server"].max_skill_level == 45
 
 
-def test_max_skill_level_is_documented_50():
-    """Verified: https://docs.artifactsmmo.com/concepts/skills —
-    '8 skills that can gain XP and reach up to level 50'."""
-    assert GameData().max_skill_level == 50
+@pytest.mark.parametrize("field", ["max_level", "max_skill_level"])
+def test_a_status_without_max_level_raises(field):  # type: ignore[no-untyped-def]
+    """Review Focus 4: a status payload missing a cap fails the bundle read
+    (both are required `StatusSchema` fields), and a catalogue built without
+    the status page has no cap to read: both readers raise, never a default."""
+    raw = _status(_SEASON_8).to_dict()
+    del raw[field]
+    with pytest.raises(KeyError, match=field):
+        GameData._hydrate_bundle({**_EMPTY_BUNDLE, "server": raw})
+    with pytest.raises(ValueError, match="no level cap"):
+        _ = GameData().max_character_level
+    with pytest.raises(ValueError, match="no skill-level cap"):
+        _ = GameData().max_skill_level
 
 
 def test_xp_per_kill_formula_normal_monster():
@@ -1722,7 +1737,7 @@ def test_category_a_hbe_invariant_next_expansion_cost_positive_when_bank_present
     monkeypatch,
 ):
     """GlobalInvariants Category A (hbe): when bank_capacity > 0 (the
-    BANK_EXPAND firing gate in tiers/means.py:108), the server's
+    BANK_EXPAND firing gate in progression/means.py:108), the server's
     next_expansion_cost MUST be > 0. Without this, the Lean liveness
     proof's hbe hypothesis is vacuously satisfied yet semantically
     violated."""

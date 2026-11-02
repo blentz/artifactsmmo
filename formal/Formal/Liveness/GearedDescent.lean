@@ -38,9 +38,15 @@ own learned-loss veto (`combat.py:367-377`), which exists precisely because
 Increment 3 (2026-07-20) took the first real bite out of G2. `GEAR_CAP` was `8`
 and self-declared "provisional"; against this repository's own fixture it was
 FALSE — 20 of the 49 `acquirableWitness` rows carry loadouts larger than 8, up to
-11. It is now `11`, pinned by `witness_loadout_le_gear_cap` /
-`witness_loadout_attains_gear_cap` below, which compute `loadoutCodes.length`
-IN-KERNEL. `WitnessAcquirable` was previously cited in this docstring while
+11. It was then `11`, pinned by `witness_loadout_le_gear_cap` and a tightness
+theorem, which computed `loadoutCodes.length` IN-KERNEL. Plan C Task 4 (ruling
+C4-R2) re-grounded it on production: `gearGap` is `len(gear_objective.missing)`, at
+most one piece per gear slot, so `GEAR_CAP` is the gear slot count, 14, pinned by
+`formal/diff/test_gear_objective_e_binding_diff.py`. The witness rows stay below it
+(`witness_loadout_le_gear_cap`); the fixture tightness theorem
+(`witness_loadout_attains_gear_cap`, "some row needs all `GEAR_CAP` steps") is
+retired, its job — keeping the constant from being inflated — taken by the
+production pin. `WitnessAcquirable` was previously cited in this docstring while
 appearing in NO import and NO proof term — it is now genuinely imported and used.
 
 Increment 4 closed the rest of G2. `gearProgress` decremented `gearGap` on EVERY
@@ -260,22 +266,15 @@ cycle detection behind a `print(f"WARN: ...")` — a fabricated number the kerne
 would then have pinned as truth.
 
 HISTORY: `GEAR_CAP` was `8`, self-declared provisional. That was FALSE against
-this very fixture — 20 of the 49 rows carry loadouts larger than 8, up to 11. -/
+this very fixture — 20 of the 49 rows carry loadouts larger than 8, up to 11. It is
+now production's gear slot count, 14 (ruling C4-R2): see `CycleStepE.GEAR_CAP`. -/
 theorem witness_loadout_le_gear_cap :
     Formal.Liveness.GameDataFixture.acquirableWitness.all
       (fun r => r.loadoutCodes.length ≤ GEAR_CAP) = true := by
   decide
 
-/-- The bound is TIGHT: some band actually needs all `GEAR_CAP` steps. Without
-    this a future edit could inflate `GEAR_CAP` to silence the bound above
-    instead of confronting a genuinely larger loadout. -/
-theorem witness_loadout_attains_gear_cap :
-    Formal.Liveness.GameDataFixture.acquirableWitness.any
-      (fun r => r.loadoutCodes.length == GEAR_CAP) = true := by
-  decide
-
-/-- The witness table is non-empty, so the two bounds above are not vacuous over
-    an empty list. -/
+/-- The witness table is non-empty, so the bound above is not vacuous over an
+    empty list. -/
 theorem Formal.Liveness.GameDataFixture.acquirableWitness_nonempty : Formal.Liveness.GameDataFixture.acquirableWitness ≠ [] := by decide
 
 

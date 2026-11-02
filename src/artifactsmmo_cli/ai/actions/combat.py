@@ -36,16 +36,12 @@ FIGHT_LEVEL_GAP_CEILING = 2
 more than this many levels above the character, regardless of what `is_winnable`
 (a pure stat question) says. Named here — the executor's own gate — so every
 OTHER consumer that needs to know "can the executor actually fight this" (not
-just "would it win") imports this constant instead of copying the `2`.
-`ai.tiers.band_target.band_combat_target` is one such consumer (task 5.2 fix
-round 1, 2026-08-23): a target picked by stat-winnability alone but outside
-this window is unplannable — `GrindCharacterXP` reaches 0 nodes — so the two
-must agree or the cascade hands the planner a target it can never execute.
-`ai.combat_picker.pick_winnable_monster_pure` also encodes this bound (its own
-bare `char_level + 2`, proven equal to this gate by
-`formal/Formal/CombatTargetExistence.lean` / `formal/diff/
-test_combat_picker_diff.py`) — that copy is intentionally left alone here, out
-of this fix's scope, and not a third independent guess at the number."""
+just "would it win") imports this constant instead of copying the `2`:
+`gear_objective._candidates` and `obtain_model.drop_routes` do. A target picked
+by stat-winnability alone but outside this window is unplannable —
+`GrindCharacterXP` reaches 0 nodes — so they must agree or the grind target is
+one the planner can never execute. The Lean liveness vocabulary's
+`CombatTargetExistence.notOverleveled` states the same bound."""
 
 LOADOUT_PENALTY = 5.0
 """Added to Fight cost when the loadout is suboptimal for the monster, so the

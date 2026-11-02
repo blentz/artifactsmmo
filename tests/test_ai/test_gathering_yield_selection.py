@@ -4,7 +4,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd_two_sources():
@@ -22,7 +22,7 @@ def _gd_two_sources():
 def test_narrows_to_yield_optimal_source():
     gd = _gd_two_sources()
     state = make_state(skills={"mining": 5})
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
     actions = [
         GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
         GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
@@ -35,7 +35,7 @@ def test_narrows_to_yield_optimal_source():
 def test_single_source_untouched():
     gd = _gd_two_sources()
     state = make_state(skills={"mining": 5})
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
     actions = [GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]),
                             learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
@@ -46,7 +46,7 @@ def test_no_locations_uses_zero_distance():
     """GatherAction with no locations: distance defaults to 0, selection still works."""
     gd = _gd_two_sources()
     state = make_state(skills={"mining": 5})
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
     # rich_rocks rate=1, poor_rocks rate=3; no locations on either → distance=0
     # tie-break → code "poor_rocks" > "rich_rocks" → rich_rocks wins
     actions = [
@@ -70,7 +70,7 @@ def test_unknown_drop_table_fail_open():
     }
     gd._resource_skill = {"rich_rocks": ("mining", 1), "poor_rocks": ("mining", 1)}
     state = make_state(skills={"mining": 5})
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10}, now=cycle_now())
     actions = [
         GatherAction(resource_code="rich_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),
         GatherAction(resource_code="poor_rocks", locations=frozenset([(1, 0)]), learned_drops=LearnedDrops.empty()),

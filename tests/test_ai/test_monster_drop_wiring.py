@@ -1,6 +1,6 @@
 """Wiring for the proven `select_monster_for_drop` core onto a LIVE planner path.
 
-Producibility (tiers/strategy._producible): a monster-drop item is producible iff
+Producibility (progression/strategy._producible): a monster-drop item is producible iff
 some monster dropping it is WINNABLE (else it would create an unreachable plan).
 
 Emission + narrowing (GatherMaterialsGoal.relevant_actions): for a needed item that
@@ -13,12 +13,12 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def _ctx() -> SelectionContext:
@@ -57,7 +57,7 @@ def test_crafted_item_emits_fight_for_drop_recipe_input() -> None:
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state(inventory={}, inventory_max=50)
     actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
-    goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
+    goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1}, now=cycle_now())
     relevant = goal.relevant_actions(actions, state, gd)
     assert any(isinstance(a, FightAction) and a.monster_code == "chicken"
                for a in relevant), (
@@ -79,7 +79,7 @@ def test_gather_feather_plans_via_fighting_chicken() -> None:
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state(inventory={}, inventory_max=50)
     actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}), learned_drops=LearnedDrops.empty())]
-    goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+    goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
     plan = (decompose(goal, state, gd, list(actions), NO_DROPS_CONTEXT) or [])
     assert plan, "GatherMaterials(feather) must be plannable via fighting chicken"
     assert any(isinstance(a, FightAction) for a in plan)
@@ -121,13 +121,13 @@ def _gd_unwinnable_dropper() -> GameData:
 def test_producible_true_for_winnable_monster_drop() -> None:
     gd = _gd_two_droppers()
     state = _winnable_state()
-    assert _producible("raw_egg", state, gd) is True
+    assert _producible("raw_egg", state, gd, now=cycle_now()) is True
 
 
 def test_not_producible_for_unwinnable_monster_drop() -> None:
     gd = _gd_unwinnable_dropper()
     state = make_state(level=1)
-    assert _producible("rare_hide", state, gd) is False
+    assert _producible("rare_hide", state, gd, now=cycle_now()) is False
 
 
 def test_not_producible_for_winnable_dropper_with_no_spawn_location() -> None:
@@ -141,7 +141,7 @@ def test_not_producible_for_winnable_dropper_with_no_spawn_location() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
-    assert _producible("raw_egg", state, gd) is False
+    assert _producible("raw_egg", state, gd, now=cycle_now()) is False
 
 
 def test_producible_true_for_winnable_dropper_with_spawn_location() -> None:
@@ -154,20 +154,20 @@ def test_producible_true_for_winnable_dropper_with_spawn_location() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
-    assert _producible("raw_egg", state, gd) is True
+    assert _producible("raw_egg", state, gd, now=cycle_now()) is True
 
 
 def test_producible_still_true_for_craftable() -> None:
     gd = GameData()
     gd._crafting_recipes = {"iron_helm": {"iron_bar": 5}}
     state = make_state(level=1)
-    assert _producible("iron_helm", state, gd) is True
+    assert _producible("iron_helm", state, gd, now=cycle_now()) is True
 
 
 def test_producible_false_for_unknown_item() -> None:
     gd = GameData()
     state = make_state(level=1)
-    assert _producible("phantom_item", state, gd) is False
+    assert _producible("phantom_item", state, gd, now=cycle_now()) is False
 
 
 # --- STEP 4 / STEP 5: live emission + narrowing (the liveness proof) ---------
@@ -179,7 +179,7 @@ def test_relevant_actions_emits_only_winner_fight_for_drop() -> None:
     select_monster_for_drop winner FightAction (chicken, rate 5 < rooster 20)."""
     gd = _gd_two_droppers()
     state = _winnable_state()
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 3})
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 3}, now=cycle_now())
     actions = [
         FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
         FightAction(monster_code="rooster", locations=frozenset([(0, 2)]), learned_drops=LearnedDrops.empty()),
@@ -196,7 +196,7 @@ def test_relevant_actions_no_fight_for_unwinnable_drop() -> None:
     (existing fail behavior: not producible, nothing to fight)."""
     gd = _gd_unwinnable_dropper()
     state = make_state(level=1, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="rare_hide", needed={"rare_hide": 1})
+    goal = GatherMaterialsGoal(target_item="rare_hide", needed={"rare_hide": 1}, now=cycle_now())
     actions = [FightAction(monster_code="dragon", locations=frozenset([(5, 5)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, FightAction) for a in relevant)
@@ -211,7 +211,7 @@ def test_relevant_actions_single_winnable_dropper_kept() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 2})
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 2}, now=cycle_now())
     actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
@@ -243,7 +243,7 @@ def test_relevant_actions_skips_dropper_with_no_fight_action() -> None:
     is still emitted."""
     gd = _gd_two_droppers()
     state = _winnable_state()
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1}, now=cycle_now())
     # Only chicken has a FightAction; rooster (also a dropper) has none.
     actions = [FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
@@ -266,8 +266,8 @@ def test_relevant_actions_pursues_winnable_boss_drop() -> None:
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chief_goblin": 10}  # low HP, no attack ⇒ winnable
     state = _winnable_state()
-    assert _producible("goblin_crown", state, gd) is True
-    goal = GatherMaterialsGoal(target_item="goblin_crown", needed={"goblin_crown": 1})
+    assert _producible("goblin_crown", state, gd, now=cycle_now()) is True
+    goal = GatherMaterialsGoal(target_item="goblin_crown", needed={"goblin_crown": 1}, now=cycle_now())
     actions = [FightAction(monster_code="chief_goblin", locations=frozenset([(3, 3)]),
                            learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
@@ -293,7 +293,7 @@ def test_relevant_actions_dropper_with_no_locations_uses_zero_distance() -> None
     fill_monster_stat_defaults(gd)
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1}, now=cycle_now())
     actions = [FightAction(monster_code="chicken", locations=frozenset(), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
@@ -316,8 +316,8 @@ def test_relevant_actions_rejects_dropper_with_no_known_spawn() -> None:
     gd._monster_hp = {"chicken": 10}
     state = _winnable_state()
     assert gd.monster_spawn_known("chicken") is False
-    assert _producible("raw_egg", state, gd) is False
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
+    assert _producible("raw_egg", state, gd, now=cycle_now()) is False
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1}, now=cycle_now())
     actions = [FightAction(monster_code="chicken", locations=frozenset(), learned_drops=LearnedDrops.empty())]
     relevant = goal.relevant_actions(actions, state, gd)
     assert not [a for a in relevant if isinstance(a, FightAction)]
@@ -338,7 +338,7 @@ def test_relevant_actions_drops_unwinnable_dropper_keeps_winnable() -> None:
     gd._monster_attack = {"chicken": {}, "dragon": {"fire": 10000}}
     gd._monster_initiative = {"chicken": 0, "dragon": 1000}
     state = _winnable_state()
-    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1})
+    goal = GatherMaterialsGoal(target_item="raw_egg", needed={"raw_egg": 1}, now=cycle_now())
     actions = [
         FightAction(monster_code="chicken", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
         FightAction(monster_code="dragon", locations=frozenset([(5, 5)]), learned_drops=LearnedDrops.empty()),
@@ -372,7 +372,7 @@ def test_producible_via_drop_currency_purchase() -> None:
     winnable and spawned — the P3 currency-chain widening."""
     gd = _gd_tailor()
     state = _winnable_state()
-    assert _producible("cloth", state, gd) is True
+    assert _producible("cloth", state, gd, now=cycle_now()) is True
 
 
 def test_not_producible_when_vendor_unlocated() -> None:
@@ -380,4 +380,4 @@ def test_not_producible_when_vendor_unlocated() -> None:
     gd = _gd_tailor()
     gd._npc_locations = {}
     state = _winnable_state()
-    assert _producible("cloth", state, gd) is False
+    assert _producible("cloth", state, gd, now=cycle_now()) is False

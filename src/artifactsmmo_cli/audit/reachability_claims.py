@@ -32,7 +32,9 @@ checked at all — when an explicitly named subject is no longer defined.
 
 SUBJECT RESOLUTION is by CONTAINMENT, which is what makes it mechanical:
 
-  * an explicitly named subject — "nothing calls `foo`" — is that symbol;
+  * an explicitly named subject — "nothing calls `foo`" — is that symbol, a
+    def, a class or a module-scope constant (an `Assign`/`AnnAssign` to a bare
+    name, whose body is the statement and its attribute docstring);
   * otherwise the innermost `def`/`class` whose body CONTAINS the claim line
     (so a claim in a method's docstring is a claim about that method);
   * otherwise — a module docstring, or a comment between definitions — the
@@ -54,13 +56,15 @@ VERIFICATION asks the real graph, built from `ast` over all of src/:
     imported module in that file; it deliberately does NOT count a bare
     `obj.name` attribute, because attribute names collide across classes
     (`RequirementGraph.is_obtainable` must not be read as a caller of
-    `tiers/skill_grind_target.is_obtainable`). A METHOD counts attribute
-    references, which is the only way a method is ever called.
+    `progression/skill_grind_target.is_obtainable`). A METHOD counts attribute
+    references, which is the only way a method is ever called. A name that is
+    only STORED is bound, not read, and is no reference. Docstring text is never
+    a reference: a module that NAMES a constant in prose does not read it.
 
-A TRUE claim passes and is meant to: `player.py`'s `_tree_band_adequate` says
-"nothing calls this method any more — a deliberate deferral", which is true,
-and `tiers/progression_tree_core.potion_type_weight` is retained with no caller
-on purpose. Recording that truthfully is the behaviour this census rewards.
+A TRUE claim passes and is meant to: `ai/ge_order_config.py` says "nothing
+reads `AVG_CYCLE_SECONDS`", which is true — `decisions/route.py` names it in a
+docstring and no code loads it. Recording that truthfully is the behaviour this
+census rewards.
 """
 
 import ast
@@ -73,15 +77,17 @@ from dataclasses import dataclass
 # claims" reads identically whether the matcher is working or broken.
 #
 # The bound is TIGHT ON PURPOSE — it is exactly the population carried:
-# `player._tree_band_adequate` and `tiers/progression_tree_core
-# .potion_type_weight`, both verified true. (`tiers/skill_grind_target
-# .is_obtainable` was the third until 2026-09-27, when it became the grind's
-# production obtainability walk and its no-caller note was retired.) The decidable population in this repo is small (~20
+# `ai/ge_order_config.AVG_CYCLE_SECONDS`, verified true. (Plan C Task 6 deleted
+# `CharacterObjective.utility_potion_targets` with its claim and taught the
+# index module constants; `progression/skill_grind_target.is_obtainable` left on
+# 2026-09-27, when it became the grind's production obtainability walk;
+# `player._tree_band_adequate` and `tiers/progression_tree_core.potion_type_weight`
+# were deleted with their claims by plan C Task 4.) The decidable population in this repo is small (~20
 # `inert` hits, nearly all CONDITIONAL and undecidable, are deliberately out of
 # scope), so a slack bound would not fail until the matcher was completely
-# dead. Rewording one of the two costs a deliberate edit here, which is the
+# dead. Rewording the one claim costs a deliberate edit here, which is the
 # point: the register is meant to be small enough to read.
-MIN_CLAIMS = 2
+MIN_CLAIMS = 1
 
 _SUBJECT = r"(?:this|it|them)"
 _ROLE = r"(?:caller|consumer|importer|reader)s?"
@@ -125,7 +131,7 @@ class Definition:
     """One `def`/`class` and the line range its body occupies."""
 
     name: str
-    kind: str  # "function" | "class" | "method"
+    kind: str  # "function" | "class" | "method" | "constant"
     module: str
     start: int
     end: int
@@ -139,6 +145,9 @@ class Reference:
     module: str
     lineno: int
     kind: str  # "name" | "import" | "module_attr" | "attr"
+    origin: str = ""
+    """The module the name is read from, where the reference says: an
+    `import`'s source module, or the module a `module_attr`'s alias is bound to."""
 
 
 @dataclass(frozen=True)
@@ -171,9 +180,31 @@ def module_name(path: str) -> str:
     return dotted[: -len(".__init__")] if dotted.endswith(".__init__") else dotted
 
 
-def _definitions(tree: ast.Module, module: str) -> list[Definition]:
-    """Every def/class in the file, tagged `method` when class-nested."""
+def _constants(tree: ast.Module, module: str) -> list[Definition]:
+    """Every module-scope constant: an `Assign`/`AnnAssign` to a bare name. Its
+    body is the statement plus the attribute docstring directly after it."""
     found: list[Definition] = []
+    body = tree.body
+    for i, stmt in enumerate(body):
+        if isinstance(stmt, ast.Assign):
+            names = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            names = [stmt.target.id]
+        else:
+            continue
+        end = stmt.end_lineno or stmt.lineno
+        after = body[i + 1] if i + 1 < len(body) else None
+        if (isinstance(after, ast.Expr) and isinstance(after.value, ast.Constant)
+                and isinstance(after.value.value, str)):
+            end = after.end_lineno or after.lineno
+        found.extend(Definition(name, "constant", module, stmt.lineno, end) for name in names)
+    return found
+
+
+def _definitions(tree: ast.Module, module: str) -> list[Definition]:
+    """Every def/class in the file, tagged `method` when class-nested, and
+    every module-scope constant (`_constants`)."""
+    found: list[Definition] = _constants(tree, module)
     stack: list[tuple[ast.AST, bool]] = [(tree, False)]
     while stack:
         node, in_class = stack.pop()
@@ -189,42 +220,66 @@ def _definitions(tree: ast.Module, module: str) -> list[Definition]:
     return found
 
 
-def _imported_modules(tree: ast.Module, module: str) -> tuple[set[str], set[str]]:
-    """(dotted modules this file imports, names bound to a module by import)."""
+def _from_base(node: ast.ImportFrom, module: str) -> str:
+    """The dotted module a `from ... import` reads from, relative levels resolved."""
+    base = node.module or ""
+    if node.level:
+        parts = module.rsplit(".", 1)[0].split(".")
+        root = ".".join(parts[: len(parts) - node.level + 1])
+        base = f"{root}.{base}" if base else root
+    return base
+
+
+def _imported_modules(tree: ast.Module, module: str) -> tuple[set[str], dict[str, str]]:
+    """(dotted modules this file imports, {name bound by an import: the dotted
+    module or member it names})."""
     modules: set[str] = set()
-    aliases: set[str] = set()
-    package = module.rsplit(".", 1)[0]
+    aliases: dict[str, str] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 modules.add(alias.name)
-                aliases.add(alias.asname or alias.name.split(".")[0])
+                aliases[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom):
-            base = node.module or ""
-            if node.level:
-                parts = package.split(".")
-                root = ".".join(parts[: len(parts) - node.level + 1])
-                base = f"{root}.{base}" if base else root
+            base = _from_base(node, module)
             modules.add(base)
             for alias in node.names:
                 modules.add(f"{base}.{alias.name}")
-                aliases.add(alias.asname or alias.name)
+                aliases[alias.asname or alias.name] = f"{base}.{alias.name}"
     return modules, aliases
 
 
-def _references(tree: ast.Module, module: str, aliases: set[str]) -> list[Reference]:
+def _dotted_origin(node: ast.expr, aliases: Mapping[str, str]) -> str | None:
+    """The dotted module or member an attribute's base names, through an import
+    alias: `a` (`from pkg import a`) is `pkg.a`, and `pkg.a` (`import pkg.a`,
+    which binds `pkg`) is `pkg.a` too. None for a base no import binds (a local
+    object), so `obj.RATE` stays a plain attribute. Without the dotted arm a
+    constant read as `pkg.a.RATE` had no origin, so a false "nothing reads
+    `RATE`" passed (plan C Task 6 re-review)."""
+    if isinstance(node, ast.Name):
+        return aliases.get(node.id)
+    if isinstance(node, ast.Attribute):
+        base = _dotted_origin(node.value, aliases)
+        return None if base is None else f"{base}.{node.attr}"
+    return None
+
+
+def _references(tree: ast.Module, module: str, aliases: Mapping[str, str]) -> list[Reference]:
     """Every name use in the file, classified so collisions can be excluded."""
     refs: list[Reference] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Store):
+            # A store binds the name; only a load (or del) reads it.
             refs.append(Reference(node.id, module, node.lineno, "name"))
         elif isinstance(node, ast.Attribute):
-            through_module = isinstance(node.value, ast.Name) and node.value.id in aliases
-            kind = "module_attr" if through_module else "attr"
-            refs.append(Reference(node.attr, module, node.lineno, kind))
+            bound = _dotted_origin(node.value, aliases)
+            kind = "module_attr" if bound is not None else "attr"
+            refs.append(Reference(node.attr, module, node.lineno, kind, bound or ""))
         elif isinstance(node, ast.ImportFrom):
+            base = _from_base(node, module)
             for alias in node.names:
-                refs.append(Reference(alias.name, module, node.lineno, "import"))
+                refs.append(Reference(alias.name, module, node.lineno, "import", base))
     return refs
 
 
@@ -316,6 +371,9 @@ def _reached_symbol(claim: Claim, index: SourceIndex) -> tuple[str, ...]:
         for ref in refs:
             if ref.name != claim.subject or ref.kind not in allowed:
                 continue
+            if owner is not None and owner.kind == "constant" and not _reads_from(
+                    ref, module, owner.module):
+                continue
             own_body = (
                 owner is not None
                 and module == owner.module
@@ -325,6 +383,15 @@ def _reached_symbol(claim: Claim, index: SourceIndex) -> tuple[str, ...]:
                 continue
             hits.add(f"{module}:{ref.lineno}")
     return tuple(sorted(hits))
+
+
+def _reads_from(ref: Reference, module: str, owner_module: str) -> bool:
+    """A constant is read only through its own module: a bare name inside it,
+    a `from owner import NAME`, or `owner.NAME` through an alias of it. A
+    same-named constant in another module is a different constant."""
+    if ref.kind == "name":
+        return module == owner_module
+    return ref.origin == owner_module
 
 
 def run_census(sources: Mapping[str, str]) -> list[Verdict]:

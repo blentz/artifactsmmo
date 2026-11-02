@@ -1,7 +1,7 @@
 -- @concept: core, planner @property: totality
 /-
 Formal model of the dispatcher-exhaustiveness extracted from
-`src/artifactsmmo_cli/ai/tiers/decide_key.py` (the GuardKind/MeansKind
+`src/artifactsmmo_cli/ai/progression/decide_key.py` (the GuardKind/MeansKind
 dispatch tables that `strategy_driver.py`'s LIVE `map_guard` / `map_means`
 use).
 
@@ -34,7 +34,7 @@ namespace Formal.DecideKey
 
 /-! ## Dispatcher inductives + total `repr` maps. -/
 
-/-- Mirror of `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`. The trailing
+/-- Mirror of `src/artifactsmmo_cli/ai/progression/guards.py::GuardKind`. The trailing
 variants (`restForCombat`, `recycleRelief`) are appended last so the oracle's
 index dispatch (and the diff test's `_GUARD_INDEX`) keeps the existing 0..7
 positions stable. Index 8 was `gearReview`, retired in Phase 4-3b; it stays
@@ -55,7 +55,7 @@ inductive GuardKind where
   | partyJoin
 deriving Repr, DecidableEq
 
-/-- Mirror of `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`. -/
+/-- Mirror of `src/artifactsmmo_cli/ai/progression/means.py::MeansKind`. -/
 inductive MeansKind where
   | claimPending
   | sellPressured
@@ -63,7 +63,7 @@ inductive MeansKind where
   | recycleSurplus  -- 2026-06-14: proactive recycle of surplus craftable gear
   | bankExpand
   | wait  -- Phase 20e-v2: always-firing sentinel sentinel (production fix
-          -- src/.../tiers/means.py:WAIT). Closes the StrategyArbiter
+          -- src/.../progression/means.py:WAIT). Closes the StrategyArbiter
           -- deadlock window when no other means fires.
   -- (maintainConsumables retired 2026-10-10: every fight step carries its
   --  loadout's potions and food; the later indices shift down by one)
@@ -72,7 +72,7 @@ inductive MeansKind where
   | geBid  -- 2026-07-24: post a discretionary GE buy order for a slow-to-craft
            -- item. Appended LAST (oracle index 14) to keep earlier dispatch stable.
   -- (supplyBank and currencyTurnIn retired: Phase 5-2c-iv — fleet work is
-  --  the fleet objective's step, `tiers/meta_goal.ReachFleetOutcome`)
+  --  the fleet objective's step, `progression/meta_goal.ReachFleetOutcome`)
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.

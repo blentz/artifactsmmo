@@ -79,11 +79,9 @@ import Formal.GameDataAccessors
 import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.GearBuildTermination
-import Formal.StrategicValue
 import Formal.GearTaxonomy
 import Formal.GearValue
 import Formal.ArbiterSelect
-import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -891,22 +889,13 @@ example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe
     Formal.Objective.Grounded r hasRec drop buys item →
       ∃ n, Formal.Objective.groundedByN r hasRec drop buys n item = true :=
   @Formal.Objective.grounded_groundedByN
--- best_gear_argmax: the chosen first-slot item IS attainable, IS a candidate, and
--- ranks ≥ every attainable candidate under (-value, code) — the genuine argmax.
-example : ∀ (attain : Formal.Objective.Gear → Bool) (items : List Formal.Objective.Gear)
-    (chosen : Formal.Objective.Gear),
-    Formal.Objective.bestAttainableGear attain items = some chosen →
-    attain chosen = true ∧ chosen ∈ items ∧
-    (∀ y ∈ items, attain y = true →
-      chosen.value > y.value ∨ (chosen.value = y.value ∧ chosen.code ≤ y.code)) :=
-  @Formal.Objective.best_gear_argmax
 -- NOTE: the objective-GAP role contracts (gap_nonneg, gap_le_denom,
 -- charGap_bounds, is_complete_iff, axisGap_zero_iff) were removed 2026-07-20
 -- together with the Python chain they guarded. `CharacterObjective.gap` and the
 -- ObjectiveGap → weighted_remaining scalar had no production consumer, so these
 -- were proofs about code the planner never ran. Gear priority is decided by the
--- progression tree's `gain` on the pursuit_value ruler; its contracts live under
--- the ProgressionTree / StrategicValue roles.
+-- gear objective (`L*`, `m*`); the progression tree's `gain` and the
+-- ProgressionTree module went with plan C Task 4.
 
 /-! ### StrategyTraversal role contracts.
 
@@ -2033,15 +2022,16 @@ example : Formal.GameDataAccessors.predictWinLite_buggy [] [] "unknown_monster" 
     = true :=
   Formal.GameDataAccessors.predictWinLite_buggy_unknown_returns_true
 
-/-! ### Phase-11 (Target A): Player._winnable_farm_target cascade -/
+/-! ### Phase-11 (Target A): the grind-target cascade (`farm_target`, two arms
+since plan C Task 4) -/
 
-/-- Statement-pin: task tier wins outright (winnable check bypassed). -/
+/-- Statement-pin: task arm wins outright (winnable check bypassed). -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (t : String),
     i.taskMonster = some t →
     Formal.WinnableCascade.winnableFarmTargetPure i = some t :=
   @Formal.WinnableCascade.task_wins
 
-/-- Statement-pin: path tier wins when task absent and path is winnable. -/
+/-- Statement-pin: path arm wins when task absent and path is winnable. -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.taskMonster = none →
     i.pathMonster = some p →
@@ -2049,30 +2039,20 @@ example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     Formal.WinnableCascade.winnableFarmTargetPure i = some p :=
   @Formal.WinnableCascade.path_wins_when_winnable
 
-/-- Statement-pin: pick tier wins when path absent. -/
-example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
-    i.taskMonster = none →
-    i.pathMonster = none →
-    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
-  @Formal.WinnableCascade.pick_wins_when_no_path
-
-/-- Statement-pin: pick tier wins when path is present but not winnable
-(safety: cascade never returns a non-winnable path monster). -/
+/-- Statement-pin: no target when task absent and the path is not winnable
+(no fight is chosen for XP while a piece of `L*` is missing). -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs),
     i.taskMonster = none →
     i.pathWinnable = false →
-    Formal.WinnableCascade.winnableFarmTargetPure i = i.pickWinnable :=
-  @Formal.WinnableCascade.pick_wins_when_path_not_winnable
+    Formal.WinnableCascade.winnableFarmTargetPure i = none :=
+  @Formal.WinnableCascade.none_when_path_not_winnable
 
-/-- Statement-pin: contrapositive safety — if the cascade returns a path
-monster that is not in the pick fallback, the path must have been
-winnable. -/
+/-- Statement-pin: safety — a result with no task is the path monster, and
+the path was winnable. -/
 example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.taskMonster = none →
-    i.pathMonster = some p →
     Formal.WinnableCascade.winnableFarmTargetPure i = some p →
-    i.pickWinnable ≠ some p →
-    i.pathWinnable = true :=
+    i.pathMonster = some p ∧ i.pathWinnable = true :=
   @Formal.WinnableCascade.path_result_was_winnable
 
 /-! ### RealizableLoadout (Phase-15, revised 2026-06-11): full `pick_loadout`
@@ -2978,43 +2958,6 @@ example : ∀ (g : Formal.StrategyTraversal.Graph), Formal.StrategyTraversal.Wel
       (steps.foldl Formal.Liveness.GearBuildTermination.markSat g).isSat t = true :=
   @Formal.Liveness.GearBuildTermination.grounded_builds_target
 
--- StrategicValue (#16): the extracted efficiency-weighted scorer's code-binding
--- contracts. The bridge is a FULL pointwise equality (extracted flat-arg core =
--- hand structured model, ∀ inputs); nonneg/monotone are TRANSFERRED onto the
--- extracted def. Weakening any (dropping a hypothesis, narrowing to a bounded
--- domain, flipping ≤) fails to elaborate against the proof term.
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW : Int),
-    Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW
-      = Formal.StrategicValue.strategicValue
-        ⟨combatRaw, wisdom, prospecting, inventorySpace, haste⟩
-        ⟨combatW, wisdomW, prospectingW, inventoryW, hasteW⟩ :=
-  @Extracted.Bridges.strategic_value_bridge
--- NONNEG: nonneg stats AND nonneg weights ⇒ nonneg score (ObjectiveGap gap-bound
--- precondition). Dropping any of the ten nonneg hypotheses fails to elaborate.
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW : Int),
-    0 ≤ combatRaw → 0 ≤ wisdom → 0 ≤ prospecting → 0 ≤ inventorySpace → 0 ≤ haste →
-    0 ≤ combatW → 0 ≤ wisdomW → 0 ≤ prospectingW → 0 ≤ inventoryW → 0 ≤ hasteW →
-    0 ≤ Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW :=
-  @Extracted.Bridges.strategic_value_nonneg_extracted
--- MONOTONE in inventory_space (bags), with nonneg inventory weight — the #16
--- load-bearing direction (a bigger bag never lowers strategic value).
-example : ∀ (combatRaw wisdom prospecting inventorySpace haste
-     combatW wisdomW prospectingW inventoryW hasteW x' : Int),
-    0 ≤ inventoryW → inventorySpace ≤ x' →
-    Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting inventorySpace haste
-        combatW wisdomW prospectingW inventoryW hasteW
-      ≤ Extracted.StrategicValue.strategic_value_pure
-        combatRaw wisdom prospecting x' haste
-        combatW wisdomW prospectingW inventoryW hasteW :=
-  @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted
-
 /-! ### GearTaxonomy role contracts (pure gear-classification core).
 
 Fully-qualified — `Formal.GearTaxonomy` is NOT opened. These pin the four
@@ -3049,7 +2992,7 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
   @Formal.GearTaxonomy.combatGear_subset_equippable
 
 -- GearValue. rankValue_decomp: THE PARTITION. The one gear ruler IS the sum of
--- the two terms the ECONOMICS layer (strategic_value / pursuit_value) weighs, so
+-- the two terms an economics layer would weigh, so
 -- the acquisition score cannot contain a stat the ruler does not, cannot drop one
 -- it does, and cannot count one twice. REPLACES the retired rawSum_decomp, whose
 -- subject (the flat 8-stat combatRaw sum, a second ruler in all but name) no
@@ -3080,23 +3023,6 @@ example : ∀ (monsterRes : Formal.EquipmentScoring.ElemStats)
         - Formal.PurposeRouting.combatScore monsterRes ci
       = Formal.EquipmentScoring.AEfficiency wisdom prospecting inventorySpace haste :=
   @Formal.PurposeRouting.weaponScore_efficiency_eq_AEfficiency
--- StrategicValue. pursuit_combat_dominates: cross-slot combat dominance is an
--- ORDER-EMBEDDING, quantified over ALL integer inputs -- a strictly greater
--- combat term is a strictly greater pursuit value whatever the efficiency stats
--- are, given only that the efficiency SPAN (2*budget) is under one unit of scaled
--- combat. Weakening it to particular catalog magnitudes fails to elaborate.
-example : ∀ (scale budget ca cb ea eb : Int),
-    0 ≤ budget → 2 * budget < scale → cb < ca →
-    Formal.StrategicValue.pursuitValue scale budget cb eb
-      < Formal.StrategicValue.pursuitValue scale budget ca ea :=
-  @Formal.StrategicValue.pursuit_combat_dominates
--- StrategicValue. pursuit_efficiency_orders: the no-regression half -- on a
--- combat TIE, efficiency still totally orders (utility slots keep their ranking).
-example : ∀ (scale budget c ea eb : Int),
-    -budget ≤ ea → ea ≤ budget → -budget ≤ eb → eb ≤ budget → eb < ea →
-    Formal.StrategicValue.pursuitValue scale budget c eb
-      < Formal.StrategicValue.pursuitValue scale budget c ea :=
-  @Formal.StrategicValue.pursuit_efficiency_orders
 -- rankValue_eq_combatValue_canonical: ONE ALGORITHM. The Python
 -- gear_value(_, Rank) is gear_value(_, Combat) against the canonical adversary,
 -- so Rank cannot hold an opinion the combat picker disagrees with. Replaces the
@@ -3594,46 +3520,82 @@ example : ∀ (a b c : Formal.ConsumablePrice.Q), 0 < b.2 →
 
 /-! ### LoopRate contracts. -/
 
-example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp fs m ≤ scale * Formal.LoopRate.restPart m maxHp :=
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food) (m q s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp fs m q s ≤ scale * Formal.LoopRate.restPart m maxHp :=
   @Formal.LoopRate.recovery_le_rest
 
 example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f ∈ fs, 0 < f.1) →
-    ∀ (m m' : Nat), m ≤ m' →
-      Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.recovery scale eat maxHp fs m' :=
+    ∀ (m m' q s : Nat), m ≤ m' →
+      Formal.LoopRate.recovery scale eat maxHp fs m q s
+        ≤ Formal.LoopRate.recovery scale eat maxHp fs m' q s :=
   @Formal.LoopRate.recovery_mono_missing
 
-example : ∀ (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp ((r, p, h) :: fs) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp fs m :=
+example : ∀ (scale eat maxHp r h c : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food)
+    (m q s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p, h, c) :: fs) m q s
+      ≤ Formal.LoopRate.recovery scale eat maxHp fs m q s :=
   @Formal.LoopRate.add_food_le
 
-example : ∀ (scale eat maxHp r h p p' : Nat) (post : List Formal.LoopRate.Food), p' ≤ p →
-    ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
-      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p', h) :: post) m
-        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
+example : ∀ (scale eat maxHp r h c p p' : Nat) (post : List Formal.LoopRate.Food), p' ≤ p →
+    ∀ (pre : List Formal.LoopRate.Food) (m q s : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p', h, c) :: post) m q s
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m q s :=
   @Formal.LoopRate.price_mono
 
-example : ∀ (scale eat maxHp r h p : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some 0, h) :: post) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h) :: post) m :=
+example : ∀ (scale eat maxHp r h c p : Nat) (pre post : List Formal.LoopRate.Food) (m q s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some 0, h, c) :: post) m q s
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some p, h, c) :: post) m q s :=
   @Formal.LoopRate.free_food_le
 
-example : ∀ (scale eat maxHp r h h' : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
-    h ≤ h' → ∀ (pre : List Formal.LoopRate.Food) (m : Nat),
-      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h') :: post) m
-        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h) :: post) m :=
+example : ∀ (scale eat maxHp r h h' c : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
+    h ≤ h' → ∀ (pre : List Formal.LoopRate.Food) (m q s : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h', c) :: post) m q s
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m q s :=
   @Formal.LoopRate.held_free_le
 
-example : ∀ (scale eat maxHp r h q : Nat) (pre post : List Formal.LoopRate.Food) (m : Nat),
-    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some q, h) :: post) m
-      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, none, h) :: post) m :=
+example : ∀ (scale eat maxHp r h c c' : Nat) (p : Option Nat) (post : List Formal.LoopRate.Food),
+    c ≤ c' → ∀ (pre : List Formal.LoopRate.Food) (m q s : Nat),
+      Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c') :: post) m q s
+        ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, p, h, c) :: post) m q s :=
+  @Formal.LoopRate.room_mono
+
+example : ∀ (scale eat maxHp r h : Nat) (p : Option Nat) (fs : List Formal.LoopRate.Food)
+    (m q s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp ((r, p, h, 0) :: fs) m q s
+      = Formal.LoopRate.recovery scale eat maxHp fs m q s :=
+  @Formal.LoopRate.no_room_skips
+
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food) (m q : Nat),
+    Formal.LoopRate.recovery scale eat maxHp fs m q 0 = scale * Formal.LoopRate.restPart m maxHp :=
+  @Formal.LoopRate.no_slot_rests
+
+example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food) (m s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp fs m 0 s = scale * Formal.LoopRate.restPart m maxHp :=
+  @Formal.LoopRate.no_qty_rests
+
+example : ∀ (scale eat maxHp r h c q' : Nat) (pre post : List Formal.LoopRate.Food) (m q s : Nat),
+    Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, some q', h, c) :: post) m q s
+      ≤ Formal.LoopRate.recovery scale eat maxHp (pre ++ (r, none, h, c) :: post) m q s :=
   @Formal.LoopRate.priced_le_unpriced
 
 example : ∀ (scale eat maxHp : Nat) (fs : List Formal.LoopRate.Food), (∀ f ∈ fs, 0 < f.1) →
-    ∀ (ks : List Nat) (m : Nat), Formal.LoopRate.feasible fs ks →
-      Formal.LoopRate.recovery scale eat maxHp fs m ≤ Formal.LoopRate.planCost scale eat maxHp fs ks m :=
+    ∀ (ks : List Nat) (m q s : Nat), Formal.LoopRate.feasible fs ks q s →
+      Formal.LoopRate.recovery scale eat maxHp fs m q s
+        ≤ Formal.LoopRate.planCost scale eat maxHp fs ks m :=
   @Formal.LoopRate.recovery_le_planCost
+
+example : ∀ (fs : List (Nat × Nat)) (slots qFree : Nat),
+    (Formal.LoopRate.shares fs slots qFree).sum ≤ Formal.LoopRate.bagSum fs + qFree :=
+  @Formal.LoopRate.shares_sum_le
+
+example : ∀ (fs : List (Nat × Nat)) (slots qFree : Nat) (f : Nat × Nat), f ∈ fs →
+    Formal.LoopRate.admits (decide (Formal.LoopRate.newStacks fs ≤ slots)) f = true →
+    Formal.LoopRate.admittedTotal (decide (Formal.LoopRate.newStacks fs ≤ slots)) fs
+      ≤ Formal.LoopRate.bagSum fs + qFree →
+    f.1 ≤ Formal.LoopRate.foodShareOf (decide (Formal.LoopRate.newStacks fs ≤ slots))
+      (Formal.LoopRate.bagSum fs + qFree)
+      (Formal.LoopRate.admittedTotal (decide (Formal.LoopRate.newStacks fs ≤ slots)) fs) f :=
+  @Formal.LoopRate.share_covers
 
 example : ∀ (k eat q : Nat),
     Formal.LoopRate.eatCost k eat (some q) 0 = (if k = 0 then 0 else eat) + k * q :=
@@ -3663,10 +3625,10 @@ example : ∀ (xp scale f f' r r' c c' : Nat), f ≤ f' → r ≤ r' → c ≤ c
   @Formal.LoopRate.xpRate_antitone
 
 example : ∀ (xp scale eat maxHp f c : Nat) (fs : List Formal.LoopRate.Food), (∀ g ∈ fs, 0 < g.1) →
-    ∀ (m m' : Nat), m ≤ m' →
+    ∀ (m m' q s : Nat), m ≤ m' →
       Formal.ConsumablePrice.qle
-        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m') c)
-        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m) c) :=
+        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m' q s) c)
+        (Formal.LoopRate.xpRate xp scale f (Formal.LoopRate.recovery scale eat maxHp fs m q s) c) :=
   @Formal.LoopRate.rate_antitone_missing
 
 example : ∀ (xp : Nat) (fight extra : Rat),

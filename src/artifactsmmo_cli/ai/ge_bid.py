@@ -1,7 +1,7 @@
 """Biddable GE buy-order candidates for the current objective step.
 
 A single pure predicate shared by BOTH the `MeansKind.GE_BID` firing guard
-(`tiers/means.py::_fires`) and the reactive goal (`goals/post_buy_bid.py`), so
+(`progression/means.py::_fires`) and the reactive goal (`goals/post_buy_bid.py`), so
 the means never fires on a candidate its goal then refuses to bid (the
 zero-length-plan trap the means module warns about).
 

@@ -57,15 +57,25 @@ open Formal.Liveness.CycleStepD
     49 exceed 8** — so the old constant asserted that a 11-item loadout is
     rebuilt in 8 steps.
 
-    11 is now pinned against the fixture by `WitnessAcquirable.witness_loadout_le_gear_cap`,
+    11 was then pinned against the fixture by `WitnessAcquirable.witness_loadout_le_gear_cap`,
     which computes `loadoutCodes.length` IN-KERNEL from the witness rows rather
     than trusting an emitted number.
+
+    RE-GROUNDED (plan C Task 4, ruling C4-R2): `gearGap` is bound to production's
+    `len(gear_objective.missing)` (`formal/diff/test_gear_objective_e_binding_diff.py`),
+    and `missing` holds at most one piece per gear slot, so the gap is at most the
+    number of gear slots: **14** (`gear_objective._GEAR_SLOTS`, every equipment
+    slot but the two utility slots). 11, the largest band-witness loadout, was not
+    a bound on that: a fresh `L*` can miss a piece in every slot. 14 is pinned
+    against production by that differential (`GEAR_CAP == len(_GEAR_SLOTS)`), and
+    the witness rows stay below it (`witness_loadout_le_gear_cap`). The rollover
+    reset to `GEAR_CAP` is now a true worst case: no `L*` misses more.
 
     STILL RESIDUAL (`GearCycleMakesProgress`, spec increment 4): that ONE gear
     cycle accomplishes ONE acquisition step. The real arbiter may spend a
     gear-step cycle travelling, or lose it to an API failure. This constant
     bounds the STEPS; it does not bound the CYCLES those steps take. -/
-def GEAR_CAP : Nat := 11
+def GEAR_CAP : Nat := 14
 
 /-- Worst-case hp loss of one fight. Lemma-agnostic.
 
@@ -160,9 +170,9 @@ def perceptionRefreshE (s : State) : State :=
 
 /-- **RESIDUAL (G2, rate): a gear cycle advances the build, at one state.**
 
-    `GEAR_CAP` bounds the acquisition STEPS for a band's witness loadout — pinned
-    against the fixture by `GearedDescent.witness_loadout_le_gear_cap`
-    (increment 3). What remained granted is the RATE: that one gear-step
+    `GEAR_CAP` bounds the acquisition STEPS for a gear objective's missing pieces —
+    production's gear slot count, pinned by the E-binding differential (ruling
+    C4-R2; the witness rows stay below it, `GearedDescent.witness_loadout_le_gear_cap`). What remained granted is the RATE: that one gear-step
     cycle accomplishes one step.
 
     Not derivable offline. The arbiter may select the gear step and spend the

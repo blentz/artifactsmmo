@@ -60,6 +60,16 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _recipe_has_combat_drop_input,
 )
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
+from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext
+from artifactsmmo_cli.ai.progression.means import MeansKind
+from artifactsmmo_cli.ai.progression.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+    ReachTaskOutcome,
+)
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -72,22 +82,12 @@ from artifactsmmo_cli.ai.strategy_driver import (
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
-from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    ObtainItem,
-    ReachCharLevel,
-    ReachSkillLevel,
-    ReachTaskOutcome,
-)
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data
 
 
 def _gd():
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
                                    resistance={"earth": 5}, crafting_skill="gearcrafting", crafting_level=1),
@@ -116,69 +116,69 @@ def _ctx(**kw):
 # ---------------------------------------------------------------------------
 
 def test_map_guard_hp_critical():
-    assert isinstance(map_guard(GuardKind.HP_CRITICAL, GameData(), _ctx()), RestoreHPGoal)
+    assert isinstance(map_guard(GuardKind.HP_CRITICAL, served_game_data(), _ctx()), RestoreHPGoal)
 
 
 def test_map_guard_discard_critical():
-    g = map_guard(GuardKind.DISCARD_CRITICAL, GameData(), _ctx())
+    g = map_guard(GuardKind.DISCARD_CRITICAL, served_game_data(), _ctx())
     assert isinstance(g, DiscardOverstockGoal)
 
 
 def test_map_guard_ge_cancel():
-    g = map_guard(GuardKind.GE_CANCEL, GameData(), _ctx(), make_state(),
+    g = map_guard(GuardKind.GE_CANCEL, served_game_data(), _ctx(), make_state(),
                   step_profile={"iron": 1})
     assert isinstance(g, CancelOrdersGoal)
 
 
 def test_map_guard_ge_cancel_requires_state():
     with pytest.raises(ValueError, match="GE_CANCEL guard requires a state"):
-        map_guard(GuardKind.GE_CANCEL, GameData(), _ctx())
+        map_guard(GuardKind.GE_CANCEL, served_game_data(), _ctx())
 
 
 def test_map_guard_discard_high():
-    g = map_guard(GuardKind.DISCARD_HIGH, GameData(), _ctx())
+    g = map_guard(GuardKind.DISCARD_HIGH, served_game_data(), _ctx())
     assert isinstance(g, DiscardOverstockGoal)
 
 
 def test_map_guard_bank_unlock():
     ctx = _ctx(bank_accessible=False, bank_unlock_monster="chicken", initial_xp=100)
-    g = map_guard(GuardKind.BANK_UNLOCK, GameData(), ctx)
+    g = map_guard(GuardKind.BANK_UNLOCK, served_game_data(), ctx)
     assert isinstance(g, UnlockBankGoal)
 
 
 def test_map_guard_reach_unlock_level():
     ctx = _ctx(bank_required_level=5)
-    g = map_guard(GuardKind.REACH_UNLOCK_LEVEL, GameData(), ctx)
+    g = map_guard(GuardKind.REACH_UNLOCK_LEVEL, served_game_data(), ctx)
     assert isinstance(g, ReachUnlockLevelGoal)
 
 
 def test_map_guard_deposit_full():
-    g = map_guard(GuardKind.DEPOSIT_FULL, GameData(), _ctx())
+    g = map_guard(GuardKind.DEPOSIT_FULL, served_game_data(), _ctx())
     assert isinstance(g, DepositInventoryGoal)
 
 
 def test_map_guard_recycle_relief():
     """RECYCLE_RELIEF maps to RecycleSurplusGoal, same as RECYCLE_SURPLUS means."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
                                    crafting_skill="gearcrafting", crafting_level=1),
     }
     gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
     gd._workshop_locations = {"gearcrafting": (2, 1)}
-    g = map_guard(GuardKind.RECYCLE_RELIEF, gd, _ctx(target_gear=frozenset({"copper_helmet"})))
+    g = map_guard(GuardKind.RECYCLE_RELIEF, gd, _ctx())
     assert isinstance(g, RecycleSurplusGoal)
 
 
 def test_map_guard_sell_relief():
     """SELL_RELIEF maps to SellInventoryGoal."""
-    g = map_guard(GuardKind.SELL_RELIEF, GameData(), _ctx(bank_accessible=True))
+    g = map_guard(GuardKind.SELL_RELIEF, served_game_data(), _ctx(bank_accessible=True))
     assert isinstance(g, SellInventoryGoal)
 
 
 def test_map_guard_unknown_raises():
     with pytest.raises(ValueError):
-        map_guard("bogus", GameData(), _ctx())  # type: ignore[arg-type]
+        map_guard("bogus", served_game_data(), _ctx())  # type: ignore[arg-type]
 
 
 def test_map_guard_returns_craft_potions_goal():
@@ -190,7 +190,7 @@ def test_map_guard_discard_merges_step_profile():
     DiscardOverstock the SAME step-enriched profile the firing predicate used,
     so the constructed goal cannot delete the active step goal's target item
     while still shedding genuinely-overstocked items."""
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
                             "ash_plank": {"ash_wood": 10}}
     # Both equipped-dup items are capped at 1 under pressure; only the
@@ -217,12 +217,12 @@ def test_skill_grind_gather_caps_bag_reserve():
     grind keeps gathering for XP). Regression: live Robby held 137 sunflower and
     the held+1 profile locked all of them in the bag (114/114) during the alchemy
     L1->L5 grind."""
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {}  # sunflower is a raw resource (no sub-recipe)
     state = make_state(inventory={"sunflower": 40}, bank_items={"sunflower": 97})
     # held = 40 + 97 = 137 -> grind target = held + 1 = 138
     grind = GatherMaterialsGoal(target_item="sunflower",
-                                needed={"sunflower": 138}, skill_grind=True)
+                                needed={"sunflower": 138}, skill_grind=True, now=cycle_now())
     profile = sd._step_protection_profile(grind, state, gd)
     assert profile is not None
     assert profile["sunflower"] == sd.GRIND_BAG_RESERVE  # capped, NOT 138
@@ -232,10 +232,10 @@ def test_non_grind_gather_keeps_full_needed_protection():
     """A normal (non-grind) GatherMaterials protects its full needed target —
     the byproduct-reserve cap applies ONLY to skill-grind gathers, so a real
     craft-input accumulation is never under-protected."""
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {}
     state = make_state(inventory={"steel_bar": 2}, bank_items={})
-    normal = GatherMaterialsGoal(target_item="steel_bar", needed={"steel_bar": 6})
+    normal = GatherMaterialsGoal(target_item="steel_bar", needed={"steel_bar": 6}, now=cycle_now())
     profile = sd._step_protection_profile(normal, state, gd)
     assert profile is not None
     assert profile["steel_bar"] == 6  # full needed still protected
@@ -256,7 +256,7 @@ def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
     outranks the (dead) UpgradeEquipment step — the equip still wins, via the
     dedicated equip-owned path."""
     planner = GOAPPlanner()
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
                                        type_="leg_armor",
@@ -315,7 +315,7 @@ def test_upgrade_equipment_repr_distinguishes_targets():
 def _deep_chain_gd():
     """steel_boots <- 6 steel_bar <- 8 iron_bar <- 10 iron_ore = 480 raw from
     scratch — the depth-unreachable deep equippable chain (Piece D)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "steel_boots": ItemStats(code="steel_boots", level=2, type_="boots",
                                  crafting_skill="gearcrafting", crafting_level=1),
@@ -402,7 +402,7 @@ def _wooden_staff_gd() -> GameData:
     catalog closely enough for THIS test (which only exercises `ash_wood`,
     the leaf `actionable_step` actually reaches) without needing to model
     `wooden_stick`'s real (non-craft) acquisition route."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "wooden_staff": ItemStats(code="wooden_staff", level=1, type_="weapon",
                                   crafting_skill="weaponcrafting", crafting_level=1),
@@ -495,7 +495,7 @@ def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     input is a raw leaf already at the root's depth), there is no deeper step to
     route to, so the helper returns the root's direct recipe (the total-function
     fallback branch)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "plank": ItemStats(code="plank", level=1, type_="resource",
                            crafting_skill="woodcrafting", crafting_level=1),
@@ -534,7 +534,7 @@ def test_bank_stock_is_credited_before_the_depth_budget_is_judged():
     own reachable-root goal (`_equippable_goal`'s `upgrade`, `GEAR_REVIEW`'s
     `committed` — see `test_equippable_goal_root_by_name_falls_through_to_upgrade`
     and `test_gear_review_root_by_name_falls_through_to_committed`)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "boots": ItemStats(code="boots", level=20, type_="boots",
                            crafting_skill="gearcrafting", crafting_level=20),
@@ -571,7 +571,7 @@ def _satchel_currency_gd():
     """satchel is a craftable bag whose only recipe input is jasper_crystal, a
     currency-buy leaf (non-craftable, not gathered, no monster drop, sold by
     tasks_trader for 8 tasks_coin). Skill gate OPEN (gearcrafting >= 1)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"satchel": {"jasper_crystal": 1}}
     gd._item_stats = {
         "satchel": ItemStats(code="satchel", level=1, type_="bag",
@@ -612,7 +612,7 @@ def test_objective_step_gathers_satchel_when_currency_funded():
 def _passive_currency_gd():
     """A buy-only artifact priced in a currency that drops from MOST monsters —
     it accrues while levelling (like gold, like event_ticket)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"medal": ItemStats(code="medal", level=5, type_="artifact")}
     gd._npc_stock = {"vendor": {"medal": 100}}
     gd._npc_buy_currency = {"vendor": {"medal": "ticket"}}
@@ -650,7 +650,7 @@ def test_equippable_non_passive_currency_still_grinds():
 
 def test_map_guard_rest_for_combat_is_restore_hp():
     """REST_FOR_COMBAT maps to a RestoreHPGoal (line 106-107)."""
-    assert isinstance(map_guard(GuardKind.REST_FOR_COMBAT, GameData(), _ctx()),
+    assert isinstance(map_guard(GuardKind.REST_FOR_COMBAT, served_game_data(), _ctx()),
                       RestoreHPGoal)
 
 
@@ -658,7 +658,7 @@ def test_map_guard_craft_relief_no_state_raises():
     """CRAFT_RELIEF needs a state to pick its target; without one it raises
     (line 121-122)."""
     with pytest.raises(ValueError, match="CRAFT_RELIEF guard requires a state"):
-        map_guard(GuardKind.CRAFT_RELIEF, GameData(), _ctx())
+        map_guard(GuardKind.CRAFT_RELIEF, served_game_data(), _ctx())
 
 
 def test_map_guard_craft_relief_no_candidate_raises():
@@ -667,18 +667,18 @@ def test_map_guard_craft_relief_no_candidate_raises():
     # Empty inventory + no recipes -> craft_relief_candidates returns [].
     state = make_state(inventory={})
     with pytest.raises(ValueError, match="no relief candidate"):
-        map_guard(GuardKind.CRAFT_RELIEF, GameData(), _ctx(), state)
+        map_guard(GuardKind.CRAFT_RELIEF, served_game_data(), _ctx(), state)
 
 
 def test_task_recipe_inputs_empty_for_no_task():
     """No task code -> empty input set (line 71-72)."""
-    assert _task_recipe_inputs(None, GameData()) == frozenset()
+    assert _task_recipe_inputs(None, served_game_data()) == frozenset()
 
 
 def test_task_recipe_inputs_walks_chain_and_dedupes_shared_material():
     """Two recipe branches sharing a material visit it once (the `mat in chain`
     guard, line 79-80); the full transitive input set is returned."""
-    gd = GameData()
+    gd = served_game_data()
     # dagger <- bar(+handle); bar <- ore; handle <- ore  (ore shared).
     gd._crafting_recipes = {
         "dagger": {"bar": 1, "handle": 1},
@@ -694,25 +694,25 @@ def test_task_recipe_inputs_walks_chain_and_dedupes_shared_material():
 # ---------------------------------------------------------------------------
 
 def test_map_means_claim_pending():
-    assert isinstance(map_means(MeansKind.CLAIM_PENDING, GameData(), _ctx(), make_state()), ClaimPendingGoal)
+    assert isinstance(map_means(MeansKind.CLAIM_PENDING, served_game_data(), _ctx(), make_state()), ClaimPendingGoal)
 
 
 def test_map_means_sell_pressured():
-    assert isinstance(map_means(MeansKind.SELL_PRESSURED, GameData(), _ctx(), make_state()), SellInventoryGoal)
+    assert isinstance(map_means(MeansKind.SELL_PRESSURED, served_game_data(), _ctx(), make_state()), SellInventoryGoal)
 
 
 def test_map_means_sell_idle():
-    assert isinstance(map_means(MeansKind.SELL_IDLE, GameData(), _ctx(), make_state()), SellInventoryGoal)
+    assert isinstance(map_means(MeansKind.SELL_IDLE, served_game_data(), _ctx(), make_state()), SellInventoryGoal)
 
 
 def test_the_task_objective_exchanges_coins():
     """c-2 #2: the exchange is the task objective's step (was TASK_EXCHANGE)."""
     state = make_state(inventory={"tasks_coin": 3})
-    g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
+    g = objective_step_goal(ReachTaskOutcome(None), state, served_game_data(),
                             _ctx(task_exchange_min_coins=3, draw_owed=False))
     assert isinstance(g, TaskExchangeGoal)
     poor = make_state(inventory={"tasks_coin": 2})
-    assert objective_step_goal(ReachTaskOutcome(None), poor, GameData(),
+    assert objective_step_goal(ReachTaskOutcome(None), poor, served_game_data(),
                                _ctx(task_exchange_min_coins=3, draw_owed=False)) is None
 
 
@@ -721,7 +721,7 @@ def test_the_exchange_step_threads_initial_total():
     inventory+bank coin total, so the goal is satisfied after a single
     batch is spent (7 -> 4 with min 3), not only when fully drained."""
     state = make_state(inventory={"tasks_coin": 4}, bank_items={"tasks_coin": 3})
-    g = objective_step_goal(ReachTaskOutcome(None), state, GameData(),
+    g = objective_step_goal(ReachTaskOutcome(None), state, served_game_data(),
                             _ctx(task_exchange_min_coins=3, draw_owed=False))
     assert g.is_satisfied(state) is False
     one_batch_spent = make_state(inventory={"tasks_coin": 1},
@@ -733,12 +733,12 @@ def test_the_exchange_step_threads_initial_total():
 
 
 def test_map_means_bank_expand():
-    assert isinstance(map_means(MeansKind.BANK_EXPAND, GameData(), _ctx(), make_state()), ExpandBankGoal)
+    assert isinstance(map_means(MeansKind.BANK_EXPAND, served_game_data(), _ctx(), make_state()), ExpandBankGoal)
 
 
 def test_map_means_unknown_raises():
     with pytest.raises(ValueError):
-        map_means("bogus", GameData(), _ctx(), make_state())  # type: ignore[arg-type]
+        map_means("bogus", served_game_data(), _ctx(), make_state())  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -828,7 +828,7 @@ def test_objective_step_combat_drop_input_routes_to_flat_step():
     explodes (live: feather_coat 57k nodes, timeout, plan_len 0; bot fell to
     slime-grind). Route to the flat actionable step instead so inputs are collected
     incrementally (gather wood / hunt chickens), each within budget."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor",
                                   crafting_skill="gearcrafting", crafting_level=1),
@@ -857,7 +857,7 @@ def test_objective_step_combat_drop_input_routes_to_flat_step():
 def test_monster_drop_inputs_collects_pure_drop_leaves():
     """monster_drop_inputs returns the recipe closure's pure monster-drop leaves
     (feather), skipping craftable/gatherable inputs (ash_plank/ash_wood)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor"),
         "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
@@ -874,7 +874,7 @@ def test_monster_drop_inputs_collects_pure_drop_leaves():
 
 
 def test_monster_drop_inputs_is_cycle_safe():
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"a": {"b": 1}, "b": {"a": 1}}
     assert monster_drop_inputs("a", gd) == []
 
@@ -882,7 +882,7 @@ def test_monster_drop_inputs_is_cycle_safe():
 def test_recipe_has_combat_drop_input_is_cycle_safe():
     """A pathological cyclic recipe (a<-b, b<-a) must not infinite-loop the
     combat-drop closure walk; the per-path visited guard returns False."""
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"a": {"b": 1}, "b": {"a": 1}}
     assert _recipe_has_combat_drop_input("a", gd) is False
 
@@ -895,7 +895,7 @@ def test_objective_step_intermediate_unreachable_root_routes_to_deepest_step():
     (1M+ nodes / 90s timeout / plan_len 0, then fall-through). The fix routes to
     the DEEPEST actionable step (the raw base material) as a FLAT gather that
     plans within budget. Piece-C feasibility gate."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "steel_boots": ItemStats(code="steel_boots", level=5, type_="boots",
                                  crafting_skill="gearcrafting", crafting_level=1),
@@ -923,7 +923,7 @@ def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
     """The router credits inventory + BANK before deciding. Bank holds some
     intermediate but not enough to make the root depth-reachable, so it still
     routes to the deepest step (covers the bank-credit loop)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "steel_boots": ItemStats(code="steel_boots", level=5, type_="boots",
                                  crafting_skill="gearcrafting", crafting_level=1),
@@ -1022,7 +1022,7 @@ class _FakeDecision:
 
 def _make_planner_gd() -> GameData:
     """Minimal GameData that lets the planner resolve Accept/Fight/Rest actions."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._resource_locations = {}
@@ -1163,7 +1163,7 @@ def arbiter_select_with(planner, decision, state, gd):
 def test_select_returns_objective_step_when_calm():
     """No guards, no collect-reward means; chosen_step→GrindCharacterXP plans."""
     planner = GOAPPlanner()
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._resource_locations = {}
@@ -1465,7 +1465,7 @@ def test_select_skips_satisfied_step_goal_continues_to_next():
 
     # The satisfied GatherMaterialsGoal must have been skipped (not attempted)
     attempted_reprs = [e["goal"] for e in goals_tried]
-    gather_repr = repr(GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6}))
+    gather_repr = repr(GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6}, now=cycle_now()))
     assert gather_repr not in attempted_reprs, (
         f"satisfied goal should be skipped, but appeared in goals_tried: {attempted_reprs}"
     )
@@ -1485,24 +1485,24 @@ class TestLevelLookahead:
         # Bounding lives on the PURSUE_TASK skill-gated path (objective path no
         # longer builds LevelSkillGoal). Task requires weaponcrafting 50, current
         # 1 -> target bounded to current+LEVEL_LOOKAHEAD=4.
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats["copper_bar"] = ItemStats(
             code="copper_bar", type_="resource", level=1,
             crafting_skill="weaponcrafting", crafting_level=50)
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->4)"   # min(50, 1+3)
 
     def test_skill_step_caps_at_required_level(self):
         # current+LEVEL_LOOKAHEAD overshoots the gate -> cap at the required level.
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats["copper_bar"] = ItemStats(
             code="copper_bar", type_="resource", level=1,
             crafting_skill="weaponcrafting", crafting_level=50)
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 48})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->50)"   # min(50, 48+3)
 
 
@@ -1516,14 +1516,14 @@ class TestPursueTaskMapping:
         # the whole remaining task is already in the bag, so the step is the trade.
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, inventory={"copper_bar": 20})
-        goal = _pursue_goal(state, GameData())
+        goal = _pursue_goal(state, served_game_data(), now=cycle_now())
         assert repr(goal) == "PursueTask(copper_bar)"
 
     def test_a_short_batch_is_produced_through_decomposition_first(self):
         """Live C3P0 2026-10-09: PursueTask(spruce_plank x10) needed 100
         single gathers, past A*'s depth, and planned nothing for 496 cycles.
         The batch is produced by the decomposed GatherMaterials, then traded."""
-        gd = GameData()
+        gd = served_game_data()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         gd._resource_skill = {"copper_rocks": ("mining", 1)}
@@ -1532,32 +1532,32 @@ class TestPursueTaskMapping:
                            bank_items={"copper_bar": 1})
         batch = task_batch_size(state, gd)
         assert batch > 2
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert isinstance(goal, GatherMaterialsGoal)
         assert repr(goal) == f"GatherMaterials(copper_bar, {{copper_bar:{batch}}})"
         held = dataclasses.replace(state, inventory={"copper_bar": batch - 1})
-        assert repr(_pursue_goal(held, gd)) == "PursueTask(copper_bar)"  # bag + bank = batch
+        assert repr(_pursue_goal(held, gd, now=cycle_now())) == "PursueTask(copper_bar)"  # bag + bank = batch
 
     def test_skill_gated_items_task_maps_to_level_skill(self):
-        gd = GameData()
+        gd = served_game_data()
         gd._item_stats["copper_bar"] = ItemStats(
             code="copper_bar", type_="resource", level=1,
             crafting_skill="weaponcrafting", crafting_level=3,
         )
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
 
     def test_pursue_task_goal_carries_batch(self):
-        gd = GameData()
+        gd = served_game_data()
         gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
         gd._resource_drops = {"copper_rocks": "copper_ore"}
         gd._resource_skill = {"copper_rocks": ("mining", 1)}
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=2, inventory={}, inventory_max=100,
                            bank_items={"copper_bar": 20})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         expected = 2 + task_batch_size(state, gd)
         assert goal.desired_state(state, gd) == {"task_progress": expected}
         assert task_batch_size(state, gd) > 1   # this state genuinely batches
@@ -1572,17 +1572,17 @@ class TestItemsTaskStandDown:
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         ctx = dataclasses.replace(_ctx(combat_monster="chicken"), held_task_pays=True)
-        assert objective_step_goal(ReachCharLevel(50), state, GameData(), ctx) is None
+        assert objective_step_goal(ReachCharLevel(50), state, served_game_data(), ctx) is None
 
     def test_char_step_grinds_for_monster_task(self):
         state = make_state(task_code="chicken", task_type="monsters",
                            task_total=20, task_progress=0)
-        goal = objective_step_goal(ReachCharLevel(50), state, GameData(),
+        goal = objective_step_goal(ReachCharLevel(50), state, served_game_data(),
                                    _ctx(combat_monster="chicken"))
         assert goal is not None and repr(goal).startswith("GrindCharacterXP")
 
     def test_char_step_grinds_with_no_task(self):
-        goal = objective_step_goal(ReachCharLevel(50), make_state(), GameData(),
+        goal = objective_step_goal(ReachCharLevel(50), make_state(), served_game_data(),
                                    _ctx(combat_monster="chicken"))
         assert goal is not None and repr(goal).startswith("GrindCharacterXP")
 
@@ -1593,7 +1593,7 @@ class TestItemsTaskStandDown:
         state = make_state(level=3, task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0)
         for target in (5, 50):
-            goal = objective_step_goal(ReachCharLevel(target), state, GameData(),
+            goal = objective_step_goal(ReachCharLevel(target), state, served_game_data(),
                                        _ctx(combat_monster="chicken"))
             assert goal is not None and repr(goal).startswith("GrindCharacterXP"), goal
 
@@ -1696,7 +1696,7 @@ class TestPursueTaskEndToEnd:
 
 
 def _gd_boots_chain():
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
                                                 crafting_skill="gearcrafting", crafting_level=1)}
     gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
@@ -1730,7 +1730,7 @@ def test_objective_step_equippable_dead_ends_admit_the_root_cheaply():
     that the goal is DEEPER-BOUNDED — it self-corrects toward the flat
     leaf whenever `actionable_step` finds one, and only falls back to the
     root here because there is no leaf to find at all."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"many_mats_item": ItemStats(code="many_mats_item", level=1,
                                                    type_="boots", crafting_skill="gearcrafting",
                                                    crafting_level=1)}
@@ -1757,7 +1757,7 @@ def test_objective_step_equippable_upgrades_when_materials_in_hand():
 def _gd_skill_gated_chain():
     """copper_legs_armor needs gearcrafting 5 (Robby has 2) — the trace
     2026-06-11 18:46 dead-route shape."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_legs_armor": ItemStats(code="copper_legs_armor", level=6,
                                        type_="leg_armor",
@@ -1783,7 +1783,7 @@ def test_objective_step_skill_gated_root_raises_the_skill():
     target to the skill it needs, and it pointed at the sibling (materials),
     never the skill — weaponcrafting sat frozen at level 10 fleet-wide from
     2026-08-16 to 2026-08-22 as a result (11,434 LevelSkill actions, target
-    never once above 10). `CanICraftCurrentTier`'s "no" branch now raises the
+    never once above 10). `CanICraftThisAtAll`'s "no" branch now raises the
     skill by one increment instead (PF-2,
     `.superpowers/sdd/PLAN_goal_decision_graph/progress.md`); the step's
     materials are picked up on a later cycle once the skill has risen, via the
@@ -1819,7 +1819,7 @@ class _TrivialPlanner:
 def test_equip_step_uses_root_slot_for_second_ring():
     """A slot-tagged ring2 gear root equips copper_ring into ring2_slot (not the
     type's first slot), so a 2nd copper_ring fills the empty second ring slot."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                                hp_bonus=2)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
@@ -1841,7 +1841,7 @@ def test_arbiter_equips_second_ring_into_empty_slot():
     the one-slot-per-code guard rejected this and the dual-ring feature was inert
     (this asserted only that the root was chosen); the live server returns HTTP
     200 for a duplicate ring."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                                hp_bonus=6)}
     gd._crafting_recipes = {"copper_ring": {"bar": 1}}
@@ -1873,7 +1873,7 @@ def test_second_ring_not_equippable_without_a_spare():
     copper_ring worn in ring1 with NO spare in inventory -> the 2nd-slot equip is
     NOT applicable. The rings carve-out must not produce an unrealizable double-
     equip when only one copy is owned."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                                hp_bonus=6)}
     state = make_state(level=5, inventory={},
@@ -1887,7 +1887,7 @@ def test_non_ring_keeps_one_slot_per_code():
     NOT equippable into a sibling slot (server HTTP 485) even with spare copies —
     e.g. a 2nd small_health_potion into utility2 while utility1 wears it. Proves
     the relaxation did not over-broaden past DUPLICATE_SLOT_TYPES."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {"small_health_potion": ItemStats(
         code="small_health_potion", level=1, type_="utility")}
     state = make_state(level=5, inventory={"small_health_potion": 5},
@@ -1916,7 +1916,7 @@ def _gd_many_mats_coat() -> GameData:
     one tier, so `min_gather_steps` counts all 35 — the one shape where leaf-
     counting still correctly exceeds max_depth 32 (`35 + 1 craft + 1 equip =
     37`)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "many_mats_coat": ItemStats(code="many_mats_coat", level=5, type_="body_armor",
                                     crafting_skill="gearcrafting", crafting_level=5),
@@ -1969,7 +1969,7 @@ def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: i
 
 def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
     """Utility-slot-equippable heal (type=utility)."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {code: ItemStats(code=code, level=1, type_="utility",
                                       hp_restore=hp_restore)}
     return gd
@@ -1978,7 +1978,7 @@ def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
 def _gd_with_food(code: str, hp_restore: int) -> GameData:
     """Eaten heal (type=consumable): carries hp_restore but is NOT utility-slot
     equippable, so it can never back a ProvisionMarginalFightGoal."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {code: ItemStats(code=code, level=1, type_="consumable",
                                       hp_restore=hp_restore)}
     return gd
@@ -2120,7 +2120,7 @@ def test_a_boost_is_skipped_for_the_chosen_restore() -> None:
 def _vendor_bag_gd() -> GameData:
     """A recipe-less, NPC-only equippable (bag) sold for a monster-drop
     currency by a permanent vendor — the sandwhisper_bag shape."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "dune_bag": ItemStats(code="dune_bag", level=1, type_="bag",
                               inventory_space=10),
@@ -2329,7 +2329,7 @@ class TestFightStepsCarryTheirLoadout:
     kill first stock the cycle's chosen loadout food (live: 120 banked
     cooked_rat_meat, none ever withdrawn, 652 Rests against 13 eats)."""
 
-    PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20})
+    PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20}, now=cycle_now())
 
     def _loadout(self, monster: str) -> ChosenLoadout:
         return ChosenLoadout(monster=monster, potions=(), food=(("cooked_chicken", 1),),
@@ -2396,7 +2396,7 @@ class TestFightStepsCarryTheirLoadout:
 
     def test_the_potions_prep_before_the_food(self, monkeypatch):
         potion = GatherMaterialsGoal(target_item="water_boost_potion",
-                                     needed={"water_boost_potion": 20}, carry=True)
+                                     needed={"water_boost_potion": 20}, carry=True, now=cycle_now())
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: potion)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
@@ -2417,11 +2417,12 @@ class TestCarryGoal:
     banked stock satisfied the prep, the arbiter skipped it, and no
     GrindCharacterXP ran anywhere in the fleet)."""
 
-    GOAL = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, carry=True)
+    GOAL = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, carry=True,
+                               now=cycle_now())
 
     def test_banked_stock_does_not_satisfy_a_carry(self):
         assert not self.GOAL.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
-        plain = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20})
+        plain = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, now=cycle_now())
         assert plain.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
 
     def test_the_bag_satisfies_it(self):
@@ -2429,5 +2430,5 @@ class TestCarryGoal:
 
     def test_carry_is_part_of_the_identity_and_survives_the_cache(self):
         assert repr(self.GOAL) == "GatherMaterials(cooked_rat_meat, {cooked_rat_meat:20}, carry)"
-        back = sd_goal_from_dict(self.GOAL.serialize(), None)
+        back = sd_goal_from_dict(self.GOAL.serialize(), None, cycle_now())
         assert isinstance(back, GatherMaterialsGoal) and back.carry and repr(back) == repr(self.GOAL)

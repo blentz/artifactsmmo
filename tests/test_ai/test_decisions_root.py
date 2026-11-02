@@ -1,81 +1,42 @@
-"""The ROOT graph: one test per branch of every node in `ai/decisions/root.py`.
+"""The ROOT graph (`ai/decisions/root.py`): `resolve_root` from
+`WhichPieceIsNext`, `IsThisTargetBlocked` on each `GearTarget` shape, the held
+task (`_task_root`), the fleet work and the orphan skill roots.
 
-Nothing in production calls `resolve_root` yet (the flip is a later task of
-`PLAN_wave3a_cutover`), so these tests ARE the whole consumer. They are built
-on a real `CharacterObjective` over a small real `GameData` rather than on a
-stand-in for `gear_targets_with_blockers`: a double returning the three
-`GearTarget` shapes by hand would agree with `classify_target` only for as
-long as somebody kept it in step, and this graph's entire job is to read that
-producer's output correctly. `classify_target` emits FOUR shapes, not the
-three spec §5.3 tabulates: skill-gated, attainable, blocked on a material, and
-blocked on ITSELF. There is a test below for the first three. The fourth is no
-longer reachable through `gear_targets_with_blockers` — `objective.is_suppliable`
-drops an item nothing mints and nobody holds before it can be classified — so it
-is pinned directly on `classify_target` in `test_tiers_objective.py` instead.
-
-The one doubled collaborator is `tier_progress.is_winnable` — a boolean oracle
-over the combat model, monkeypatched so "the ladder is finished" and "a rung is
-still open" are both reachable without building a winnable and an unwinnable
-monster. That is the idiom `tests/test_ai/test_tier_progress.py` already uses
-for the same two branches. Every test that patches it also puts a monster in
-the band first: the bare `_gd()` has an EMPTY monster table, `tier_cleared` is
-then `all([])`, and the patch would decide nothing — the branch would be
-reached by an empty collection instead. Fix-round-1 found exactly that in two
-of these tests.
+Built on a real `CharacterObjective` over a small real `GameData`.
+`classify_target` emits FOUR shapes: skill-gated, attainable, blocked on a
+material, and blocked on ITSELF; `IsThisTargetBlocked` has a test for each.
 """
 from dataclasses import replace
 from fractions import Fraction
 
 import pytest
 
-import artifactsmmo_cli.ai.decisions.root as _root_mod
-import artifactsmmo_cli.ai.tiers.tier_progress as tier_progress
 from artifactsmmo_cli.ai import gather_demand as _gather_demand
-from artifactsmmo_cli.ai.decision import Decision, resolve_node
 from artifactsmmo_cli.ai.decisions.root import (
-    CanIClearMyTier,
-    IsAFightBlockingMe,
-    IsMyGearBehindMyTier,
-    IsThereACombatTarget,
     IsThisTargetBlocked,
     RootWalk,
-    WhichSlotClosesTheFight,
-    WhichSlotIsFurthestBehind,
-    _next_rung_above,
     _orphan_skill_roots,
-    _tier_gap,
-    dead_target_slots,
     resolve_root,
 )
-from artifactsmmo_cli.ai.drop_evidence import drop_evidence
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_context import attach_gear_objective
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
-from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
-from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.task_horizon import (
-    HORIZON_GEAR,
-    HORIZON_LEVEL_UP,
-    HORIZON_OUT_OF_REACH,
-    TaskHorizon,
-)
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    MetaGoal,
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
-from artifactsmmo_cli.ai.tiers.tier_ladder import ladder, normal_band, tier_of_level
-from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
+from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
+from artifactsmmo_cli.ai.source_kind import SourceKind
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data
 from tests.test_ai.test_strategy_driver import _ctx
 
 # The five gear candidates below are chosen so that ONE slot lands in each of
-# `classify_target`'s outcomes, and so the tier gaps are not all equal:
+# `classify_target`'s outcomes:
 #
 #   shield_slot     iron_shield    gearcrafting 10 vs the character's 1 -> SKILL-gated
 #   weapon_slot     ash_club       ash_plank <- ash_wood <- ash_tree     -> ATTAINABLE
@@ -86,20 +47,11 @@ from tests.test_ai.test_strategy_driver import _ctx
 # The last two deliberately collide on `ObtainItem("leather", 2)`, which is
 # what makes the alternatives dedupe observable.
 #
-# `helmet_slot` USED TO WITNESS THE FOURTH SHAPE (its own blocker) by giving
-# copper_helmet no recipe, no drop and no vendor. `objective.is_suppliable` now
-# drops exactly that kind of candidate before `classify_target` ever sees it —
-# an item nothing mints and nobody holds is not a target — so the fourth shape
-# is no longer reachable through `gear_targets_with_blockers` and cannot be
-# witnessed from this fixture at all. The arm still exists (the material loop
-# can exhaust), and it is pinned directly on `classify_target` by
-# `test_tiers_objective.py`. copper_helmet here now carries its REAL recipe.
-_LADDER_RUNGS = (1, 10)
-_HIGH_LADDER_RUNGS = (10, 20)
+# copper_helmet carries its REAL recipe.
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "iron_shield": ItemStats(code="iron_shield", level=10, type_="shield",
                                  resistance={"earth": 20},
@@ -110,14 +62,6 @@ def _gd() -> GameData:
         # THE REAL copper_helmet: gearcrafting@1 from `copper_bar` x6, and
         # copper_bar is mining@1 from copper_ore x10 — all three read off the
         # committed bundle, not invented to make a test pass.
-        #
-        # It was the ONE candidate in this fixture with no recipe and no
-        # crafting skill, which made it unsuppliable once
-        # `objective.is_suppliable` began asking whether anything mints a
-        # candidate at all — `helmet_slot` then vanished from
-        # `gear_targets_with_blockers` and silently shortened the gap ladder
-        # these tests measure. The omission was incidental: this fixture exists
-        # for the gap arithmetic, so nothing ever forced it to declare a source.
         "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
                                    resistance={"water": 4},
                                    crafting_skill="gearcrafting", crafting_level=1),
@@ -158,38 +102,8 @@ def _gd() -> GameData:
     return gd
 
 
-def _gd_two_ways_behind() -> GameData:
-    """A second ladder, built for ONE question: what happens when two slots
-    are behind by the SAME number of rungs but their targets sit on different
-    rungs.
-
-    Over `_gd()` that case cannot arise — every tied gap there is a tie in the
-    target rung too (all four rung-1 targets sit in empty slots), so
-    `_slot_order`'s middle key is never the one that decides and a mutant of
-    it would survive. Here:
-
-        weapon_slot  empty (rung 0)      -> iron_club   (rung 10)  gap 10
-        boots_slot   iron_boots (rung 10) -> steel_boots (rung 20)  gap 10
-
-    Same gap, different target rung, and the slots are in the OPPOSITE order
-    to the schema tiebreak (weapon is index 0, boots is index 6), so the
-    middle key is the only thing that can put boots first.
-    """
-    gd = GameData()
-    gd._item_stats = {
-        "iron_club": ItemStats(code="iron_club", level=10, type_="weapon",
-                               attack={"air": 10}),
-        "iron_boots": ItemStats(code="iron_boots", level=10, type_="boots",
-                                resistance={"earth": 10}),
-        "steel_boots": ItemStats(code="steel_boots", level=20, type_="boots",
-                                 resistance={"earth": 30}),
-    }
-    return gd
-
-
 def _objective(gd: GameData) -> CharacterObjective:
-    return CharacterObjective(target_char_level=50, target_skill_levels={},
-                              target_gear={}, _game_data=gd)
+    return CharacterObjective.from_game_data(gd)
 
 
 def _geared_state():
@@ -206,359 +120,6 @@ def _target(**kw) -> GearTarget:
     base = dict(code="iron_shield", attainable=False, blocker=None)
     base.update(kw)
     return GearTarget(**base)
-
-
-# ---------------------------------------------------------------------------
-# The ladder the gap arithmetic is measured against
-# ---------------------------------------------------------------------------
-
-def test_the_fixture_ladder_is_the_two_rungs_the_gap_tests_assume():
-    """Anti-vacuity: every gap number below is `rung - rung`, so a fixture
-    whose ladder collapsed to one rung would make them all zero and the
-    ordering tests would pass on a tie."""
-    assert ladder(_gd()) == _LADDER_RUNGS
-    assert ladder(_gd_two_ways_behind()) == _HIGH_LADDER_RUNGS
-
-
-# ---------------------------------------------------------------------------
-# IsMyGearBehindMyTier
-# ---------------------------------------------------------------------------
-
-def test_gear_behind_the_tier_routes_to_the_slot_walk():
-    gd = _gd()
-    walk = RootWalk()
-    child = IsMyGearBehindMyTier(_objective(gd), walk).resolve(
-        make_state(level=15), gd, _ctx(), None)
-    assert isinstance(child, WhichSlotIsFurthestBehind)
-    assert set(child.targets) == {"weapon_slot", "shield_slot", "helmet_slot",
-                                  "leg_armor_slot", "boots_slot"}
-    assert walk.trail == ["IsMyGearBehindMyTier"]
-
-
-def test_no_gear_target_routes_to_the_combat_question():
-    gd = _gd()
-    child = IsMyGearBehindMyTier(_objective(gd), RootWalk()).resolve(
-        _geared_state(), gd, _ctx(), None)
-    assert isinstance(child, IsThereACombatTarget)
-
-
-# ---------------------------------------------------------------------------
-# WhichSlotIsFurthestBehind
-# ---------------------------------------------------------------------------
-
-def test_the_furthest_behind_slot_is_the_one_that_resolves():
-    """shield_slot is 10 rungs behind (empty -> the level-10 rung); every
-    other slot is 1. The head is the shield, and the other four are left in
-    the walk as siblings."""
-    gd = _gd()
-    state = make_state(level=15)
-    walk = RootWalk()
-    node = IsMyGearBehindMyTier(_objective(gd), walk).resolve(state, gd, _ctx(), None)
-    assert isinstance(node, WhichSlotIsFurthestBehind)
-    child = node.resolve(state, gd, _ctx(), None)
-    assert isinstance(child, IsThisTargetBlocked)
-    assert child.slot == "shield_slot"
-    assert [slot for slot, _ in walk.sibling_targets] == [
-        "weapon_slot", "helmet_slot", "leg_armor_slot", "boots_slot"]
-
-
-def test_equal_gaps_break_on_the_schema_slot_order_not_the_alphabet():
-    """weapon/helmet/leg_armor/boots are all 1 rung behind with a rung-1
-    target. Alphabetically that is boots, helmet, leg_armor, weapon; the
-    schema declares weapon, shield, helmet, leg_armor, boots, and the schema
-    order is what the walk uses."""
-    gd = _gd()
-    state = make_state(level=15)
-    walk = RootWalk()
-    node = WhichSlotIsFurthestBehind(
-        _objective(gd).gear_targets_with_blockers(state, None), walk)
-    node.resolve(state, gd, _ctx(), None)
-    assert [slot for slot, _ in walk.sibling_targets] == [
-        "weapon_slot", "helmet_slot", "leg_armor_slot", "boots_slot"]
-
-
-def test_equal_gaps_prefer_the_HIGHER_rung_target():
-    """The middle key of `_slot_order`. Both slots are 10 rungs behind; boots
-    is chasing rung 20 and weapon rung 10, and boots must lead even though the
-    schema puts weapon_slot first. Feeding the targets dict straight in is
-    deliberate: this node's input IS a `dict[str, GearTarget]` and the claim
-    under test is the ORDERING, not how the blocker fields were classified."""
-    gd = _gd_two_ways_behind()
-    base = make_state(level=25)
-    state = make_state(level=25,
-                       equipment=dict(base.equipment, boots_slot="iron_boots"))
-    targets = {
-        "weapon_slot": _target(code="iron_club", attainable=True),
-        "boots_slot": _target(code="steel_boots", attainable=True),
-    }
-    assert _tier_gap("weapon_slot", targets["weapon_slot"], state, gd) == 10
-    assert _tier_gap("boots_slot", targets["boots_slot"], state, gd) == 10
-    walk = RootWalk()
-    child = WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
-    assert isinstance(child, IsThisTargetBlocked)
-    assert child.slot == "boots_slot"
-    assert [slot for slot, _ in walk.sibling_targets] == ["weapon_slot"]
-
-
-def test_an_empty_slot_outranks_an_occupied_one_at_the_same_rung():
-    """An empty slot counts as rung 0, strictly below the ladder's first rung
-    — not `tier_of_level(0)`, which IS the first rung. Wearing a rung-1 item
-    and targeting a rung-1 item is a gap of 0; wearing nothing is a gap of 1."""
-    gd = _gd()
-    target = _target(code="leather_boots", attainable=True)
-    empty = make_state(level=15)
-    worn = make_state(level=15,
-                      equipment=dict(empty.equipment, boots_slot="leather_boots"))
-    assert _tier_gap("boots_slot", target, empty, gd) == 1
-    assert _tier_gap("boots_slot", target, worn, gd) == 0
-
-
-# ---------------------------------------------------------------------------
-# WhichSlotIsFurthestBehind — the dead-target demotion
-# ---------------------------------------------------------------------------
-#
-# THE FIXTURE IS HAL'S THREE MEASURED SHAPES, 2026-09-12, level 20:
-#
-#   boots_slot   snakeskin_boots     blocker=spider_leg        live=('spider',)     closes=('spider',)  alive
-#   shield_slot  slime_shield        blocker=king_slimeball    live=('king_slime',) closes=()           DEAD
-#   helmet_slot  hard_leather_helmet blocker=astralyte_crystal live=()              closes=()           alive
-#
-# All three conjuncts of `_is_dead_target` are therefore witnessed BOTH ways by
-# the same three targets, which is what stops any one of them being a branch no
-# input takes. The gear rungs are picked so the dead target is the one the OLD
-# key put FIRST: without the leading term `slime_shield` heads this walk on a
-# gap of 10 against the other two's 1.
-
-
-def _gd_dead_drop() -> GameData:
-    """Two monsters and three blockers: one wall a gear chain opens, one wall
-    nothing opens, and one material no monster drops at all.
-
-    `spider` (200 hp, 10 earth attack, no resistance) is the closing wall — bare
-    the margin is -101, and `bronze_sword` + `hide_vest` carry it positive, so
-    `combat_deficit` returns a chain with `closes` set. `king_slime` (1000 hp,
-    60 earth attack, 50 resistance in every element) is the terminal one: no
-    subset of this catalogue moves it, which is the `MAX_CHAIN` greedy walk
-    returning a deficit that does NOT close rather than no deficit at all.
-    `astralyte_crystal` appears in no `_monster_drops` entry — the SPAWN wall.
-
-    Ladder rungs (1, 10), the same two `_gd()` uses, so `_tier_gap` reads the
-    same arithmetic the rest of this module's ordering tests are calibrated on.
-    """
-    gd = GameData()
-    gd._item_stats = {
-        "slime_shield": ItemStats(code="slime_shield", level=10, type_="shield",
-                                  resistance={"earth": 10}),
-        "snakeskin_boots": ItemStats(code="snakeskin_boots", level=1,
-                                     type_="boots", resistance={"fire": 3}),
-        "hard_leather_helmet": ItemStats(code="hard_leather_helmet", level=1,
-                                         type_="helmet", resistance={"water": 4}),
-        "bronze_sword": ItemStats(code="bronze_sword", level=1, type_="weapon",
-                                  attack={"earth": 16}),
-        "hide_vest": ItemStats(code="hide_vest", level=1, type_="body_armor",
-                               resistance={"earth": 20}, hp_bonus=40),
-        "spider_leg": ItemStats(code="spider_leg", level=1, type_="resource"),
-        "king_slimeball": ItemStats(code="king_slimeball", level=1,
-                                    type_="resource"),
-        "astralyte_crystal": ItemStats(code="astralyte_crystal", level=1,
-                                       type_="resource"),
-    }
-    # `IsThisTargetBlocked` refuses a blocker that is not in the target's own
-    # recipe, so every blocker below is a real ingredient rather than a label.
-    # `snakeskin_boots` takes BOTH materials: that is what lets the same target
-    # witness the closing wall and the terminal one without a second item.
-    gd._crafting_recipes = {
-        "slime_shield": {"king_slimeball": 6},
-        "hard_leather_helmet": {"astralyte_crystal": 1},
-        "snakeskin_boots": {"spider_leg": 2, "king_slimeball": 1},
-    }
-    gd._monster_level = {"spider": 1, "king_slime": 30}
-    gd._monster_hp = {"spider": 200, "king_slime": 1000}
-    gd._monster_attack = {"spider": {"earth": 10}, "king_slime": {"earth": 60}}
-    gd._monster_resistance = {"spider": {},
-                              "king_slime": {"earth": 50, "air": 50,
-                                             "fire": 50, "water": 50}}
-    fill_monster_stat_defaults(gd)
-    gd._monster_locations = {"spider": [(1, 1)], "king_slime": [(3, -1)]}
-    gd._monster_drops = {"spider": [("spider_leg", 10, 1, 1)],
-                         "king_slime": [("king_slimeball", 10, 1, 1)]}
-    return gd
-
-
-def _dead_drop_targets() -> dict[str, GearTarget]:
-    """The three targets, each blocked on its own material.
-
-    Handed in as a dict for the same reason
-    `test_equal_gaps_prefer_the_HIGHER_rung_target` does it: this node's input
-    IS a `dict[str, GearTarget]` and the claim under test is the ORDERING, not
-    how `classify_target` derived the blocker fields.
-    """
-    return {
-        "shield_slot": _target(code="slime_shield", blocker="king_slimeball"),
-        "helmet_slot": _target(code="hard_leather_helmet",
-                               blocker="astralyte_crystal"),
-        "boots_slot": _target(code="snakeskin_boots", blocker="spider_leg"),
-    }
-
-
-def test_the_dead_drop_fixture_is_hals_three_measured_shapes():
-    """Anti-vacuity for every test below: all three `drop_evidence` shapes are
-    DISTINCT here, so a fixture that collapsed two of them — a `king_slime`
-    something could beat, a `spider` nothing could, an `astralyte_crystal` that
-    grew a dropper — would make the conjunct tests agree by accident.
-
-    Also pins the two gaps the ordering depends on: the DEAD target is 10 rungs
-    behind and both live ones 1, so it is the target the pre-demotion key put
-    first and the demotion is the only thing that can move it."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = _dead_drop_targets()
-
-    closing = drop_evidence("spider_leg", state, gd)
-    assert closing.on_live_tiles == ("spider",) and closing.closes == ("spider",)
-    terminal = drop_evidence("king_slimeball", state, gd)
-    assert terminal.on_live_tiles == ("king_slime",) and terminal.closes == ()
-    spawn = drop_evidence("astralyte_crystal", state, gd)
-    assert spawn.droppers == () and spawn.on_live_tiles == ()
-
-    assert _tier_gap("shield_slot", targets["shield_slot"], state, gd) == 10
-    assert _tier_gap("helmet_slot", targets["helmet_slot"], state, gd) == 1
-    assert _tier_gap("boots_slot", targets["boots_slot"], state, gd) == 1
-
-
-def test_a_target_whose_blocker_no_chain_reaches_is_dead():
-    """The `WALL_DROPPER_OUT_OF_REACH` shape, and ONLY it: `king_slimeball` has
-    a live dropper and no chain closes it.
-
-    Kills the mutant that deletes the leading `dead` term from `_slot_order`
-    (the set would still be right but nothing would read it — see the ordering
-    test), and pins the set that the ordering tests below rest on."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    assert dead_target_slots(_dead_drop_targets(), state, gd) == {"shield_slot"}
-
-
-def test_a_blocker_with_no_live_droppers_at_all_stays_alive():
-    """HAL's `hard_leather_helmet`/`astralyte_crystal`: a SPAWN wall, not a
-    combat wall. Nothing drops it, so `closes` is empty for a reason that says
-    nothing about any fight, and a rule that read only "closes is empty" would
-    demote every gather-gated target in the catalogue.
-
-    Kills the mutant that drops `_is_dead_target`'s MIDDLE conjunct
-    (`bool(evidence.on_live_tiles)`): without it `helmet_slot` joins the dead
-    set and this equality fails."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = _dead_drop_targets()
-    assert drop_evidence("astralyte_crystal", state, gd).on_live_tiles == ()
-    assert "helmet_slot" not in dead_target_slots(targets, state, gd)
-
-
-def test_a_target_whose_dropper_a_gear_chain_closes_stays_alive():
-    """HAL's `snakeskin_boots`/`spider_leg`: unbeatable TODAY, and
-    `combat_deficit` names the gear that changes that. The target is expensive,
-    not dead, and demoting it would bury the walk's own route to opening it.
-
-    Kills the mutant that drops `_is_dead_target`'s LAST conjunct (`not
-    evidence.closes`): without it `boots_slot` joins the dead set."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = _dead_drop_targets()
-    assert drop_evidence("spider_leg", state, gd).closes == ("spider",)
-    assert "boots_slot" not in dead_target_slots(targets, state, gd)
-
-
-def test_an_attainable_target_is_never_dead_however_unbeatable_the_world():
-    """`blocker is None` (attainable, or skill-gated) and `blocker == code` (a
-    leaf with no recipe) are the two shapes that are not a claim about a
-    material at all. Neither may consult `drop_evidence`, and neither may be
-    demoted — a skill-gated target is the one thing the walk can always make
-    progress on.
-
-    Kills the mutant that drops `_is_dead_target`'s FIRST conjunct."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = {
-        "shield_slot": _target(code="slime_shield", blocker=None,
-                               blocking_skill="gearcrafting",
-                               blocking_skill_level=20),
-        "boots_slot": _target(code="snakeskin_boots", blocker="snakeskin_boots"),
-    }
-    assert dead_target_slots(targets, state, gd) == frozenset()
-
-
-def test_a_dead_target_sorts_below_a_lower_ranked_live_one():
-    """THE FIX. `slime_shield` is 10 rungs behind against the other two's 1, so
-    on the three history-free components it is the argmax and heads the walk —
-    which is what HAL did live: root `ObtainItem(king_slimeball, 6)`, planner
-    `nodes=6 depth=2 plan_len=0 NO PLAN`, every cycle.
-
-    The leading term is the ONLY thing that can move it, and the schema
-    tiebreak decides the two survivors (helmet is index 3, boots index 6).
-
-    THE MUTANT THIS KILLS: delete the `1 if slot in dead else 0` component from
-    `_slot_order`'s tuple. The head reverts to `shield_slot`."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    walk = RootWalk()
-    child = WhichSlotIsFurthestBehind(_dead_drop_targets(), walk).resolve(
-        state, gd, _ctx(), None)
-    assert isinstance(child, IsThisTargetBlocked)
-    assert child.slot == "helmet_slot"
-    assert [slot for slot, _ in walk.sibling_targets] == ["boots_slot", "shield_slot"]
-
-
-def test_a_dead_target_is_demoted_and_never_dropped():
-    """DEMOTE, NEVER DROP. `slime_shield` is still the best shield this
-    character has and the verdict is a fact about THIS state — a level-30 HAL
-    beats `king_slime` — so a target removed here could never come back.
-
-    It keeps its full place at the TAIL: last among the siblings, and still
-    ranked against any dead peer by the same three components it always was.
-    `_slot_order` is a total order over the whole set either way.
-
-    THE MUTANT THIS KILLS: turn the demotion into a filter (drop dead slots
-    from `targets` before sorting). The head is unchanged, so the test above
-    still passes; this one fails on the missing sibling."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = _dead_drop_targets()
-    walk = RootWalk()
-    WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
-    ranked = ["helmet_slot"] + [slot for slot, _ in walk.sibling_targets]
-    assert set(ranked) == set(targets)
-    assert ranked[-1] == "shield_slot"
-
-
-def test_two_dead_targets_keep_the_old_order_between_themselves():
-    """The leading term is 0/1, not a rank: it separates the live from the dead
-    and decides nothing inside either group. Two dead targets are still ordered
-    by gap, then target rung, then the schema — so the demotion cannot smuggle
-    in the alphabetical tiebreak `feedback_no_alphabetical_tiebreak` forbids
-    (alphabetically `boots_slot` precedes `shield_slot`; by gap the shield
-    leads).
-
-    THE MUTANT THIS KILLS: make the leading term the ONLY term for dead slots
-    (e.g. returning early with a constant tail)."""
-    gd = _gd_dead_drop()
-    state = make_state(level=20)
-    targets = dict(_dead_drop_targets())
-    # boots' blocker moved onto the terminal monster: now BOTH are dead.
-    targets["boots_slot"] = _target(code="snakeskin_boots",
-                                    blocker="king_slimeball")
-    dead = dead_target_slots(targets, state, gd)
-    assert dead == {"shield_slot", "boots_slot"}
-    walk = RootWalk()
-    child = WhichSlotIsFurthestBehind(targets, walk).resolve(state, gd, _ctx(), None)
-    assert child.slot == "helmet_slot"
-    assert [slot for slot, _ in walk.sibling_targets] == ["shield_slot", "boots_slot"]
-
-
-def test_a_gear_target_absent_from_game_data_is_an_error_not_a_default_rung():
-    gd = _gd()
-    with pytest.raises(ValueError, match="no item stats in game data"):
-        _tier_gap("boots_slot", _target(code="phantom_boots"),
-                  make_state(level=15), gd)
 
 
 # ---------------------------------------------------------------------------
@@ -621,107 +182,6 @@ def test_a_blocker_on_an_uncraftable_target_is_an_error():
     with pytest.raises(ValueError, match="not in its recipe"):
         _blocked(_target(code="copper_helmet", blocker="leather"),
                  slot="helmet_slot")
-
-
-# ---------------------------------------------------------------------------
-# IsThereACombatTarget / CanIClearMyTier
-# ---------------------------------------------------------------------------
-
-def test_combat_target_root_is_the_next_rung_up_not_the_one_already_reached():
-    """THE FLIP's correction to spec §5.3, which named `tier_of_level` — the
-    highest rung AT OR BELOW the level, i.e. a root already satisfied. The
-    fixture ladder is (1, 10), so at level 5 the answer is rung 10, and 10 is
-    strictly above 5: an UNMET root, which is the whole point.
-
-    `is_satisfied` is asserted False directly rather than inferred from the
-    level, because that is the property three downstream readers depend on
-    (`objective_needs`'s `char_xp`, `actionable_step`'s descent, and the plan
-    pane's "why") and the number alone does not state it."""
-    gd = _gd()
-    state = make_state(level=5)
-    result = IsThereACombatTarget(RootWalk()).resolve(
-        state, gd, _ctx(combat_monster="chicken"), None)
-    assert result == ReachCharLevel(level=10)
-    assert isinstance(result, ReachCharLevel) and not result.is_satisfied(state, gd)
-
-
-def test_combat_target_root_falls_back_to_the_milestone_past_the_last_rung():
-    """The ladder-exhausted arm of `_next_rung_above`. The fixture ladder tops
-    out at 10, so a level-15 character has no rung above it and the answer is
-    `milestone_pure(15) == 20` — still strictly above the level, and the same
-    trunk milestone `CanIClearMyTier` falls back on."""
-    gd = _gd()
-    state = make_state(level=15)
-    result = IsThereACombatTarget(RootWalk()).resolve(
-        state, gd, _ctx(combat_monster="chicken"), None)
-    assert result == ReachCharLevel(level=20)
-    assert isinstance(result, ReachCharLevel) and not result.is_satisfied(state, gd)
-
-
-def test_combat_target_root_at_the_level_cap_is_the_satisfied_capstone():
-    """THE END THE FIRST DERIVATION DID NOT CHECK. `_next_rung_above` is
-    "strictly above" only while the ladder has a rung left; at the cap it falls
-    back to `milestone_pure`, whose L50 fixed point is 50, so a level-50
-    character DOES get an already-satisfied root and the three consequences the
-    correction was made to remove come back.
-
-    Pinned rather than fixed: there is no level above 50 to name, and
-    `CanIClearMyTier` reaches the same fixed point by the same route. It is the
-    L50 capstone's own open question (`project_l50_unconditional_descent`), and
-    the task-6 report's blanket claim that this arm always names an unreached
-    level was false here."""
-    gd = _gd()
-    state = make_state(level=50)
-    result = IsThereACombatTarget(RootWalk()).resolve(
-        state, gd, _ctx(combat_monster="chicken"), None)
-    assert result == ReachCharLevel(level=50)
-    assert isinstance(result, ReachCharLevel) and result.is_satisfied(state, gd)
-
-
-def test_next_rung_above_refuses_an_empty_ladder_like_its_sibling():
-    """`_next_rung_above` RAISES on a catalogue with no equippable items, the
-    same as `tier_of_level` — the fail-fast parity F6 asked for. It silently
-    returned `milestone_pure` until wave 3a fix-round 1, which would have made
-    the two disagree about one data fault while "tier_of_level correctly
-    refuses it" was the argument six test fixtures were changed on."""
-    with pytest.raises(ValueError, match="no equippable items in game data"):
-        _next_rung_above(GameData(), 5)
-    with pytest.raises(ValueError, match="no equippable items in game data"):
-        tier_of_level(GameData(), 5)
-
-
-def test_no_combat_target_asks_whether_the_tier_is_clear():
-    gd = _gd()
-    child = IsThereACombatTarget(RootWalk()).resolve(
-        make_state(level=15), gd, _ctx(combat_monster=None), None)
-    assert isinstance(child, CanIClearMyTier)
-
-
-def test_a_finished_ladder_resolves_to_the_trunk_milestone(monkeypatch):
-    """The chicken is REQUIRED, not decoration: on the bare `_gd()` the
-    monster table is empty, `normal_band(gd, 1)` is `()` and `tier_cleared` is
-    `all([])`, so `next_uncleared_tier` already returns None and the patch
-    below decides nothing. With a monster in the band the patch is what flips
-    the branch. Fix-round-1."""
-    gd = _gd()
-    gd._monster_level = {"chicken": 1}
-    gd._monster_type = {"chicken": "normal"}
-    assert normal_band(gd, 1) == ("chicken",)
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
-    result = CanIClearMyTier(RootWalk()).resolve(
-        make_state(level=15), gd, _ctx(), None)
-    assert result == ReachCharLevel(level=20)
-
-
-def test_an_open_rung_with_nothing_to_do_is_an_honest_wall(monkeypatch):
-    """Gear wants nothing, no monster in the band is winnable, and a rung is
-    still open. There is no root — reported as None, not dressed up."""
-    gd = _gd()
-    gd._monster_level = {"chicken": 1}
-    gd._monster_type = {"chicken": "normal"}
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: False)
-    assert CanIClearMyTier(RootWalk()).resolve(
-        make_state(level=15), gd, _ctx(), None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -914,7 +374,7 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
     walled = make_state(level=30, skills={"woodcutting": 50, "mining": 16})
     gold = [ObtainItem(code="gold_ore", quantity=1)]
     assert _gather_demand.gather_demand(gold, walled, gd, TIMED_NO_PROFILE_CONTEXT) == {"mining": 20}
-    assert not skill_is_grindable("mining", 17, walled, gd)
+    assert not skill_is_grindable("mining", 17, walled, gd, now=cycle_now())
     assert _orphan_skill_roots(walled, gd, gold, TIMED_NO_PROFILE_CONTEXT) == ()
 
 
@@ -983,187 +443,6 @@ def test_the_orphan_roots_sit_behind_the_trunk(bundle_game_data: GameData):
     assert min(skills) > trunk
 
 
-# ---------------------------------------------------------------------------
-# IsAFightBlockingMe / WhichSlotClosesTheFight (wave 4)
-#
-# These five cases are the STANDING arm of `RegearEdge`, re-homed. They were
-# `test_regear_edge.py::test_an_unwinnable_task_arms_the_latch_without_a_loss`
-# and friends; the arm is now a node, so its coverage lives with the node. The
-# behaviour asserted is the same, one layer down: what used to be "does the
-# latch arm" is now "does the walk take the fight arm".
-# ---------------------------------------------------------------------------
-
-
-
-def _horizon(verdict: str | None):
-    """A `resolve_task_horizon` stand-in. `None` = no reading to take."""
-    def _fake(state, game_data):
-        if verdict is None:
-            return None
-        return TaskHorizon(monster="pig", verdict=verdict, gear_target=None)
-    return _fake
-
-
-def _old_walk(state, gd, ctx, walk=None):  # type: ignore[no-untyped-def]
-    """The pre-objective walk, driven whole from `IsAFightBlockingMe`."""
-    entry: Decision[MetaGoal] | MetaGoal | None = IsAFightBlockingMe(
-        _objective(gd), walk or RootWalk())
-    return resolve_node(entry, state, gd, ctx, None)
-
-
-def _arm(monkeypatch, verdict, combat_monster, gd=None, propped=False, risky=False):
-    """The CHILD `IsAFightBlockingMe` hands the walk to.
-
-    Asserted on the returned node rather than on `walk.trail`: a node appends
-    its own name when ITS `resolve` runs, so one call only ever shows the
-    parent. The child is the decision."""
-    gd = gd or _gd()
-    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
-    node = IsAFightBlockingMe(_objective(gd), RootWalk())
-    return node.resolve(make_state(level=5), gd,
-                        _ctx(combat_monster=combat_monster, combat_propped=propped,
-                             combat_risky=risky), None)
-
-
-def test_an_unwinnable_task_takes_the_fight_arm_without_a_loss(monkeypatch):
-    """No edge, no loss — a STANDING condition, which is the whole point: the
-    latch this replaced needed an event, and a frozen character has no events
-    left to produce one."""
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster=None),
-                      WhichSlotClosesTheFight)
-
-
-def test_no_deficit_leaves_the_walk_on_the_tier_arm(monkeypatch):
-    assert isinstance(_arm(monkeypatch, None, combat_monster=None),
-                      IsMyGearBehindMyTier)
-
-
-def test_a_winnable_alternative_keeps_the_walk_on_the_tier_arm(monkeypatch):
-    """USER (2026-08-22): "not being able to win against a pig is fine. but that
-    shouldn't block us from fighting other, winnable monsters." Read off
-    `ctx.combat_monster` — one fact, one reader."""
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken"),
-                      IsMyGearBehindMyTier)
-
-
-def test_a_potion_propped_target_still_takes_the_fight_arm(monkeypatch):
-    """USER 2026-10-10: "we should work to improve gear over a cheaper xp-grind
-    with substandard gear". The same grind target, standing only on a potion
-    loadout (`ctx.combat_propped`: bare gear has no fight), is no winnable
-    alternative to the gear decisions — they judge bare gear — so the fight's
-    gear is still asked for."""
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken", propped=True),
-                      WhichSlotClosesTheFight)
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="chicken", propped=False),
-                      IsMyGearBehindMyTier)
-
-
-def test_risky_target_asks_for_gear_first(monkeypatch):
-    """USER 2026-10-15: "if all of our fights are below 75% win rates, we
-    probably need better gear". A grind target won below SECURE_WIN
-    (`ctx.combat_risky`) is, like a propped one, no winnable alternative to the
-    gear decisions: the fight's gear is still asked for."""
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="owlbear", risky=True),
-                      WhichSlotClosesTheFight)
-    assert isinstance(_arm(monkeypatch, HORIZON_GEAR, combat_monster="owlbear", risky=False),
-                      IsMyGearBehindMyTier)
-
-
-def test_risky_target_without_gear_still_grinds(monkeypatch):
-    """Risky, a gear deficit, and no gear that closes it: the walk takes the
-    fight arm (the risky target hides no gear — it ASKED for the fight's gear),
-    finds none, and still reaches the trunk through the tier sheet, which wants
-    nothing — a risky fight is fought when there is no gear to build."""
-    gd = _gd()
-    gd._monster_level = {"chicken": 1}
-    gd._monster_type = {"chicken": "normal"}
-    monkeypatch.setattr(tier_progress, "is_winnable", lambda s, g, c, h: True)
-    monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(HORIZON_GEAR))
-    asked: list[str] = []
-
-    def no_gear(state, game_data, actions_of=None):  # type: ignore[no-untyped-def]
-        asked.append("deficit")
-        return None
-    monkeypatch.setattr(_root_mod, "deficit_upgrade_target", no_gear)
-    root = _old_walk(_geared_state(), gd, _ctx(combat_monster="chicken", combat_risky=True))
-    assert asked
-    assert root == ReachCharLevel(level=20)
-
-
-def test_a_potion_propped_only_win_keeps_the_gear_root(monkeypatch):
-    """A character whose only win is potion-propped gets the gear root —
-    exactly the walk of a character with no fight at all. Both gear arms: the
-    tier sheet (no fight held) and the fight's deficit (`HORIZON_GEAR`).
-
-    Driven from `IsAFightBlockingMe` itself: since the global gear objective
-    (Task 5) `resolve_root` enters at `WhichPieceIsNext`, and this subtree is
-    left in place, unreferenced, for Plan C to delete. The trunk-behind-gear
-    half this test also pinned is now structural: no trunk is offered while a
-    piece is missing (`test_decisions_which_piece`)."""
-    gd = _gd()
-    state = make_state(level=15)
-    propped = _ctx(combat_monster="chicken", combat_propped=True)
-    for verdict in (None, HORIZON_GEAR):
-        monkeypatch.setattr(_root_mod, "resolve_task_horizon", _horizon(verdict))
-        monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
-                            lambda state, game_data, actions_of=None: ("ash_club", "weapon_slot"))
-        propped_walk, plain_walk = RootWalk(), RootWalk()
-        on_potions = _old_walk(state, gd, propped, propped_walk)
-        no_fight = _old_walk(state, gd, _ctx(), plain_walk)
-        assert on_potions == no_fight
-        assert propped_walk.trail == plain_walk.trail
-        assert isinstance(on_potions, (ObtainItem, ReachSkillLevel))
-    assert "WhichSlotClosesTheFight" in propped_walk.trail
-
-
-def test_a_futile_deficit_does_not_take_the_fight_arm(monkeypatch):
-    """`HORIZON_OUT_OF_REACH`: nothing closes the fight at this level, so there
-    is nothing to build for it. `means.py` cancels on this verdict; the node
-    must not compete for it."""
-    assert isinstance(_arm(monkeypatch, HORIZON_OUT_OF_REACH, combat_monster=None),
-                      IsMyGearBehindMyTier)
-
-
-def test_a_level_up_verdict_does_not_take_the_fight_arm(monkeypatch):
-    """Served from the EDGE instead (`map_guard`'s surviving arm). Here there is
-    no monster worth fighting, so a level goal would have nothing to grind on;
-    the objective's own XP grind IS the level-up being pursued."""
-    assert isinstance(_arm(monkeypatch, HORIZON_LEVEL_UP, combat_monster=None),
-                      IsMyGearBehindMyTier)
-
-
-def test_the_node_carries_nothing_between_cycles(monkeypatch):
-    """O4, BY EXHIBITION. The freeze was a latch that armed once and held for
-    981 cycles. A fresh node is built per walk, so the same node type asked
-    twice with different answers gives different answers -- there is no state
-    for a stale one to survive in."""
-    gd = _gd()
-    armed = _arm(monkeypatch, HORIZON_GEAR, combat_monster=None, gd=gd)
-    released = _arm(monkeypatch, None, combat_monster=None, gd=gd)
-    assert isinstance(armed, WhichSlotClosesTheFight)
-    assert isinstance(released, IsMyGearBehindMyTier)
-
-
-def test_an_empty_deficit_chain_falls_through_to_the_tier_arm(monkeypatch):
-    """THE HONEST WALL. `IsAFightBlockingMe` routes here on the UNPRICED
-    verdict, but this node re-asks with pricing, and the two orderings can
-    disagree — measured on `l35_artifact_fill` vs `demon`, where the priced walk
-    closes and the unpriced one does not. The reverse is reachable too, and when
-    it happens there is nothing to build for the fight.
-
-    The answer is the objective's own next step, NOT a monster-blind value scan:
-    that scan is what chose `iron_boots` for ten hours and it was deleted with
-    `map_guard`'s branch."""
-    gd = _gd()
-    monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
-                        lambda state, game_data, actions_of=None: None)
-    walk = RootWalk()
-    child = WhichSlotClosesTheFight(_objective(gd), walk).resolve(
-        make_state(level=5), gd, _ctx(), None)
-    assert isinstance(child, IsMyGearBehindMyTier)
-    assert walk.trail == ["WhichSlotClosesTheFight"]
-
-
 # --- the blocked target: what the walk drops, and who needs it ---------------
 
 def test_a_skill_gated_pick_records_the_target_it_could_not_build(
@@ -1199,55 +478,3 @@ def test_an_unblocked_walk_records_no_blocked_target(bundle_game_data) -> None:
                               None)
     assert resolution.root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
     assert resolution.blocked_target is None
-
-
-# --- the pre-objective subtree's step declines (Plan C deletes the subtree) --
-
-def test_the_tier_sheet_never_lets_a_declined_target_head_it():
-    """`IsMyGearBehindMyTier` hands only SERVED targets to the slot walk; a
-    declined one is named with its reason. Driven from the node itself: since
-    the global gear objective `resolve_root` no longer enters here."""
-    gd = _gd()
-    shield_step = ReachSkillLevel(skill="gearcrafting", level=2)
-    walk = RootWalk(step_decline=lambda root: "no_route" if root == shield_step else None)
-    root = _old_walk(make_state(level=15), gd, _ctx(), walk)
-    assert root != shield_step
-    assert walk.declined == {repr(shield_step): "no_route"}
-
-
-def test_the_fight_arm_falls_through_on_a_declined_target(monkeypatch):
-    """`WhichSlotClosesTheFight`: the fight's best acquisition whose step is
-    declined does not head the walk — the arm falls through to the tier sheet,
-    with the decline named."""
-    gd = _gd()
-    monkeypatch.setattr(_root_mod, "deficit_upgrade_target",
-                        lambda state, game_data, actions_of=None: ("ash_club", "weapon_slot"))
-    club = ObtainItem(code="ash_club", quantity=1, slot="weapon_slot")
-    walk = RootWalk(step_decline=lambda root: "no_route" if root == club else None)
-    child = WhichSlotClosesTheFight(_objective(gd), walk).resolve(
-        make_state(level=5), gd, _ctx(), None)
-    assert isinstance(child, IsMyGearBehindMyTier)
-    assert walk.declined == {repr(club): "no_route"}
-
-
-def test_the_fight_arm_prices_its_candidates_through_route_price(monkeypatch):
-    """`WhichSlotClosesTheFight` hands `deficit_upgrade_target` a pricer that
-    is `route_price` on an `ObtainItem` in the candidate's slot — the one
-    pricing import `ai/decisions/` is allowed (O6)."""
-    gd = _gd()
-    priced: list[object] = []
-
-    def price(goal, state, game_data, ctx, history):  # type: ignore[no-untyped-def]
-        priced.append(goal)
-        return 7
-
-    def deficit(state, game_data, actions_of=None):  # type: ignore[no-untyped-def]
-        assert actions_of is not None and actions_of("ash_club", "weapon_slot") == 7
-        return ("ash_club", "weapon_slot")
-
-    monkeypatch.setattr(_root_mod._route, "route_price", price)
-    monkeypatch.setattr(_root_mod, "deficit_upgrade_target", deficit)
-    child = WhichSlotClosesTheFight(_objective(gd), RootWalk()).resolve(
-        make_state(level=5), gd, _ctx(), None)
-    assert isinstance(child, IsThisTargetBlocked)
-    assert priced[0] == ObtainItem("ash_club", 1, slot="weapon_slot")

@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, PIECE_POLICY
 from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.scenario import (
     FAR_FUTURE,
@@ -41,9 +42,8 @@ from artifactsmmo_cli.ai.scenario import (
     scenario_state,
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -58,13 +58,17 @@ COVERED = 20100
 safety floor (the rune is itself the reserved target, so its own price is
 credited back)."""
 
-GOLD_MONSTER = "highwayman"
-"""The cheapest gold per action a level-20 character would fight: level 15,
-4 gold a win."""
+GOLD_MONSTER = "yellow_slime"
+"""The cheapest gold per action a level-20 character would fight: level 2,
+2 gold a win in a 5-second fight. Priced in seconds (ruling "seconds inside",
+2026-10-31) its short fights earn gold fastest; it was the highwayman (level
+15, 4 gold a win, a fight several times as long) while a win counted as one
+fight-equivalent whatever its length. Grey at level 20, so its gold fight is
+the drop_farm variant."""
 
 CAPPED = "imp"
-"""Cheaper gold per action than the highwayman, and level 28: above the
-level-20 character's fight ceiling, so no price counts its gold."""
+"""A gold payer at level 28: above the level-20 character's fight ceiling, so
+no price counts its gold."""
 
 SOLD = "sap"
 SELLER = "timber_merchant"
@@ -109,8 +113,8 @@ def test_a_gold_funded_buy_is_served() -> None:
     assert [repr(a) for a in report.plan] == [f"Fight({GOLD_MONSTER})"]
     fight = report.plan[0]
     assert isinstance(fight, FightAction)
-    assert fight.gold_target == win_gold(GOLD_MONSTER, world) == 4
-    assert fight.drop_farm is False
+    assert fight.gold_target == win_gold(GOLD_MONSTER, world) == 2
+    assert fight.drop_farm is True
 
 
 def test_the_buy_follows_once_the_pocket_covers_it() -> None:
@@ -171,10 +175,10 @@ def test_gold_fight_is_only_for_the_piece() -> None:
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
     actions = player._build_actions()
     declined: list[str] = []
-    plain = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1})
+    plain = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, now=cycle_now())
     assert decompose(plain, state, world, actions, ctx, declined) is None
     assert declined == ["infeasible:lifesteal_rune:no_route:"]
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, actions, ctx)
     assert plan is not None and [repr(a) for a in plan] == [f"Fight({GOLD_MONSTER})"]
 
@@ -200,13 +204,44 @@ def test_the_gold_leg_counts_the_pocket() -> None:
     fight = FightAction(monster_code=GOLD_MONSTER, gold_target=4,
                         locations=frozenset(world.all_monster_locations[GOLD_MONSTER]),
                             learned_drops=LearnedDrops.empty())
-    cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}),
+    cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, now=cycle_now()),
                       plan=[fight], crafting_target=None, plan_level=state.level,
                       goal_repr="g")
     cache.arm_step(cache_holdings(state), world)
     assert cache.step_target == state.gold + 4
     assert cache.batch_satisfied(cache_holdings(replace(state, gold=state.gold + 3)), world) is False
     assert cache.batch_satisfied(cache_holdings(replace(state, gold=state.gold + 4)), world) is True
+
+
+GE_CELL = "l12_ge_book_adequate"
+"""A level-12 character in the busy book, where `copper_dagger` has a 19-gold
+standing sell order and a gather-and-craft chain."""
+
+
+def test_the_walk_ranks_its_routes_on_the_pocket_the_reserve_lets_it_spend() -> None:
+    """A gold-fighting walk counts only the pocket its buy may spend
+    (`spendable_pocket`), in the route ranking as in the bag: from 110 gold
+    and an empty bank, the reserve's 100-gold floor leaves 10, so the
+    dagger's 19-gold fill would fight for gold the reserve keeps (every
+    fight losing in this record), and the walk crafts the dagger instead of
+    fighting toward the fill."""
+    world = shared_world(BUNDLE, with_ge_orders=True)
+    state = replace(scenario_state(SCENARIOS[GE_CELL], world), gold=110, bank_gold=0,
+                    bank_items={})
+    assert spendable_pocket(state, world, frozenset({"copper_dagger"})) == 10
+    player = GamePlayer(character=state.character, history=None)
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    player.seed_offline(state, world)
+    lossy = replace(TIMED_NO_PROFILE_CONTEXT,
+                    fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+    ctx = attached(state, world, lossy, None)
+    goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1}, fight_gold=True,
+                               now=cycle_now())
+    plan = decompose(goal, state, world, player._build_actions(), ctx)
+    assert plan is not None
+    assert [repr(a) for a in plan][-1] == "Craft(copper_dagger×1)"
+    assert not any(isinstance(a, FightAction) for a in plan)
 
 
 def test_each_gold_fight_cycle_re_decides() -> None:
@@ -234,9 +269,9 @@ def test_each_gold_fight_cycle_re_decides() -> None:
 
 
 def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
-    """At level 39 the imp is still the cheapest gold, and pays no XP: the gold
-    fight is the drop_farm variant, which the zero-XP gate lets through, as
-    `select_drop_fight` hunts a grey dropper."""
+    """At level 39 the yellow slime is still the cheapest gold, and pays no
+    XP: the gold fight is the drop_farm variant, which the zero-XP gate lets
+    through, as `select_drop_fight` hunts a grey dropper."""
     world = _world()
     seeded = _player(world)
     assert seeded.state is not None
@@ -247,14 +282,14 @@ def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
     state = player.state
     assert state is not None
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
-    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == CAPPED
-    assert world.xp_per_kill(CAPPED, state.level) == 0
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == GOLD_MONSTER
+    assert world.xp_per_kill(GOLD_MONSTER, state.level) == 0
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, player._build_actions(), ctx)
     assert plan is not None
     fights = [a for a in plan if isinstance(a, FightAction)]
     assert [(repr(a), a.drop_farm, a.gold_target) for a in fights] == [
-        (f"Fight({CAPPED})", True, win_gold(CAPPED, world))]
+        (f"Fight({GOLD_MONSTER})", True, win_gold(GOLD_MONSTER, world))]
     assert plan[-1] is fights[0]
 
 
@@ -270,7 +305,7 @@ def test_no_fight_for_the_gold_monster_is_a_named_decline() -> None:
     actions = [a for a in player._build_actions()
                if not (isinstance(a, FightAction) and a.monster_code == GOLD_MONSTER)]
     declined: list[str] = []
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     assert decompose(piece, state, world, actions, ctx, declined) is None
     assert len(declined) == 1 and declined[0].startswith("unmapped_step:Act(item='gold'"), declined
 
@@ -334,10 +369,15 @@ def _busy() -> tuple[GameData, WorldState, list[object]]:
 
 
 def _crystal_ctx():  # type: ignore[no-untyped-def]
+    """The piece's objective carries its fighter, as every production one does
+    (`gear_objective`): pricing a choice among the walk's minting routes
+    (`acquisition_cost.route_order`) charges spent gold at the fight gold
+    `m*` earns in that fighter's loadout."""
     piece = GearPiece("artifact3_slot", "malefic_crystal", 0, Fraction(1), Fraction(10),
                       SourceKind.BUY)
     return replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
-        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,)))
+        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,),
+        fighter=_busy()[1]))
 
 
 def test_an_l_star_piece_s_currency_step_is_served_by_its_priced_route() -> None:
@@ -356,7 +396,7 @@ def test_a_piece_s_ge_material_is_filled_with_the_pocket_s_gold() -> None:
     world, state, actions = _busy()
     order = world.ge_best_sell_order(SHARD)
     assert order is not None
-    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
+    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True, now=cycle_now())
     rich = replace(state, gold=order[1] * 3 + 1000)
     plan = decompose(goal, rich, world, actions, _crystal_ctx())
     assert plan is not None
@@ -371,7 +411,7 @@ def test_a_piece_s_ge_material_is_filled_with_the_pocket_s_gold() -> None:
     assert isinstance(first[0], FightAction) and first[0].gold_target is not None
     # Not a piece's step: D-E stands, the walk has no GE fill.
     declined: list[str] = []
-    assert decompose(GatherMaterialsGoal(SHARD, {SHARD: 3}), rich, world, actions,
+    assert decompose(GatherMaterialsGoal(SHARD, {SHARD: 3}, now=cycle_now()), rich, world, actions,
                      TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == [f"infeasible:{SHARD}:no_route:{SHARD}"]
 

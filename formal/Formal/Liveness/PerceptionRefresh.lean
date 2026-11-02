@@ -9,20 +9,33 @@ preserves `false`. Hence `Settled_unreachable_without_perception` — the
 objective-committed half of `hfightFires` cannot be discharged in-model without a
 re-arming step. This module supplies that step.
 
-`perceptionRefresh` is the model's faithful image of production's `perceive`:
-below the level cap the `ReachCharLevel` meta-goal is committed and its plan LEADS
-WITH A FIGHT (provided a winnable XP-positive monster exists in the band — that
-proviso is `GearTierLeveling.combatObjective_live_below_fifty`, i.e.
-`WinnableAcrossBand`). That proviso is now DISCHARGED, not assumed: Task 4's
-`WinnableGrounded.winnableAcrossBand_grounded` kernel-proves `WinnableAcrossBand`
-over the live catalog, so `combatTarget_exists_below_fifty` below makes
-target-existence a THEOREM and `arming_justified_below_fifty` shows the set
-`objectiveStepIsFight := true` is BACKED (kernel target-existence + the production
-differential `formal/diff/test_objectivestep_arming_diff.py`, which pins
-`objective_step_goal(ReachCharLevel) → GrindCharacterXPGoal` whenever a target
-exists and we are not in the paying-items-task defer case). So arming
-`objectiveStepFires`/`objectiveStepIsFight` on `level < 50` is DISCHARGED, not a
-free assertion. It arms ONLY those two
+`perceptionRefresh` is the model's image of production's `perceive` below the
+level cap ONCE THE GEAR OBJECTIVE'S `L*` IS HELD (ruling C4-b): the root is then
+`ReachCharLevel(level + 1)` and the grind target is `m*`, so the plan LEADS WITH A
+FIGHT (`GearTierLeveling.fight_armed_of_held`). That a candidate for `m*` exists at
+every band level is a THEOREM: `WinnableGrounded.winnableAcrossBand_grounded`
+kernel-proves `WinnableAcrossBand` over the live catalog
+(`combatCandidate_exists_below_fifty`; `arming_justified_below_fifty` bundles it with
+the set `objectiveStepIsFight := true`) — for the band WITNESS loadout. Production's
+gear objective reads its own predicate (a `_candidates` monster whose `L*` fighter
+wins at the real state with `R > 0`); that such a candidate gives an objective on
+one is the HYPOTHESIS `GearTierLeveling.ObjectiveCovers`, bound by
+`formal/diff/test_gear_objective_link_diff.py`. That the catalogue witness makes
+production's antecedent true at a real state is NOT proved: it is the named
+catalogue→`L*` residual of `LevelFiftyReachableP`. The production differentials are `formal/diff/test_gear_objective_arming_diff.py`
+(both halves of the gear objective's root walk and grind target) and
+`formal/diff/test_objectivestep_arming_diff.py` (`objective_step_goal(ReachCharLevel)
+→ GrindCharacterXPGoal` whenever a target exists and we are not in the
+paying-items-task defer case).
+
+While `L*` is NOT held production fights nothing for XP: the root is a missing
+piece's acquisition (`GearTierLeveling.piece_root_of_not_held`). This module's
+unconditional arming arms the fight anyway, so below the cap it is OPTIMISTIC in
+TWO places: the paying-items-task defer case (below) and the whole not-held phase.
+Neither is modelled here; the second is the named residual "the not-held phase
+terminates and `L*` is held again after a level-up" of `LevelFiftyReachableP`.
+This module survives for the iteration helpers the E/F/D towers consume. It arms
+ONLY those two
 Bools — the chore flags (`hasOverstockItems`, `selectBankDepositsNonempty`, …)
 read inventory composition the Lean model abstracts, so re-arming them would be a
 fabrication; their transience stays the documented `BlockersQuietInfinitelyOften`
@@ -55,6 +68,7 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.GearTierLeveling
 open Formal.Liveness.WinnableGrounded
 open Formal.CombatTargetExistence
+open Formal.GearObjectiveWalk
 
 /-- **The perception-refresh step.** Below the level cap, arm the objective-step
 Bools — the in-model image of production's `perceive` committing the
@@ -78,55 +92,57 @@ by `unfold perceptionRefresh; rw [if_pos]` alone.
 
 The lemmas below establish MODEL FAITHFULNESS *offline* — they are NOT logically
 consumed by proofs that merely need the set value:
-* The kernel half (`combatTarget_exists_below_fifty`, Task 4's
-  `winnableAcrossBand_grounded` fed through `combatObjective_live_below_fifty`) proves a
-  winnable combat target EXISTS at every level `1 ≤ L < 50`.
+* The kernel half (`combatCandidate_exists_below_fifty`, Task 4's
+  `winnableAcrossBand_grounded`) proves a band-witness candidate EXISTS at every level
+  `1 ≤ L < 50`; that production's `L*` fighter then wins is NOT proved (the named
+  catalogue→`L*` residual of `LevelFiftyReachableP`).
 * The production differential (`formal/diff/test_objectivestep_arming_diff.py`) pins that
   when such a target exists and we are NOT in the paying-items-task defer case
   (an items task in progress AND it pays, `held_task_pays`), production's
   `objective_step_goal(ReachCharLevel)` yields a `GrindCharacterXPGoal`, a FIGHT.
 
-Together these ground the model's unconditional arming as a faithful image of production
-behaviour — OUTSIDE the defer-case.  The defer-case (the one production branch yielding
-NO fight below 50) is NOT modelled in `perceptionRefresh` (which abstracts the
-items-task lifecycle away); it lives in the undischarged `BlockersQuietInfinitelyOften`
-residual (`hquiet`) of the capstone. -/
+Together these ground the model's unconditional arming as an image of production
+behaviour ONLY while `L*` is held and outside the defer case. Production yields NO
+fight below 50 in two cases the model does not see:
+* the defer case (an items task in progress that pays): it lives in the
+  undischarged `BlockersQuietInfinitelyOften` residual (`hquiet`) of the capstone;
+* the not-held phase (`L*` missing pieces, `GearTierLeveling.no_xp_fight_of_not_held`):
+  the root is a piece's acquisition. That this phase terminates, and that `L*` is
+  held again after each level-up, is the named residual of `LevelFiftyReachableP`. -/
 
-/-- **Kernel half — a winnable combat target exists below the cap.** Instantiates
-Task 4's `winnableAcrossBand_grounded` through `combatObjective_live_below_fifty`:
-at every level `1 ≤ L < 50` the live catalog's picker returns `some` target. So
-below 50 the objective tier ALWAYS has a Fight to emit — target-existence is a
-THEOREM, not an assumption. -/
-theorem combatTarget_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50) :
-    ∃ target,
-      pickWinnableWindowed L winnableConcrete xpPosConcrete catalogAsMonsters
-        = some target :=
-  combatObjective_live_below_fifty winnableConcrete xpPosConcrete catalogAsMonsters
-    winnableAcrossBand_grounded L hlo hhi
+/-- **Kernel half — a band-witness candidate exists below the cap.** Task 4's
+`winnableAcrossBand_grounded` at one level: the live catalog holds a monster the
+band's WITNESS loadout beats, XP-positive and under the suicide guard. A THEOREM about
+the catalogue; that production's `L*` fighter then wins is the named residual of
+`LevelFiftyReachableP`. -/
+theorem combatCandidate_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50) :
+    ∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
+      notOverleveled L m = true :=
+  winnableAcrossBand_grounded L ⟨hlo, hhi⟩
 
 /-- **The arming is grounded.** Below the cap (and at a real spawn level `1 ≤ s.level`),
 `arming_justified_below_fifty` bundles two components:
-* `.1` — a kernel target-existence proof (from Task 4's `winnableAcrossBand_grounded`):
-  a winnable combat target EXISTS at `s.level`.  Together with the production differential
-  (`test_objectivestep_arming_diff.py`) this establishes that the model's unconditional
-  arming is a FAITHFUL image of production outside the items-task defer-case.  This is
-  the offline grounding — it is NOT logically consumed by capstone proofs that only need
-  `.2`.
+* `.1` — a kernel candidate-existence proof (from Task 4's `winnableAcrossBand_grounded`):
+  a band-witness candidate EXISTS at `s.level`. It does NOT transfer to production's
+  objective (the named catalogue→`L*` residual of `LevelFiftyReachableP`). With the
+  production differential (`test_objectivestep_arming_diff.py`) it grounds the model's
+  arming only while `L*` is held and outside the items-task defer case. It is NOT
+  logically consumed by capstone proofs that only need `.2`.
 * `.2` — the model's set value: `(perceptionRefresh s).objectiveStepIsFight = true`,
   proved by `unfold perceptionRefresh; rw [if_pos]`.  This is what the capstone proof
   term directly consumes.
 
-The model's unconditional arming is OPTIMISTIC vs production: in the paying-items-task
-defer case production returns None (no fight), but `perceptionRefresh` sets `true`
-regardless.  That gap is the items-task component of the undischarged
-`BlockersQuietInfinitelyOften` residual — it is named there, not confronted here. -/
+The model's unconditional arming is OPTIMISTIC vs production in two places: the
+paying-items-task defer case (production returns None; the items-task component of
+the undischarged `BlockersQuietInfinitelyOften` residual) and the not-held phase
+(production fights nothing for XP while `L*` misses a piece; the named not-held
+residual of `LevelFiftyReachableP`). Neither is confronted here. -/
 theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
     (hhi : s.level < 50) :
-    (∃ target,
-        pickWinnableWindowed (s.level : Int) winnableConcrete xpPosConcrete
-          catalogAsMonsters = some target)
+    (∃ m ∈ catalogAsMonsters, winnableConcrete m = true ∧ xpPosConcrete m = true ∧
+        notOverleveled (s.level : Int) m = true)
       ∧ (perceptionRefresh s).objectiveStepIsFight = true :=
-  ⟨combatTarget_exists_below_fifty (s.level : Int) (by exact_mod_cast hlo)
+  ⟨combatCandidate_exists_below_fifty (s.level : Int) (by exact_mod_cast hlo)
       (by exact_mod_cast hhi),
    by unfold perceptionRefresh; rw [if_pos hhi]⟩
 
@@ -134,10 +150,10 @@ theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
 value `objectiveStepIsFight := true` from the `if s.level < 50` branch.  This is
 proved by `unfold perceptionRefresh; rw [if_pos]` alone (no kernel result needed).
 
-For the offline FAITHFULNESS grounding of this set value, see `arming_justified_below_fifty`:
-its `.1` (kernel target-existence, Task 4) + the production differential establish that
-the model faithfully images production outside the items-task defer-case; its `.2` IS
-this theorem.  The unconditional form here is kept for field-preservation callers that
+For the offline grounding of this set value, see `arming_justified_below_fifty`:
+its `.1` (kernel candidate existence, Task 4) + the production differentials ground it
+only while `L*` is held and outside the items-task defer case; its `.2` IS this
+theorem.  The unconditional form here is kept for field-preservation callers that
 only need the Bool; the bundled form is `arming_justified_below_fifty`. -/
 theorem perceptionRefresh_objectiveStepIsFight (s : State) (h : s.level < 50) :
     (perceptionRefresh s).objectiveStepIsFight = true := by

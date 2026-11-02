@@ -13,8 +13,9 @@ scenarios (`l1_fresh`, `l10_weapon_upgrade`, `l10_copper_adequate`,
     level-12 character in a full copper set losing to a 60-hp chicken;
   * that fiction became LOAD-BEARING at the flip. The retired ranking read
     `near_term_gear`, capped by LEVEL and blind to winnability. The resolution
-    walk reads `gear_targets_with_blockers`, which gears for
-    `tier_progress.gear_target_tier` — the rung being CLEARED. With no attack
+    walk read `gear_targets_with_blockers`, which geared for
+    `tier_progress.gear_target_tier` — the rung being CLEARED (all three
+    deleted by plan C Tasks 3 and 6). With no attack
     nothing clears, so `gear_target_tier` pinned to 1 and all four goldens
     collapsed onto ONE answer, `GatherMaterials(ash_wood)`. A golden suite that
     cannot tell four scenarios apart is testing nothing.
@@ -29,6 +30,7 @@ their own descriptions."""
 import json
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from functools import cache
 from pathlib import Path
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -73,8 +75,8 @@ class ScenarioCharacter:
     inference (0 when `bank` is known, None/unknown when `bank` is None) — set
     this to give a scenario bank gold distinct from pocket `gold` WITHOUT
     inflating `gold` itself. Needed because `state.gold` (pocket) and
-    `state.bank_gold` are read by DIFFERENT consumers: `tiers/objective.py`'s
-    `is_attainable_now` (near_term_gear candidacy) reads POCKET gold only,
+    `state.bank_gold` are read by DIFFERENT consumers: `progression/objective.py`'s
+    `near_term_model` (`classify_target`'s feasibility) reads POCKET gold only,
     while `analyze_currency_leaves` (GAP-3/Task 3's reserve-aware gold-buy
     affordability) reads pocket + KNOWN bank gold. A scenario that needs extra
     TOTAL gold to clear the progression-reserve floor for one purchase, without
@@ -116,10 +118,11 @@ class ScenarioCharacter:
     trivially (epic P3, docs/PLAN_events_raids_epic.md)."""
     derive_combat_stats: bool = False
     """When True, scenario_state computes the server-total combat stats
-    (attack/dmg/dmg_elements/resistance/critical_strike/initiative) by
-    summing the equipped items' catalog stats — the server reports totals =
-    base 0 + gear, so this reproduces what a live character wearing this
-    loadout would report. Requires game_data at scenario_state time.
+    (attack/dmg/dmg_elements/resistance/critical_strike/initiative) as the
+    base sheet plus the equipped items' catalog stats — the server reports
+    totals = base + gear, the base being initiative 100 and zero elsewhere
+    (`base_combat_stats`), so this reproduces what a live character wearing
+    this loadout would report. Requires game_data at scenario_state time.
 
     Also derives max_hp = 115 + 5*level + sum(equipped gear hp_bonus) — the
     same base-HP formula the server uses, live-validated against a real
@@ -190,11 +193,27 @@ class _CombatTotals:
     haste: int = 0
 
 
+BASE_STATS = Path(__file__).resolve().parents[3] / "formal" / "sim" / "character_base_stats.json"
+"""The live base sheet: a character's stats with nothing worn
+(`formal/sim/generate_base_stats_table.py`, live-anchored at levels 1, 6 and
+36-41). The server reports base + gear, so a derived state starts here."""
+
+
+@cache
+def base_combat_stats() -> tuple[int, int]:
+    """`(initiative, critical_strike)` of the base sheet: level-invariant, so
+    read from its `combat_stats` (100 and 0; every live anchor reads the same).
+    Its attack and resistance are zero at every level."""
+    combat = json.loads(BASE_STATS.read_text())["provenance"]["combat_stats"]
+    return int(combat["initiative"]), int(combat["critical_strike"])
+
+
 def _derived_combat_totals(
     equipment: dict[str, str | None], game_data: GameData,
 ) -> _CombatTotals:
-    """Sum of every equipped item's catalog stats: a character's base combat
-    stats are zero, so the server's reported totals are exactly the gear sum.
+    """The base sheet (`base_combat_stats`: initiative 100, critical strike
+    0, no attack or resistance) plus every equipped item's catalog stats, so
+    the totals are what the server reports for a character wearing them.
     Utility slots are SKIPPED: boost-family potions fold boost_dmg_*/boost_
     res_*/boost_hp into dmg_elements/resistance/hp_bonus at catalog-build
     time (game_data.py fill), which are combat-time effects the live sheet
@@ -205,8 +224,7 @@ def _derived_combat_totals(
     dmg = 0
     dmg_elements: dict[str, int] = {}
     resistance: dict[str, int] = {}
-    critical_strike = 0
-    initiative = 0
+    initiative, critical_strike = base_combat_stats()
     hp_bonus = 0
     wisdom = 0
     prospecting = 0
@@ -460,6 +478,22 @@ def _ge_market_cell(name: str, *, gearcrafting: int, ge_market: bool,
         ge_market=ge_market, description=description)
 
 
+# HISTORICAL DERIVATIONS. The comments on the scenarios below record how each
+# sheet was BUILT, against rankers plan C has since deleted: `near_term_gear`
+# and the `pursuit_value` ruler it ranked on, `has_structural_upgrade`,
+# `is_attainable_now` (now `progression/objective.feasible_now`),
+# `gear_target_tier`, `bootstrap_potion_target`, `utility_potion_targets` and
+# `_slot_assignments`. A sheet is pinned data; its derivation is the record of
+# why it holds what it holds, not a claim that those functions still run. Each
+# scenario's CURRENT outcome is pinned by its tests (RE-DERIVED notes there).
+# HISTORICAL DERIVATIONS. The comments on the scenarios below record how each
+# sheet was BUILT, against rankers plan C has since deleted: `near_term_gear`
+# and the `pursuit_value` ruler it ranked on, `has_structural_upgrade`,
+# `is_attainable_now` (now `progression/objective.feasible_now`),
+# `gear_target_tier`, `bootstrap_potion_target`, `utility_potion_targets` and
+# `_slot_assignments`. A sheet is pinned data; its derivation is the record of
+# why it holds what it holds, not a claim that those functions still run. Each
+# scenario's CURRENT outcome is pinned by its tests (RE-DERIVED notes there).
 SCENARIOS: dict[str, ScenarioCharacter] = {
     "l1_fresh": ScenarioCharacter(
         name="l1_fresh", level=1, max_hp=120,
@@ -480,10 +514,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"sunflower": 20},
         derive_combat_stats=True,  # wave 3a fix-round 1: see the module note
         # HELD TASK, value "unwinnable and NO gear closes the gap" (measured:
-        # has_combat_deficit True, deficit_upgrade_target None). A dryad is far
-        # out of this build's band, so the deficit walk runs to exhaustion and
-        # names nothing -- the fall-through arm of `deficit_upgrade_target`,
-        # which had no offline witness at all. IN_PROGRESS rather than 0/10 so
+        # has_combat_deficit True, task horizon OUT_OF_REACH). A dryad is far
+        # out of this build's band, so no gear names a close -- the
+        # fall-through arm, which had no offline witness at all. IN_PROGRESS rather than 0/10 so
         # the phase is distinct from ACCEPTED; measured not to move this
         # scenario's chosen root/step/goal/first action.
         task=("dryad", "monsters", 4, 10),
@@ -758,7 +791,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own. Slots that were a fixed point only
             # for the retired flat `combat_raw` sum are re-converged here, so
             # this scenario keeps isolating the gap it was built for instead of
@@ -804,7 +837,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # non-bag slot at its fixed point, which is this scenario's whole
             # isolation methodology.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own. Slots that were a fixed point only
             # for the retired flat `combat_raw` sum are re-converged here, so
             # this scenario keeps isolating the gap it was built for instead of
@@ -868,7 +901,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "snakeskin_boots",
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -931,7 +964,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "snakeskin_boots",
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             "ring1_slot": "gold_ring",
@@ -1008,7 +1041,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # again. Equipping the true argmax restores this scenario's "every
             # other slot at its own fixed point, rune_slot the SOLE target".
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             "weapon_slot": "battlestaff", "helmet_slot": "lucky_wizard_hat",
@@ -1074,7 +1107,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # "no structural gear candidate" design intent (band-adequate), so
             # the XP-outranks-empty-utility verdict is isolated again.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -1106,8 +1139,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # while slot 1 was skipped lived ONLY in that function, which wave 3b
     # deleted (zero production callers since wave 3a stopped reading it) —
     # so as of wave 3b no potion reaches `fallback_roots` at all, stocked or
-    # not (utility slots aren't equipment slots `gear_targets_with_blockers`
-    # sees). This scenario now exercises that absence rather than a win.
+    # not (`L*` wears no potion). This scenario now exercises that absence rather than a win.
     "l20_dual_utility_one_stocked": ScenarioCharacter(
         name="l20_dual_utility_one_stocked", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,
@@ -1117,7 +1149,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # helmet/body RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value) —
             # see l20_dual_utility's comment; same combat-argmax fixed point.
             # RE-FIXED-POINT 2026-08-04 (pursuit_value unification):
-            # `near_term_gear` ranks on `pursuit_value`, whose combat term is
+            # `near_term_gear` ranked on `pursuit_value`, whose combat term is
             # now the ONE gear ruler's own, so slots that were a fixed point
             # only for the retired flat `combat_raw` sum are re-converged here.
             # Without this the scenario leaks unrelated candidates into the
@@ -1184,10 +1216,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "topaz_stone": 28, "wooden_shield": 1,
         },
         derive_combat_stats=True,
-        # HELD TASK, value "unwinnable but a gear chain CLOSES it" (measured:
-        # has_combat_deficit True, deficit_upgrade_target ('iron_sword',
-        # 'weapon_slot')). This is the "I lost, so get gear" link the bot spent
-        # ten hours without; the arm had no offline witness. Measured not to
+        # HELD TASK, value "unwinnable but gear CLOSES it" (measured:
+        # has_combat_deficit True; the task horizon's gear verdict names
+        # `L*(cow)`'s first missing piece, `iron_legs_armor`, plan C Task 2).
+        # This is the "I lost, so get gear" link the bot spent ten hours
+        # without; the arm had no offline witness. Measured not to
         # move this scenario's chosen root/step/goal/first action.
         task=("cow", "monsters", 4, 10),
         description="Live-Robby mirror (2026-07-08): L13, weaponcrafting 5, "
@@ -1280,8 +1313,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                    "amulet_slot": "air_and_water_amulet"},
         bank={"iron_bar": 10},
         derive_combat_stats=True,
-        # HELD TASK, value "workable" (measured: has_combat_deficit False,
-        # deficit_upgrade_target None) -- the NEGATIVE arm of the deficit check,
+        # HELD TASK, value "workable" (measured: has_combat_deficit False, no
+        # task horizon) -- the NEGATIVE arm of the deficit check,
         # which needs a task that IS winnable to be reached at all. Measured not
         # to move this scenario's chosen root/step/goal/first action.
         task=("cow", "monsters", 4, 10),
@@ -1412,9 +1445,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     #
     # `derive_combat_stats=True` is LOAD-BEARING here, not decoration. Without
     # it the character carries zero attack, `is_winnable` is False against every
-    # monster (see the flag's own docstring), and `cheapest_path_to_level` blocks
-    # at rung one — so the scenario would report a flat benefit column for a
-    # reason that has nothing to do with the band position it exists to isolate.
+    # monster (see the flag's own docstring), and no fight is winnable — so
+    # the scenario would report a flat benefit column for a reason that has
+    # nothing to do with the band position it exists to isolate.
     # Both are modelled on `l21_grey_material_grind`'s gear and skill shape so
     # the pair differs from it, and from each other, in LEVEL and nothing else.
     "l19_band_edge": ScenarioCharacter(
@@ -1481,21 +1514,21 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # unwinnable-with-a-closing-chain, 38 unwinnable-with-none.
     #
     # THE SPLIT INVERTED, and the old numbers (37 closing / 9 none) are kept
-    # here only to name what changed: `e6a2e37c` taught `deficit_upgrade_target`
-    # to honour `closes`, so the 29 monsters it used to name gear for — gear
+    # here only to name what changed: `e6a2e37c` taught the deficit walk's
+    # consumer (deleted in plan C Task 2) to honour `closes`, so the 29 monsters it used to name gear for — gear
     # that provably could not win — now correctly report no chain. The three
     # cells below are unaffected: their verdicts were re-measured and each still
     # sits in the arm its comment claims.
     #
-    # The `level_up` band is EMPTY at this loadout: 0 of 58 monsters, which is
-    # why the triple has no fourth member. That verdict IS witnessed, on a
-    # different character: `test_task_horizon.py`'s census (`l10_gearcrafting_gap`
-    # v wolf); `test_held_task.py`'s STARVED rows drive gear and out-of-reach
-    # through `plan_from_state`.
+    # The `level_up` band was EMPTY at this loadout under the deficit walk.
+    # Since plan C Task 2 both gear arms read `L*`: ogre, pig, skeleton and
+    # spider read LEVEL_UP here (the closable cell's ogre among them);
+    # `test_held_task.py`'s STARVED rows drive gear and out-of-reach through
+    # `plan_from_state`.
     # D2 = WORKABLE. `wolf` is winnable at this loadout (P(win) 1.0), so
-    # `has_combat_deficit` is False and `deficit_upgrade_target` is None through
-    # its FIRST return. It was `pig` until the fight gates read the odds (spec
-    # 2026-10-15 fight-gates-odds §1): pig is P 0.76 here, short of 0.8, and
+    # `has_combat_deficit` is False and the task horizon has no reading. It
+    # was `pig` until the fight gates read the odds (spec 2026-10-15
+    # fight-gates-odds §1): pig is P 0.76 here, short of 0.8, and
     # only wolf and highwayman clear it in band.
     # THE ITEMS-TASK CELL, and the only one in the set. Built from the SAME
     # `_held_task_cell` loadout as the monsters triple below, so the one thing
@@ -1535,10 +1568,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         "l32_held_task_workable", ("wolf", "monsters", 4, 10),
         "Held-task triple, value WORKABLE: a wolf task this loadout wins — "
         "the negative arm of the deficit check."),
-    # D2 = UNWINNABLE, A GEAR CHAIN CLOSES IT. The greedy margin walk names
-    # `perfect_bow` unpriced and `earth_boost_potion` under acquisition
-    # pricing — either way it names SOMETHING, which is the "I lost, so get
-    # gear" link the walk's `WhichSlotClosesTheFight` follows.
+    # D2 = UNWINNABLE, A CATALOGUE CHAIN CLOSES IT. The greedy margin walk
+    # names `perfect_bow` unpriced and `earth_boost_potion` under acquisition
+    # pricing. Since plan C Task 2 the task asks `L*(ogre)`, the ACHIEVABLE
+    # loadout, instead: it is held and still loses, and one level closes the
+    # fight, so the horizon reads LEVEL_UP and the task asks for no gear.
     "l32_held_task_closable": _held_task_cell(
         "l32_held_task_closable", ("ogre", "monsters", 4, 10),
         "Held-task triple, value UNWINNABLE-CLOSABLE: an ogre task this "
@@ -1601,8 +1635,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # a recipe ({hardwood_plank:6, ogre_eye:4, hard_leather:2, king_slimeball:2})
     # and `hardwood_plank` is a third ({ash_wood:4, birch_wood:6}).
     #
-    # Reaching it needs a CHARACTER, not a field (design §4.3). `gear_target_tier`
-    # is the rung being CLEARED, so a level-47 character in the best catalogue
+    # Reaching it needed a CHARACTER, not a field (design §4.3). `gear_target_tier`
+    # (deleted in plan C Task 3) was the rung being CLEARED, so a level-47 character in the best catalogue
     # loadout at or below its own level clears through rung 25 and gears for
     # rung 30 — at which the amulet slot's best candidate IS the depth-3 amulet.
     # The slot is left EMPTY so it is the one slot behind its target; every other
@@ -1805,7 +1839,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # Its precondition is the heal stock SATISFIED plus an understocked
     # beneficial boost, so the cell is `l20_relief_full_bank`'s loadout with
     # exactly two things changed: utility1_slot carries the level-20 heal
-    # baseline (`potion_baseline_pure(20, 5, 5, 45, 100)` == 40) so the heal
+    # baseline (40, the deleted level ramp's value at level 20) so the heal
     # deficit closes, and the bag holds three units of each earth_boost_potion
     # ingredient so `_recipe_producible` passes and the ladder sizes 3 runs
     # from held stock rather than a 5-run gather batch.

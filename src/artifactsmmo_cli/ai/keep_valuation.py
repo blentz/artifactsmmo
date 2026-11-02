@@ -61,25 +61,20 @@ from artifactsmmo_cli.ai.requirement_graph import RequirementGraph
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
-MAX_ATTAINABLE_SKILL_LEVEL = GameData.MAX_CHARACTER_LEVEL
-"""The highest crafting-skill level a character can ever reach — the API's
-documented progression cap (`GameData.MAX_CHARACTER_LEVEL`, sourced from
-https://docs.artifactsmmo.com/concepts/stats_and_fights/), which crafting
-skills share with the character level. Derived, not invented: the live catalog's
-highest `crafting_level` is exactly this value, so a recipe gated ABOVE it is a
-recipe no character can ever craft, and the material it consumes has no
-reachable consumer through that recipe."""
 
-
-def consumer_reachable(consumer: str, graph: RequirementGraph) -> bool:
+def consumer_reachable(consumer: str, graph: RequirementGraph,
+                       max_skill_level: int) -> bool:
     """Can a character ever craft `consumer`?
 
     Reads the requirement graph's `craft_skill` — its SINGLE skill-gate
     derivation — rather than re-deriving the gate from `item_stats`. A recipe
     with no craft-skill gate is always reachable; a gated one is reachable iff
-    its level is inside the progression cap."""
+    its level is inside `max_skill_level`, the server's per-skill cap
+    (`GameData.max_skill_level`, loaded from `GET /`): a recipe gated above it
+    is one no character can ever craft, so the material it consumes has no
+    reachable consumer through that recipe."""
     gate = graph.craft_skill.get(consumer)
-    return gate is None or gate[1] <= MAX_ATTAINABLE_SKILL_LEVEL
+    return gate is None or gate[1] <= max_skill_level
 
 
 def reachable_consumer_demand(code: str, game_data: GameData) -> int:
@@ -98,8 +93,9 @@ def reachable_consumer_demand(code: str, game_data: GameData) -> int:
     when some recipe consumes the code, which is what the scan tests), and an
     inversion-equivalent conditional is dead logic, not a decision."""
     graph = game_data.requirement_graph.graph()
+    cap = game_data.max_skill_level
     for consumer, ingredients in graph.edges.items():
-        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph):
+        if ingredients.get(code, 0) > 0 and consumer_reachable(consumer, graph, cap):
             return game_data.max_recipe_demand(code)
     return 0
 

@@ -21,9 +21,10 @@ def gear_components(stats: ItemStats, purpose: object) -> tuple[int, int]:
     EVERY item and every purpose this accepts — the split is a partition of the
     one ruler, not a second ruler.
 
-    This exists so the ECONOMICS layer (`tiers/pursuit_value`, which must let
-    combat dominate utility CROSS-SLOT) can re-read the ruler's own two terms
-    lexicographically rather than re-summing the stats on a scale of its own.
+    It was split out so the ECONOMICS layer (`tiers/pursuit_value`, deleted in
+    plan C Task 6, which had to let combat dominate utility CROSS-SLOT) could
+    re-read the ruler's own two terms lexicographically rather than re-summing
+    the stats on a scale of its own. `gear_value` below still reads it.
     Before this, that layer ran on a flat 8-stat sum (`combat_raw` = attack +
     resistance + hp_restore + hp_bonus + dmg + critical_strike + lifesteal +
     combat_buff) which added a resistance PERCENTAGE to an HP amount to a

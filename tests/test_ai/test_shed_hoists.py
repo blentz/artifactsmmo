@@ -33,15 +33,16 @@ from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.means import MeansKind
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.shed_urgency import bank_shed_hoist, bank_shed_hoist_pure
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -86,7 +87,7 @@ def _state(gd: GameData, *, bank: dict[str, int] | None = None,
 def _drive(gd: GameData, state: WorldState) -> tuple[Goal | None, list]:
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     step = ReachCharLevel(level=12)
     decision = StrategyDecision(interrupt=None, chosen_root=step,
@@ -199,7 +200,7 @@ def test_snapshot_makes_one_batch_a_complete_plan(gd: GameData) -> None:
                              snapshot=drain_snapshot(state, gd, _ctx()))
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
     plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
     assert len(plan) == 2 and isinstance(plan[0], WithdrawItemAction)
     assert plan[1].quantity == plan[0].quantity
@@ -278,7 +279,7 @@ def test_owned_progress_metric_is_unmoved_by_a_withdraw(gd: GameData) -> None:
     assert goal._owned_snapshot_total(landed) == before
     sold = NpcSellAction(npc_code="timber_merchant", item_code="sap",
                          quantity=120,
-                         npc_location=gd.npc_location("timber_merchant")
+                         npc_location=gd.npc_location("timber_merchant"), now=cycle_now()
                          ).apply(landed, gd)
     assert goal._owned_snapshot_total(sold) < before
 

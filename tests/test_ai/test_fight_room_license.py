@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, ChosenLoadout, food_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.fight_room_license import license_fights, refusal_line, refused_fight
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -25,13 +25,13 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachTaskOutcome
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 
 CTX = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="ogre")
 
@@ -56,7 +56,8 @@ def _gd() -> GameData:
 
 
 def _state(inventory_max: int) -> WorldState:
-    """Ten apples in the bag: the recovery eats two a fight, a carry of 40."""
+    """Ten apples in the bag and none to be had: the recovery eats two a
+    fight, a horizon of 40 the ten held bound to a carry of 10 (Task 8c)."""
     return make_state(level=5, hp=100, max_hp=100, attack={"fire": 40}, initiative=1,
                       inventory={"apple": 10}, inventory_max=inventory_max)
 
@@ -66,25 +67,43 @@ def _fight(monster: str) -> FightAction:
                        learned_drops=LearnedDrops.empty())
 
 
-def test_the_carry_past_the_bag_refuses_the_fight_and_keeps_the_carry() -> None:
-    """A bag of 30 holding the 40-apple carry has no room for the bone: the
+def test_the_carry_that_fills_the_bag_refuses_the_fight_and_keeps_the_carry() -> None:
+    """A bag of 10 holding the 10-apple carry has no room for the bone: the
     fight's loop does not run. The cycle's loadout says so by name, the fight
     against the ogre is refused and named, and the keep still holds the apple
     carry: this path does not switch the consumables off."""
     gd = _gd()
-    state = _state(inventory_max=30)
+    state = _state(inventory_max=10)
     loadout = fight_ahead_loadout(state, gd, CTX, None)
     assert loadout is not None
     assert loadout.monster == "ogre" and loadout.runnable is False
     [(food, eaten)] = loadout.food
-    assert food == "apple" and food_carry(eaten) > 30
+    assert food == "apple" and food_carry(eaten, 10, 10) == 10
     ctx = replace(CTX, loadout=loadout)
     assert refused_fight(ctx) == "ogre"
     pool: list[Action] = [_fight("ogre"), _fight("wolf"), RestAction()]
     assert license_fights(pool, ctx) == pool[1:]
     assert refusal_line("ogre") == ("Fight ogre refused: no room in the bag for its drops "
                                     "(the keep and the consumable carry fill it)")
-    assert keep_in_bag("apple", state, gd, ctx) == food_carry(eaten)
+    assert keep_in_bag("apple", state, gd, ctx) == food_carry(eaten, 10, None) == 10
+
+
+def test_the_uncapped_carry_past_the_bag_refuses_no_fight() -> None:
+    """Task 8c (ruling C2-food): a bag of 30 holding the ten apples. The
+    uncapped carry (two a fight × 20 = 40) read past the bag, so the loop read
+    `runnable=False` and `fight_room_license` refused the ogre; the carry is
+    bounded by the ten held, which leave 20 units of room for the bone, so the
+    fight runs and nothing is refused."""
+    gd = _gd()
+    state = _state(inventory_max=30)
+    loadout = fight_ahead_loadout(state, gd, CTX, None)
+    assert loadout is not None and loadout.monster == "ogre"
+    [(food, eaten)] = loadout.food
+    assert food == "apple" and eaten * CARRY_HORIZON_FIGHTS > 30
+    assert loadout.runnable
+    ctx = replace(CTX, loadout=loadout)
+    assert refused_fight(ctx) is None
+    assert license_fights([_fight("ogre")], ctx) == [_fight("ogre")]
 
 
 def test_room_for_the_drops_refuses_nothing() -> None:
@@ -169,7 +188,7 @@ def test_a_refused_fight_is_named_in_the_log(capsys: pytest.CaptureFixture[str])
     with (patch.object(player._arbiter, "select", return_value=(None, [], [])),
           patch.object(player, "_record_decision_targets", return_value=None),
           patch.object(player, "_selection_context", return_value=ctx)):
-        player._decide_band(make_state(), GameData(), [])
+        player._decide_and_select(make_state(), GameData(), [])
     assert refusal_line("ogre") in capsys.readouterr().out
 
 
@@ -205,7 +224,7 @@ is priced by `loadout_for` alone (ruling T14d-2)."""
 
 
 def _grind_fighting_ogre(monkeypatch: pytest.MonkeyPatch, inventory_max: int) -> tuple[object, list[str]]:
-    rung = GatherMaterialsGoal("bone", {"bone": 1})
+    rung = GatherMaterialsGoal("bone", {"bone": 1}, now=cycle_now())
     monkeypatch.setattr(craft_plan_gen_mod, "grind_rung_goal", lambda *a, **k: rung)
     monkeypatch.setattr(craft_plan_gen_mod, "_walk_plan", lambda *a, **k: [_fight("ogre")])
     monkeypatch.setattr(craft_plan_gen_mod, "heal_prep_goal", lambda *a, **k: None)
@@ -220,9 +239,9 @@ def test_a_grinds_fight_with_no_room_for_its_drops_is_refused_at_the_grind(
         monkeypatch: pytest.MonkeyPatch) -> None:
     """T13e re-review minor (1): the grind's fight against the ogre is priced
     by `loadout_for` (the cycle's loadout is the wolf's). Its loop has no room
-    for the drops in a bag of 30, so the grind declines it by name; in a bag of
+    for the drops in a bag of 10, so the grind declines it by name; in a bag of
     200 the grind's legs stand."""
-    plan, declined = _grind_fighting_ogre(monkeypatch, 30)
+    plan, declined = _grind_fighting_ogre(monkeypatch, 10)
     assert plan is None and declined == ["fight_no_room:ogre"]
     plan, declined = _grind_fighting_ogre(monkeypatch, 200)
     assert plan == [_fight("ogre")] and declined == []
@@ -235,7 +254,7 @@ def test_a_task_fight_with_no_room_for_its_drops_is_refused_at_its_step() -> Non
     gd = _gd()
     ctx = replace(CTX, loadout=_WOLF_AHEAD)
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
-    full = replace(_state(inventory_max=30), **held)
+    full = replace(_state(inventory_max=10), **held)
     roomy = replace(_state(inventory_max=200), **held)
     refused: list[str] = []
     assert objective_step_goal(ReachTaskOutcome("ogre"), full, gd, ctx, refused=refused) is None
@@ -252,7 +271,7 @@ def test_the_root_walk_names_a_task_step_refused_for_room() -> None:
     root whose fight has no room for its drops is the refusal's name, not the
     anonymous `no_step_goal`."""
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
-    full = replace(_state(inventory_max=30), **held)
+    full = replace(_state(inventory_max=10), **held)
     decline = player_mod.GamePlayer(character="hero")._step_decline(
         full, _gd(), replace(CTX, loadout=_WOLF_AHEAD), [])
     assert decline(ReachTaskOutcome("ogre")) == "fight_no_room:ogre"
@@ -269,7 +288,7 @@ def test_the_task_steps_prep_and_refusal_share_one_guard(monkeypatch: pytest.Mon
     monkeypatch.setattr(driver_mod, "loadout_for",
                         lambda *a: pytest.fail("the step's pick was read"))
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
-    full = replace(_state(inventory_max=30), **held)
+    full = replace(_state(inventory_max=10), **held)
     goal = objective_step_goal(ReachTaskOutcome("ogre"), full, _gd(), replace(CTX, loadout=_WOLF_AHEAD))
     assert isinstance(goal, TaskKillsGoal) and asked == ["ogre"]
 
@@ -286,7 +305,7 @@ def test_a_task_step_reads_its_fights_pick_once(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(driver_mod, "loadout_for", counting)
     held = {"task_code": "ogre", "task_type": "monsters", "task_total": 5, "task_progress": 0}
     ctx = replace(CTX, loadout=_WOLF_AHEAD)
-    for bag, refused in ((30, True), (200, False)):
+    for bag, refused in ((10, True), (200, False)):
         calls.clear()
         goal = objective_step_goal(ReachTaskOutcome("ogre"), replace(_state(inventory_max=bag), **held),
                                    _gd(), ctx)

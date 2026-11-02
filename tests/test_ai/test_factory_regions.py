@@ -9,7 +9,7 @@ from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd() -> GameData:
@@ -32,14 +32,14 @@ def _regions(actions, kind, code):  # type: ignore[no-untyped-def]
 
 def test_a_fight_per_region() -> None:
     actions = build_actions(_gd(), make_state(), None, bank_accessible=True,
-                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty())
+                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty(), now=cycle_now())
     assert _regions(actions, FightAction, "crab") == [("overworld", ((1, 0),)),
                                                       ("overworld:5,5", ((5, 5),))]
 
 
 def test_a_gather_per_region() -> None:
     actions = build_actions(_gd(), make_state(), None, bank_accessible=True,
-                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty())
+                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty(), now=cycle_now())
     got = [r for r in _regions(actions, GatherAction, "palm_tree")]
     assert got == [("overworld", ((1, 0),)), ("overworld:5,5", ((5, 6),))]
 
@@ -48,7 +48,7 @@ def test_the_layered_path_adds_no_second_copy() -> None:
     gd = _gd()
     gd.world.layered_content = {"crab": [(5, 5, "overworld")]}
     actions = build_actions(gd, make_state(), None, bank_accessible=True,
-                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty())
+                            task_exchange_min_coins=1, learned_drops=LearnedDrops.empty(), now=cycle_now())
     assert len([a for a in actions if isinstance(a, FightAction) and a.monster_code == "crab"
                 and a.travel_region == "overworld:5,5"]) == 1
 
@@ -58,7 +58,7 @@ def _task_actions(state):  # type: ignore[no-untyped-def]
     gd.world.taskmaster_tiles = {"monsters": (1, 0), "items": (4, 13)}
     gd._item_stats = {}
     actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=cycle_now())
     return {type(a).__name__: a.taskmaster_location for a in actions
             if type(a).__name__ in ("TaskCancelAction", "CompleteTaskAction", "TaskTradeAction")}
 

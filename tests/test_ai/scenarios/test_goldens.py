@@ -132,7 +132,7 @@ EXPECTATIONS: dict[str, Golden] = {
     # `GatherMaterials(iron_ore)`: gather materials for a sword the character
     # cannot craft at ANY quantity of iron_ore. This is the exact bug class
     # Task 5 fixes (weaponcrafting frozen at 10 fleet-wide, 2026-08-16 to
-    # 2026-08-22): `CanICraftCurrentTier` now runs BEFORE the monster-drop
+    # 2026-08-22): `CanICraftThisAtAll` now runs BEFORE the monster-drop
     # check, so a skill-gated root raises the skill instead. First action was
     # therefore LevelSkill(weaponcrafting->N), never a gather.
     #
@@ -153,8 +153,13 @@ EXPECTATIONS: dict[str, Golden] = {
     # this golden used to witness — `L*`'s first piece is `iron_sword`, gated
     # at weaponcrafting 10 against 1 — and the grind's first leg withdraws the
     # banked feathers toward its first craft.
+    # RE-DERIVED plan C Task 1 (Review Focus 2, ruling C1-a): the iron pieces
+    # demand mining and woodcutting, whose tools `T*` (copper_pickaxe,
+    # copper_axe, both weaponcrafting 1) are objective codes, so the grind's
+    # `wanted` credit crafts a tool at the same craft level instead of the
+    # throwaway `apprentice_gloves`: the first leg mines the copper for it.
     "l12_taskgated_bag": Golden(
-        goal_class="ReachSkill(weaponcrafting", first_action="Withdraw(feather"),
+        goal_class="ReachSkill(weaponcrafting", first_action="Gather(copper_rocks"),
 }
 
 

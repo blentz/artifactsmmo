@@ -3,8 +3,7 @@
 No gear target can name alchemy: `objective._gear_candidates_by_type` — the
 ONLY builder of the gear sheet `classify_target` reads `blocking_skill` off —
 skips `stats.type_ == "utility"` outright, and alchemy's 25 recipes are 20
-`utility` potions and 5 `consumable`s. A gear target named alchemy in 0 of the
-committed scenarios.
+`utility` potions and 5 `consumable`s.
 
 So alchemy reaches a standalone climb only through `_orphan_skill_roots`, and
 since USER 2026-10-08 ("Only when demanded") only when the goal-action DAG
@@ -22,15 +21,14 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 SKILL = "alchemy"
@@ -85,25 +83,6 @@ def test_alchemys_whole_catalogue_is_utility_or_consumable(
     assert not ITEM_TYPE_TO_SLOTS.get("consumable")
 
 
-def test_no_scenario_produces_a_gear_target_that_names_alchemy(
-        bundle_game_data: GameData) -> None:
-    """The measurement, over the whole corpus: 0 of 42. This is what makes the
-    old docstring's "alchemy is therefore NOT an orphan" false rather than
-    merely unproven — the claim had a witness set and it was empty.
-
-    Every OTHER skill in `GEAR_NAMEABLE` is asserted to appear somewhere in the
-    same sweep, so an empty answer for alchemy cannot be a broken sweep."""
-    objective = CharacterObjective.from_game_data(bundle_game_data)
-    named: set[str] = set()
-    for scenario in SCENARIOS.values():
-        state = derived_scenario_state(scenario, bundle_game_data)
-        for target in objective.gear_targets_with_blockers(state, None).values():
-            if target.blocking_skill:
-                named.add(target.blocking_skill)
-    assert SKILL not in named
-    assert named and named <= GEAR_NAMEABLE
-
-
 # --- the branch that now carries alchemy, reached ---------------------------
 
 def test_alchemy_heads_the_orphan_list_for_this_cell(
@@ -131,7 +110,7 @@ def test_the_alchemy_rung_is_open_and_is_a_potion(
     assert stats is not None
     assert (stats.crafting_skill, stats.type_) == (SKILL, "utility")
     assert stats.crafting_level <= state.skills[SKILL]
-    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data)
+    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data, now=cycle_now())
 
 
 def test_the_alchemy_root_plans_a_grind_cycle(

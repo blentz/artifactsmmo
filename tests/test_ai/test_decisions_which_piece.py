@@ -10,9 +10,11 @@ piece is held the root is one more character level. No objective is the wall.
 
 from collections import Counter
 from dataclasses import replace
+from datetime import UTC, datetime
 from fractions import Fraction
 
 import pytest
+from artifactsmmo_api_client.models.status_schema import StatusSchema
 
 from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
 from artifactsmmo_cli.ai.decisions.root import (
@@ -32,21 +34,21 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
     ReachFleetOutcome,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.source_kind import SourceKind
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state, season_8_status
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_gear_objective import BUNDLE, COPPER, CTX, _novice, _robby
@@ -85,6 +87,24 @@ def test_the_first_missing_piece_is_the_root() -> None:
     assert resolution.blocked_target == "iron_shield"
     assert resolution.alternatives[:2] == (
         ObtainItem("ash_club", 1, slot="weapon_slot"), ObtainItem("leather", 2))
+
+
+def test_the_pieces_are_classified_on_the_contexts_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T8b: the walk's entry and the alternatives `resolve_root` offers
+    classify each crafted piece at the cycle's instant (`ctx.now`), never at the
+    wall clock."""
+    instant = datetime(2026, 1, 1, 12, tzinfo=UTC)
+    seen: list[datetime] = []
+    real = CharacterObjective.classify_target
+
+    def spy(self: CharacterObjective, code: str, state: WorldState, now: datetime) -> GearTarget:
+        seen.append(now)
+        return real(self, code, state, now)
+
+    monkeypatch.setattr(CharacterObjective, "classify_target", spy)
+    _resolve(make_state(level=15), _gd(), _missing(SHIELD, CLUB, LEGS),
+             ctx=replace(_ctx(), now=instant))
+    assert len(seen) >= 4 and set(seen) == {instant}
 
 
 def test_a_zero_gain_piece_keeps_its_place() -> None:
@@ -246,7 +266,7 @@ def test_a_level_up_retargets_without_an_xp_fight(bundle: GameData) -> None:
     first = after.missing[0]
     assert (stats := bundle.item_stats(first.code)) is not None and stats.level == 15
     resolution = _resolve(levelled, bundle, after, ctx=CTX)
-    gear = CharacterObjective.from_game_data(bundle).classify_target(first.code, levelled)
+    gear = CharacterObjective.from_game_data(bundle).classify_target(first.code, levelled, now=cycle_now())
     assert resolution.root == IsThisTargetBlocked(first.slot, gear, RootWalk()).resolve(
         levelled, bundle, CTX, None)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)
@@ -279,6 +299,16 @@ def test_a_piece_the_catalogue_does_not_know_is_refused() -> None:
     ghost = GearPiece("helmet_slot", "no_such_helmet", 0, Fraction(1), Fraction(1), SourceKind.CRAFT)
     with pytest.raises(ValueError, match=r"\['no_such_helmet'\], absent from game data"):
         _resolve(make_state(level=15), gd, _missing(CLUB, ghost))
+
+
+def test_the_trunk_stops_at_the_loaded_level_cap() -> None:
+    """Review Focus 4: a season may move the cap, so the trunk's stop reads
+    the server's `max_level`, never a documented 50. With a cap of 45 a
+    level-45 character is offered no level; level 44 is offered level 45."""
+    gd = _gd()
+    gd._build_server(StatusSchema.from_dict({**season_8_status().to_dict(), "max_level": 45}))
+    assert _resolve(make_state(level=45), gd, _missing()).root is None
+    assert _resolve(make_state(level=44), gd, _missing()).root == ReachCharLevel(level=45)
 
 
 def test_no_trunk_at_the_level_cap() -> None:

@@ -15,13 +15,15 @@ from fractions import Fraction
 from pathlib import Path
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 import artifactsmmo_cli.ai.player as player_mod
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_options
+from artifactsmmo_cli.ai.acquisition_cost import _kind_actions, acquisition_options
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
+from artifactsmmo_cli.ai.decompose_core import Act
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -29,13 +31,14 @@ from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY, LEGACY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -79,10 +82,13 @@ def _evidence(path: Path, game_data, rows) -> LearnedDrops:  # type: ignore[no-u
 def _walk_gathers(state, game_data, evidence, policy=DECOMPOSE_POLICY):  # type: ignore[no-untyped-def]
     """The acquisition walk's GATHER routes to a pearl under `policy`:
     `{resource: gathers a pearl}`. DECOMPOSE_POLICY (the fast path's) offers
-    every pearl spot; LEGACY only the primary one."""
+    every pearl spot; LEGACY only the primary one. A route is priced in planner
+    actions at a gather's measured seconds (ruling "seconds inside",
+    2026-10-31), so the gathers are its price over one gather's."""
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
     options = acquisition_options("small_pearls", state, game_data, ctx, policy=policy)
-    return {o.venue: o.actions_per_application for o in options["small_pearls"]
+    gather = _kind_actions(LogType.GATHERING, ctx)
+    return {o.venue: o.actions_per_application / gather for o in options["small_pearls"]
             if o.kind == "gather"}
 
 
@@ -97,9 +103,9 @@ def _producers(state, game_data, evidence):  # type: ignore[no-untyped-def]
     built with `evidence`, beside the context carrying the same value."""
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=evidence)
+                            learned_drops=evidence, now=cycle_now())
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
-    goal = GatherMaterialsGoal(target_item="small_pearls", needed={"small_pearls": 1})
+    goal = GatherMaterialsGoal(target_item="small_pearls", needed={"small_pearls": 1}, now=cycle_now())
     fast = decompose(goal, state, game_data, actions, ctx)
     searched = GOAPPlanner().plan(state, goal, actions, game_data)
     assert fast is not None and searched
@@ -129,7 +135,7 @@ def test_no_store_prices_the_prior(state, game_data) -> None:
     assert walk["trout_spot"] == 300
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=cycle_now())
     assert _pearl_gather(actions, "trout_spot").gathers(state, game_data) == 300
 
 
@@ -191,8 +197,8 @@ def _player(state, game_data, history) -> GamePlayer:  # type: ignore[no-untyped
 def test_the_player_hands_one_evidence_to_the_actions_and_the_context(
         tmp_path, state, game_data) -> None:
     """Built once a cycle from the store (`_refresh_learned_drops`), the very
-    value the factory's gathers and fights carry and the pricing context
-    (`_band_context`) reads, so the planner and the walk read one model."""
+    value the factory's gathers and fights carry and the cycle's context
+    (`_last_ctx`) reads, so the planner and the walk read one model."""
     store = _store(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     player = _player(state, game_data, store)
     with pytest.raises(ValueError, match="no drop evidence"):
@@ -204,7 +210,6 @@ def test_the_player_hands_one_evidence_to_the_actions_and_the_context(
     carried = [a.learned_drops for a in player._build_actions()
                if isinstance(a, GatherAction | FightAction)]
     assert carried and all(drops is evidence for drops in carried)
-    assert player._band_context("chicken").learned_drops is evidence
     # The trace's plan tree prices through `_last_ctx`, before any decision.
     assert player._last_ctx.learned_drops is evidence
 
@@ -224,9 +229,10 @@ def test_a_context_without_evidence_refuses_to_price_a_drop() -> None:
 
 def test_the_players_other_prices_read_the_cycles_evidence(
         tmp_path, state, game_data, monkeypatch) -> None:
-    """Ruling T16b: the consumable upkeep price (`_consumable_price`) and the
-    role board's work (`_work_of_item`) walk the acquisition routes too, so
-    they price at the cycle's evidence, never an inherited prior."""
+    """Ruling T16b: the role board's work (`_work_of_item`) walks the
+    acquisition routes too, so it prices at the cycle's evidence, never an
+    inherited prior. (The consumable upkeep price went with the band target,
+    plan C Task 4.)"""
     store = _store(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     player = _player(state, game_data, store)
     player._refresh_learned_drops()
@@ -238,16 +244,16 @@ def test_the_players_other_prices_read_the_cycles_evidence(
         return 1
 
     monkeypatch.setattr(player_mod, "acquisition_actions", spy)
-    player._consumable_price("small_health_potion")
     player._work_of_item({"small_pearls": 1}, state, game_data)
-    assert len(seen) == 2 and all(drops is evidence for drops in seen)
+    assert seen == [evidence] and seen[0] is evidence
 
 
 def test_every_pricing_context_carries_the_cycle_clock(state, game_data, monkeypatch) -> None:
     """Ruling FR-IA: the player stamps the cycle clock once (`_stamp_cycle`),
     and every context it derives from `NO_PROFILE_CONTEXT` carries it through
-    `_timed`, never the module's import instant: the band candidate's context
-    and the consumable price's."""
+    `_timed`, never the module's import instant: `_timed` itself and the role
+    board's pricing (ruling C-1: the band candidate's context and the
+    consumable price went with plan C Task 4)."""
     stamp = datetime(2099, 1, 1, tzinfo=UTC)
 
     class _Clock(datetime):
@@ -260,9 +266,28 @@ def test_every_pricing_context_carries_the_cycle_clock(state, game_data, monkeyp
     monkeypatch.setattr(player_mod, "datetime", _Clock)
     player._stamp_cycle()
     assert player._cycle_now == stamp != NO_PROFILE_CONTEXT.now
-    assert player._band_context("chicken").now == stamp
+    assert player._timed(NO_PROFILE_CONTEXT).now == stamp
     seen: list[datetime] = []
     monkeypatch.setattr(player_mod, "acquisition_actions",
                         lambda code, qty, at, gd, ctx, **kw: seen.append(ctx.now) or 1)
-    player._consumable_price("small_health_potion")
-    assert seen and set(seen) == {stamp}
+    player._work_of_item({"small_pearls": 1}, state, game_data)
+    assert seen == [stamp]
+
+
+def test_an_unpriced_walk_serves_the_learned_cheapest_gather(tmp_path, state, game_data) -> None:
+    """Re-review: a walk with no priced route order (`prefer` left at its
+    default, as `potion_supply.prep_supplies`', `gear_objective`'s and the
+    joint-walk census' are) serves gathers in `ObtainModel._ranked_gathers`'
+    order, the learned attempts: the fleet's 1,000 dry salmon gathers move the
+    pearl's first gather from `salmon_spot` (the prior's 1 in 100) to
+    `trout_spot`. The ranking is not dead code behind the priced walk."""
+    def first_gather(evidence: LearnedDrops) -> str:
+        ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
+        answer = ObtainModel(state, game_data, ctx, ctx.now).walk(
+            "small_pearls", 1, DECOMPOSE_POLICY)
+        leg = next(leg for leg in answer.plan if isinstance(leg, Act))
+        return answer.graph.sources[leg.item][leg.route].via
+
+    assert first_gather(LearnedDrops.empty()) == "salmon_spot"
+    evidence = _evidence(tmp_path / "learn.db", game_data, _PEARLS_383_FOR_2 + _SALMON_1000_DRY)
+    assert first_gather(evidence) == "trout_spot"

@@ -38,10 +38,12 @@ def test_the_sweep_is_not_looking_at_nothing() -> None:
     both residuals trivially."""
     found = sweep(PACKAGE)["decision_classes"]
     assert len(found) >= MIN_DECISION_CLASSES, found
-    # The two wave-4 nodes are named explicitly, so a refactor that drops them
-    # fails here rather than silently lowering what the census covers.
+    # The live walk's entry and its slot node are named explicitly, so a
+    # refactor that drops them fails here rather than silently lowering what
+    # the census covers. (The wave-4 fight arm was named here until plan C
+    # Task 2 deleted it.)
     names = {n.split(":", 1)[1] for n in found}
-    assert {"IsAFightBlockingMe", "WhichSlotClosesTheFight"} <= names
+    assert {"WhichPieceIsNext", "IsThisTargetBlocked"} <= names
 
 
 def test_the_funnel_itself_is_exempt() -> None:

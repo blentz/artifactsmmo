@@ -2,9 +2,9 @@
 counts as producible (P3 engagement expansion — tailor leathers @ hides)."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.strategy import _producible
+from artifactsmmo_cli.ai.progression.strategy import _producible
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def test_producible_recognizes_currency_buy_with_gatherable_currency() -> None:
@@ -21,7 +21,7 @@ def test_producible_recognizes_currency_buy_with_gatherable_currency() -> None:
         "leather_boots": ItemStats(code="leather_boots", level=1, type_="boots"),
         "cowhide": ItemStats(code="cowhide", level=1, type_="resource"),
     }
-    assert _producible("leather_boots", make_state(), gd) is True
+    assert _producible("leather_boots", make_state(), gd, now=cycle_now()) is True
 
 
 def _vendor_only_gd() -> GameData:
@@ -53,9 +53,9 @@ def test_producible_credits_held_stock() -> None:
     droppers of its purchase currency unwinnable), so actionable_step
     returned None and the equip leg never fired."""
     gd = _vendor_only_gd()
-    assert _producible("dune_bag", make_state(inventory={"dune_bag": 1}), gd) is True
-    assert _producible("dune_bag", make_state(bank_items={"dune_bag": 1}), gd) is True
-    assert _producible("dune_bag", make_state(), gd) is False
+    assert _producible("dune_bag", make_state(inventory={"dune_bag": 1}), gd, now=cycle_now()) is True
+    assert _producible("dune_bag", make_state(bank_items={"dune_bag": 1}), gd, now=cycle_now()) is True
+    assert _producible("dune_bag", make_state(), gd, now=cycle_now()) is False
 
 
 def test_producible_credits_held_currency_covering_price() -> None:
@@ -65,9 +65,9 @@ def test_producible_credits_held_currency_covering_price() -> None:
     and the buy leg never fired)."""
     gd = _vendor_only_gd()
     assert _producible("dune_bag",
-                       make_state(inventory={"dune_coin": 230}), gd) is True
+                       make_state(inventory={"dune_coin": 230}), gd, now=cycle_now()) is True
     assert _producible("dune_bag",
-                       make_state(inventory={"dune_coin": 229}), gd) is False
+                       make_state(inventory={"dune_coin": 229}), gd, now=cycle_now()) is False
 
 
 def test_a_gold_price_is_producible_by_fighting_for_the_gold() -> None:
@@ -87,6 +87,6 @@ def test_a_gold_price_is_producible_by_fighting_for_the_gold() -> None:
     gd.monsters.min_gold = {"chicken": 1}
     gd.monsters.max_gold = {"chicken": 3}
     fighter = make_state(gold=10, attack={"fire": 50})
-    assert _producible("big_sword", fighter, gd) is True
+    assert _producible("big_sword", fighter, gd, now=cycle_now()) is True
     gd.monsters.max_gold = {"chicken": 0}
-    assert _producible("big_sword", fighter, gd) is False
+    assert _producible("big_sword", fighter, gd, now=cycle_now()) is False

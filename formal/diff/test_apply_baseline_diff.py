@@ -63,6 +63,7 @@ from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import cycle_now
 
 BASELINE_FIELDS: tuple[str, ...] = (
     "attack", "dmg", "dmg_elements", "resistance",
@@ -347,7 +348,7 @@ def test_npc_buy() -> None:
     _assert_preserved(
         state,
         NpcBuyAction(npc_code="merchant", item_code="potion", quantity=1,
-                     npc_location=(2, 0)).apply(state, gd),
+                     npc_location=(2, 0), now=cycle_now()).apply(state, gd),
     )
 
 
@@ -359,7 +360,7 @@ def test_npc_sell() -> None:
     _assert_preserved(
         state,
         NpcSellAction(npc_code="merchant", item_code="trash", quantity=1,
-                      npc_location=(2, 0)).apply(state, gd),
+                      npc_location=(2, 0), now=cycle_now()).apply(state, gd),
     )
 
 

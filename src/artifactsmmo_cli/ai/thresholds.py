@@ -1,7 +1,7 @@
 """Single source of truth for the HP-critical preempt threshold and the
 inventory space-pressure ladder.
 
-Stdlib-only leaf: imports nothing from the decision layers (goals/, tiers/) so
+Stdlib-only leaf: imports nothing from the decision layers (goals/, progression/) so
 any module can depend on it without an import cycle — the very reason these
 constants used to be re-typed in several places. Consolidating them here removes
 that silent-drift risk (DRY backlog Group A, findings #2 and #3).
@@ -46,12 +46,6 @@ PRESSURE_CRITICAL_FRACTION = PRESSURE_CRITICAL_NUM / PRESSURE_CRITICAL_DEN
 # Marginal-fight potion provisioning (spec 2026-06-30).
 UTILITY_SLOT_MAX_STACK = 100       # openapi.json EquipSchema.quantity.maximum
 
-# Level-scaled potion stocking (spec 2026-06-30-potion-supply). Baseline ramps
-# linearly from (level 5 -> 5 potions) to (level 45 -> 100 potions).
-POTION_LOW_LEVEL = 5
-POTION_LOW_QTY = 5
-POTION_HIGH_LEVEL = 45
-POTION_HIGH_QTY = 100             # == UTILITY_SLOT_MAX_STACK
 POTION_GATHER_BATCH = 5           # gather/craft this many when gathering is required
 
 # Batch size for accumulating an item-currency toward a vendor price. The grind

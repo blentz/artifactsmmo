@@ -29,8 +29,8 @@ from artifactsmmo_cli.ai.party_lease_core import PartyLease, on_tile
 from artifactsmmo_cli.ai.world_state import WorldState
 
 HOLD_SECONDS = 20
-"""One hold's pause. A party boss fight's cooldown runs 45-180 s (the probes
-and `party_loop`), so a member reads its state back a few times per fight —
+"""One hold's pause. A party boss fight's cooldown runs 45-180 s (the
+probes), so a member reads its state back a few times per fight —
 one character read per hold, on the per-IP request budget."""
 
 

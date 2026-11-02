@@ -34,10 +34,15 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Floors, not exact counts: a new Decision must not have to touch this file,
-# but a sweep that goes blind must. `decisions/obtain_item.py` holds six
-# classes and five edges; `decisions/root.py` holds five and four.
-_MIN_CLASSES = 13
-_MIN_EDGES = 11
+# but a sweep that goes blind must. `decisions/obtain_item.py` holds seven
+# classes and six edges; `decisions/root.py` holds `IsThisTargetBlocked` and
+# `decisions/which_piece_is_next.py` holds `WhichPieceIsNext`, neither with a
+# static edge (the entry names its child through a module attribute). The
+# floors were 13 and 10 until plan C Task 3 deleted the tier walk
+# (`IsMyGearBehindMyTier`, `WhichSlotIsFurthestBehind`,
+# `IsThereACombatTarget`, `CanIClearMyTier`) and its edges.
+_MIN_CLASSES = 9
+_MIN_EDGES = 6
 
 
 def _decision_classes() -> list[type]:
@@ -66,7 +71,7 @@ def static_child_edges(classes: list[type]) -> dict[str, set[str]]:
     `return`. Fix-round-1: scoping the walk to `ast.Return` UNDER-approximated
     and the docstring claimed the opposite. The two-line idiom
 
-        child = IsThereACombatTarget(...)
+        child = IsThisTargetBlocked(...)
         return child
 
     hides an edge from a return-scoped walk, and `strategy_driver.py:639`
@@ -123,9 +128,7 @@ def test_the_sweep_sees_the_whole_graph():
     assert sum(len(v) for v in edges.values()) >= _MIN_EDGES, edges
     # Named pins, so the floors above cannot be met by one module alone.
     assert "CanIAffordTheCurrencyLeaf" in names
-    assert "IsMyGearBehindMyTier" in names
-    assert edges["IsMyGearBehindMyTier"] == {"IsThereACombatTarget",
-                                             "WhichSlotIsFurthestBehind"}
+    assert {"WhichPieceIsNext", "IsThisTargetBlocked"} <= names
 
 
 def test_the_decision_graph_is_acyclic():

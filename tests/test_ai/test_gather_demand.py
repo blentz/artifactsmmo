@@ -2,7 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_demand import gather_demand
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 

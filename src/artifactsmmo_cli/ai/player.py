@@ -60,7 +60,7 @@ from artifactsmmo_cli.ai.bag_clear import (
     related_codes,
     roomy,
 )
-from artifactsmmo_cli.ai.best_loadout import BestLoadout, best_loadout, candidate_potions, fight_ahead_loadout
+from artifactsmmo_cli.ai.best_loadout import fight_ahead_loadout
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.combat import (
@@ -70,7 +70,6 @@ from artifactsmmo_cli.ai.combat import (
     predict_win,
     win_probability,
 )
-from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
@@ -97,7 +96,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 )
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
-from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
+from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, is_dual_role
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.failure_recovery_core import (
     STATE,
@@ -126,13 +125,15 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
-from artifactsmmo_cli.ai.grind_heal_prep import HEAL_PREP_POLICY
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
     STALL_CYCLES,
+    DropKey,
+    leg_progressed,
     progress_measure,
     progressed,
     record_turn,
@@ -143,12 +144,13 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
+    committed_kind_seconds,
     committed_timing,
     fetch_fleet_bootstrap,
+    learned_kind_seconds,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.learning.xp_gain import xp_gained
@@ -158,14 +160,13 @@ from artifactsmmo_cli.ai.loadout_profiles import (
     gather_key,
     party_combat_key,
 )
-from artifactsmmo_cli.ai.loop_rate import food_menu
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.objective_demand import objective_demand
 from artifactsmmo_cli.ai.objective_step_fight_core import items_task_active
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_card import card_json, card_state
 from artifactsmmo_cli.ai.party_lease_core import PartyLease, assembled
-from artifactsmmo_cli.ai.party_loop import PartyLoop, best_party_loop
 from artifactsmmo_cli.ai.party_win import party_chosen_loadout, wears_party_loadout
 from artifactsmmo_cli.ai.plan_cache import PlanCache, cache_holdings
 from artifactsmmo_cli.ai.plan_report import PlanReport
@@ -173,7 +174,18 @@ from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
-from artifactsmmo_cli.ai.potion_supply import potion_level_ramp
+from artifactsmmo_cli.ai.progression import (
+    CharacterObjective,
+    ObtainItem,
+    StrategyDecision,
+    StrategyEngine,
+)
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import (
+    MetaGoal,
+)
+from artifactsmmo_cli.ai.progression.root_group import root_group_of
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.progression_reserve import account_gold, progression_reserve, reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
@@ -212,24 +224,9 @@ from artifactsmmo_cli.ai.strategy_driver import (
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import pool_draw
-from artifactsmmo_cli.ai.tiers import (
-    CharacterObjective,
-    ObtainItem,
-    StrategyDecision,
-    StrategyEngine,
-)
-from artifactsmmo_cli.ai.tiers.band_target import BandTarget, band_combat_target
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    MetaGoal,
-)
-from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.root_group import root_group_of
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, TASKS_COIN_CODE, WorldState
-from artifactsmmo_cli.ai.xp_demand import demand_roots, xp_demand
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
@@ -445,7 +442,6 @@ class GamePlayer:
         self._task_exchange_min_coins: int = 1
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
-        self._last_path_plan: PathPlan | None = None
         self._cycle_observer = cycle_observer
         self._planning_observer: Callable[[bool], None] | None = None
         # Authoritative aged open-order list, persisted independently of
@@ -483,6 +479,9 @@ class GamePlayer:
         # and the offline worlds' fit from the committed live capture, set by
         # `seed_offline`, which replaces the live fit entirely.
         self._bootstrap: FleetBootstrap | None = fight_bootstrap
+        # Per planned drop `(source, item)`, the consecutive successful legs
+        # whose drop did not land (`intention_progress.leg_progressed`).
+        self._dry_streaks: dict[DropKey, int] = {}
         self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
         # The cycle's drop evidence (ruling T16a), refreshed once per cycle by
         # `_refresh_learned_drops` before the actions and the context are
@@ -729,7 +728,7 @@ class GamePlayer:
     def _record_decision_targets(self, decision: "StrategyDecision") -> str | None:
         """The chosen step's item code.
 
-        ONE PRODUCER. `_decide_band` and `plan_from_state` each carried
+        ONE PRODUCER. `_decide_and_select` and `plan_from_state` each carried
         their own copy of this derivation — `plan_from_state`'s docstring says it
         "mirrors run()'s per-cycle decide+select", and a mirror is what it was:
         the copies drifted the moment `blocked_target` was added to one of them,
@@ -750,7 +749,7 @@ class GamePlayer:
         self._last_decide_crafting_target = crafting_target
         return crafting_target
 
-    def _decide_band(
+    def _decide_and_select(
         self,
         state: "WorldState",
         game_data: GameData,
@@ -773,10 +772,9 @@ class GamePlayer:
         step_decline = self._step_decline(planned, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
-        # inside it: the unified objective runs one `cheapest_path_to_level` walk
-        # per candidate, and each walk asks `is_winnable` about every monster at
-        # or above a level. Uncached that is ~3.6k SQL reads per walk (~400ms);
-        # cached, ~30ms. Sound for the same reason the planner's own cache is —
+        # inside it: the decision's walks ask `is_winnable` about many monsters,
+        # each a learning-store read when uncached. Sound for the same reason
+        # the planner's own cache is —
         # nothing here writes the learning DB — and `search_cache` is reentrant,
         # so the planner's nested enter reuses this one instead of shadowing it.
         with (self.history.search_cache() if self.history is not None
@@ -806,29 +804,6 @@ class GamePlayer:
                   "and every stack is related to the plan or cannot move")
         return selected_goal, plan, goals_tried
 
-    def _tree_band_adequate(self) -> bool:
-        """The real progression-band adequacy verdict: a winnable monster
-        exists for the current loadout AND no positive-gain structural
-        upgrade is reachable. Pre-wave-3a this was wired into `decide_tree`'s
-        `band_adequate` parameter (via `StrategyEngine.decide`); THE FLIP
-        (wave 3a) removed that parameter along with the ranking it fed, and
-        nothing calls this method any more — a deliberate deferral (branch
-        review, wave-3a-final), not a bug this task fixes. The upgrade leg is
-        tier-aware
-        (2026-07-07 live-shadow correction: a full COPPER set at L14 read as
-        adequate under the old empty-armor-slot leg and the tree never
-        geared) and SUBSUMES the old empty-slot check — an empty slot is a
-        gain-from-zero candidate. Both legs are existing cores
-        (`_pick_winnable_monster`, `has_structural_upgrade`) — pure
-        composition, not new decision logic. Callers must have
-        state/game_data/objective seeded."""
-        assert self.state is not None
-        assert self.game_data is not None
-        assert self._objective is not None
-        return (self._pick_winnable_monster() is not None
-                and not has_structural_upgrade(self.state, self.game_data,
-                                               self._objective))
-
     def _plan_or_reuse(
         self,
         state: "WorldState",
@@ -838,6 +813,8 @@ class GamePlayer:
         """Reuse the cached plan unless should_replan fires. Returns
         (selected_goal, plan, goals_tried, replanned)."""
         cache = self._plan_cache
+        if cache is not None:
+            cache.on_cycle_clock(self._cycle_now)
         step = cache.current() if cache is not None else None
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = (step is not None and step.is_applicable(state, game_data)
@@ -855,7 +832,7 @@ class GamePlayer:
             refreshing = refresh_only(
                 cache, self._last_outcome, state.level,
                 goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL, party_called)
-            selected_goal, plan, goals_tried = self._decide_band(state, game_data, actions)
+            selected_goal, plan, goals_tried = self._decide_and_select(state, game_data, actions)
             if refreshing and cache is not None and selected_goal is not None \
                     and repr(selected_goal) == cache.goal_repr:
                 # The same goal again: keep the committed plan (its legs are
@@ -934,7 +911,7 @@ class GamePlayer:
         goal_data = json.loads(row.goal_json)
         if not goal_data or "type" not in goal_data:
             return  # goal was not a plan-bearing type — re-plan cold
-        goal = goal_from_dict(goal_data, game_data)
+        goal = goal_from_dict(goal_data, game_data, self._cycle_now)
         by_repr = {repr(a): a for a in self._build_actions()}
         tail = json.loads(row.plan_json)[row.cursor:]
         if game_data is None:
@@ -1049,7 +1026,7 @@ class GamePlayer:
         # game_data.active_event_codes from the freshly-fetched active
         # events): an offline state that declares active events must surface
         # the same event monster/resource/NPC spawns the live planner sees,
-        # or event-gated attainability (near_term_gear via
+        # or event-gated attainability (the obtain model's drop routes via
         # monster_spawn_known) is silently inert in scenarios.
         self.game_data.active_event_codes = set(state.active_events)
         # Same overlay for raids: an open raid opens the RESTRICTED areas, so
@@ -1108,15 +1085,15 @@ class GamePlayer:
         state = self.state
         ctx = self._selection_context()
         self._last_ctx = ctx
-        # Built BEFORE the decision, as `run()` builds it before `_decide_band`:
+        # Built BEFORE the decision, as `run()` builds it before `_decide_and_select`:
         # the root walk asks each gear target's step against this pool
         # (`_step_decline`), and the arbiter selects over the same one.
         actions = self._build_actions()
         # `history` and the search cache are wired here — NOT just in
-        # `_decide_band` — because the whole point of this site is to SHOW what
+        # `_decide_and_select` — because the whole point of this site is to SHOW what
         # production would decide, and a decide site that silently omits an
         # argument production passes is the two-plan-producers trap. It must
-        # keep mirroring `_decide_band` argument for argument.
+        # keep mirroring `_decide_and_select` argument for argument.
         planned = self._net_sibling_gold(state)
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
@@ -1226,6 +1203,10 @@ class GamePlayer:
                 assert self._strategy is not None
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions)
+                # A fleet currency's shortfall is farmed by one character: the
+                # farm this cycle runs holds the election (ticket farm,
+                # 2026-10-31).
+                self._claim_currency_farm(selected_goal, state, game_data)
                 # Whether the arbiter could actually plan this cycle's supply
                 # goal is the evidence `decide_role`'s release-on-unservable
                 # rule runs on, and this is the only point it exists.
@@ -1277,7 +1258,6 @@ class GamePlayer:
                         "objective_unplannable": (
                             self._arbiter.objective_unplannable if replanned else None),
                         "goal_rank": goal_rank_trace,
-                        **self._path_trace_snapshot(),
                     }
                     self._emit_trace(
                         action_name="<no_plan>",
@@ -1442,8 +1422,14 @@ class GamePlayer:
                     outcome == "ok" or outcome == "error:cooldown"
                     or outcome == self.RATE_LIMITED_OUTCOME
                 )
-                self._track_intention(selected_goal, prev_state_for_learning,
-                                      new_state, outcome == "ok")
+                # A successful leg planned for a drop that did not land moved
+                # nothing once that drop's `(source, item)` dry streak is past
+                # luck (`intention_progress.leg_progressed`: the ticket farm,
+                # live 2026-10-31).
+                self._track_intention(selected_goal, prev_state_for_learning, new_state,
+                                      leg_progressed(self._dry_streaks, executed_action,
+                                                     prev_state_for_learning, new_state,
+                                                     outcome == "ok", game_data))
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action=action,
@@ -1466,7 +1452,6 @@ class GamePlayer:
                     "objective_unplannable": (
                         self._arbiter.objective_unplannable if replanned else None),
                     "goal_rank": goal_rank_trace,
-                    **self._path_trace_snapshot(),
                 }
                 self._emit_trace(
                     action_name=repr(action),
@@ -1510,17 +1495,26 @@ class GamePlayer:
             self._coordination.release_bank_stock()
 
     def _net_sibling_gold(self, state: WorldState) -> WorldState:
-        """`state` with the bank's gold less what siblings have claimed to
-        withdraw (`CoordinationStore.sibling_bank_claims` under `GOLD_CODE`):
-        the gold this character may plan to spend. A VIEW for the decision,
-        never stored on `self.state`: the bank is re-read only every
-        `BANK_REFRESH_INTERVAL` actions, so netting the held state would
-        subtract the same claim again every cycle. An unread bank (None) stays
-        unknown."""
-        claimed = self._sibling_bank_claims.get(GOLD_CODE, 0)
-        if state.bank_gold is None or claimed <= 0:
+        """`state` with the bank less what siblings have claimed to withdraw
+        (`CoordinationStore.sibling_bank_claims`): its gold less the claim
+        under `GOLD_CODE`, the gold this character may plan to spend, and
+        each banked item less its claim, the stock it may plan to withdraw
+        (the ticket farm, live 2026-10-31: two characters planned
+        `Withdraw(event_ticket)` against one bank and one drew HTTP 404). A
+        VIEW for the decision, never stored on `self.state`: the bank is
+        re-read only every `BANK_REFRESH_INTERVAL` actions, so netting the
+        held state would subtract the same claim again every cycle. An unread
+        bank (None) stays unknown."""
+        claims = self._sibling_bank_claims
+        if not any(quantity > 0 for quantity in claims.values()):
             return state
-        return replace(state, bank_gold=max(0, state.bank_gold - claimed))
+        gold = claims.get(GOLD_CODE, 0)
+        bank_gold = (state.bank_gold if state.bank_gold is None or gold <= 0
+                     else max(0, state.bank_gold - gold))
+        items = (None if state.bank_items is None else
+                 {code: left for code, held in state.bank_items.items()
+                  if (left := held - max(0, claims.get(code, 0))) > 0})
+        return replace(state, bank_gold=bank_gold, bank_items=items)
 
     def _claim_ge_order(self, action: GeCancelOrderAction) -> None:
         """Announce to siblings that this character is cancelling
@@ -2408,6 +2402,9 @@ class GamePlayer:
             "fleet_total": self._turn_in.fleet_total,
             "buyer": self._turn_in.buyer,
             "role": "buyer" if self._turn_in.buyer == self.character else "holder",
+            # A not-ready claim names the shortfall's farmer, who buys only
+            # once the fleet can pay (`TurnIn.ready`, review M6).
+            "ready": self._turn_in.ready,
         }
 
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
@@ -2499,8 +2496,6 @@ class GamePlayer:
             # key back into GET /my/logs if the transcript is ever wanted — the
             # TUI fight modal reads the same key (see tui/screens/fight_screen).
             record["fight"] = fight.model_dump(exclude={"logs"})
-        if self.game_data is not None:
-            record["gear"] = {"adequate": self._pick_winnable_monster() is not None}
         if self._strategy is not None and self.game_data is not None:
             # Phase 4b (THE FLIP): `record["strategy"]` carries the
             # progression-tree decision — decide() delegates to decide_tree —
@@ -2511,7 +2506,7 @@ class GamePlayer:
             # `ctx` is what makes a node with a ready `ai/obtain_sources` route a
             # LEAF in the tier descent, so omitting it here traced a from-scratch
             # descent the bot never ran (whole-branch review, MINOR 5).
-            # `_last_ctx` is this cycle's context, computed in `_decide_band` /
+            # `_last_ctx` is this cycle's context, computed in `_decide_and_select` /
             # the decide path above.
             # THE THIRD CALL SITE. It is a fallback — `_last_decision` is None
             # only on a trace emitted before any real decide() this session —
@@ -2770,6 +2765,7 @@ class GamePlayer:
             bank_accessible=not self._blockers.is_blocked("bank"),
             task_exchange_min_coins=self._exchange_min_coins(),
             learned_drops=self._cycle_learned_drops(),
+            now=self._cycle_now,
         )
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
@@ -2840,7 +2836,6 @@ class GamePlayer:
             )
             if isinstance(raw_abandoned, dict) else None
         )
-        plan = self._last_path_plan
         # Cooldown remaining at snapshot time (post-action; the server-set
         # cooldown the bot will wait through before the next cycle).
         cooldown_remaining = 0.0
@@ -2879,10 +2874,6 @@ class GamePlayer:
             outcome=outcome,
             goal_rank=[GoalRankEntry(goal=str(e["goal"]), priority=float(e["priority"]))
                        for e in goal_rank_trace],
-            path_next_action=plan.next_action_monster if plan else None,
-            projected_cycles_to_max=(
-                plan.total_cycles if plan and plan.total_cycles != float("inf") else None
-            ),
             max_level=self.game_data.max_character_level if self.game_data else 0,
             remaining_levels=max(
                 0, (self.game_data.max_character_level if self.game_data else 0) - self.state.level,
@@ -2893,7 +2884,8 @@ class GamePlayer:
             plan_len=int(stats.get("plan_len", 0)),
             goals_tried=goals_tried,
             objective_unplannable=objective_unplannable,
-            path_blocked=bool(stats.get("path_blocked", False)),
+            gear_objective=(None if self._last_ctx is NO_PROFILE_CONTEXT
+                            else gear_objective_line(self._last_ctx.gear_objective)),
             chosen_root=(repr(self._last_decision.chosen_root)
                          if self._last_decision is not None
                          and self._last_decision.chosen_root is not None else None),
@@ -2924,87 +2916,6 @@ class GamePlayer:
         )
         self._cycle_observer(snap)
 
-    def _path_trace_snapshot(self) -> dict[str, object]:
-        """G-I: small dict of root-objective state to merge into trace records."""
-        max_lvl = self.game_data.max_character_level if self.game_data else 0
-        cur_lvl = self.state.level if self.state else 0
-        snapshot: dict[str, object] = {
-            "max_level": max_lvl,
-            "remaining_levels": max(0, max_lvl - cur_lvl),
-        }
-        plan = self._last_path_plan
-        if plan is not None:
-            snapshot["projected_cycles_to_max"] = (
-                round(plan.total_cycles, 1) if plan.total_cycles != float("inf") else "inf"
-            )
-            snapshot["path_next_action"] = plan.next_action_monster
-            snapshot["path_blocked"] = plan.blocked
-        return snapshot
-
-    def _path_aligned_monster(self) -> BandTarget | None:
-        """Return the band's pick — the winnable monster in the next uncleared
-        tier's band with the most XP per second over its best loadout — or
-        None if the ladder is finished, or the band holds nothing winnable (a
-        gear wall — see `band_target`'s module docstring; the two None cases
-        are deliberately not distinguished here).
-
-        G-I: `cheapest_path_to_level`'s candidate filter floors at level 1,
-        so its `next_action_monster` used to outrank the windowed picker at
-        tier 3 and left four of five live characters grinding 4-10 levels
-        below themselves. `band_combat_target` bounds candidates to the
-        character's current tier band instead, so a target far below the
-        character can never be drawn.
-        """
-        if self.game_data is None or self.state is None:
-            return None
-        # `cheapest_path_to_level` is still run and cached here (when a
-        # store is available) so `_last_path_plan` stays populated for the
-        # trace (projected_cycles, path_next_action, path_blocked). Its
-        # `next_action_monster` is a diagnostic ONLY now, never a decision
-        # input — the band target below decides, and it tolerates a missing
-        # store (`band_combat_target`'s `history` parameter is Optional).
-        if self.history is not None:
-            self._last_path_plan = cheapest_path_to_level(
-                self.game_data.max_character_level, self.state, self.history, self.game_data,
-                self._timing()[0],
-            )
-        return band_combat_target(self.state, self.game_data, self.history,
-                                  self._consumable_price, self._band_loadout, self._band_party)
-
-    def _band_loadout(self, monster: str) -> BestLoadout:
-        """`best_loadout` against one band monster, for `band_combat_target`'s
-        rank (USER 2026-10-10, "loadout picks the monster").
-
-        Priced as if `monster` were the grind target: a buy is converted at
-        the grind target's gold rate (`gold_rate.gold_per_second`), and
-        the band is choosing that target, so each candidate is priced at its
-        own — the rate the cycle's loadout (`fight_ahead_loadout`) will read
-        once it is chosen. The rest of the context is `_consumable_price`'s:
-        the full selection context is not built yet (it NEEDS this cycle's
-        combat target), and the obtain walk reads only bank access and the
-        siblings' skills from it."""
-        assert self.state is not None and self.game_data is not None
-        return best_loadout(self.state, self.game_data, self._band_context(monster), monster,
-                            self.history)
-
-    def _band_party(self, monster: str) -> PartyLoop | None:
-        """`best_party_loop` against one boss, for `band_combat_target`'s rank
-        (docs/PLAN_group_fights.md increment 3), priced as `_band_loadout`
-        prices a solo candidate."""
-        assert self.state is not None and self.game_data is not None
-        ctx = self._band_context(monster)
-        return best_party_loop(self.state, self.game_data, monster,
-                               candidate_potions(self.state, self.game_data, ctx, self.history),
-                               food_menu(self.state, self.game_data, ctx, self.history))
-
-    def _band_context(self, monster: str) -> SelectionContext:
-        """The pricing context of a band candidate (see `_band_loadout`)."""
-        return self._timed(replace(NO_PROFILE_CONTEXT,
-                                   bank_accessible=self._blockers.get("bank") is None,
-                                   sibling_skills=self._sibling_skills,
-                                   combat_monster=monster,
-                                   learned_drops=self._cycle_learned_drops()))
-
     def _stamp_cycle(self) -> None:
         """Read the cycle clock once, at the start of a cycle (ruling FR-IA)."""
         self._cycle_now = datetime.now(tz=timezone.utc)
@@ -3015,42 +2926,7 @@ class GamePlayer:
         `NO_PROFILE_CONTEXT` on a live path passes here."""
         fight_seconds, action_seconds = self._timing()
         return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,
-                       action_seconds=action_seconds)
-
-    def _consumable_price(self, code: str) -> Fraction:
-        """Acquisition actions per unit to REPLACE a consumable a fight used —
-        the upkeep price `band_combat_target` charges a kill (USER 2026-10-07).
-
-        Priced on the state with every held copy removed (bag, bank, worn): a
-        fight burns the stock, and what it costs is making the next one. A
-        price against the held stock read 0 for Lor's potions live. The unit
-        price is a batch's over its size, the batch the potion guard stocks to
-        at this level (`potion_level_ramp`), so a run's fixed moves are
-        amortized the way the guard amortizes them.
-
-        Priced the way heal prep prices a heal (`HEAL_PREP_POLICY`: no drop
-        routes). The full selection context is not built yet here — it NEEDS
-        this cycle's combat target — and the obtain walk reads only bank access
-        and the siblings' skills from it, so those two are set on the
-        no-profile context."""
-        assert self.state is not None and self.game_data is not None
-        state = self.state
-        stripped = replace(
-            state,
-            inventory={c: q for c, q in state.inventory.items() if c != code},
-            bank_items=(None if state.bank_items is None
-                        else {c: q for c, q in state.bank_items.items() if c != code}),
-            equipment={slot: (None if worn == code else worn)
-                       for slot, worn in state.equipment.items()})
-        ctx = self._timed(replace(NO_PROFILE_CONTEXT,
-                                  bank_accessible=self._blockers.get("bank") is None,
-                                  sibling_skills=self._sibling_skills,
-                                  learned_drops=self._cycle_learned_drops()))
-        batch = potion_level_ramp(state.level)
-        actions = acquisition_actions(code, batch, stripped, self.game_data, ctx, equip=False,
-                                      store=self.history, gated_drop=False,
-                                      policy=HEAL_PREP_POLICY)
-        return Fraction(actions, batch)
+                       action_seconds=action_seconds, kind_seconds=self._kind_seconds())
 
     def _is_winnable(self, monster_code: str) -> bool:
         """Target-selection beatability: can the bot beat this monster AFTER
@@ -3068,47 +2944,6 @@ class GamePlayer:
         assert self.state is not None and self.game_data is not None
         projected = replace(self.state, hp=self.state.max_hp)
         return is_winnable(projected, self.game_data, monster_code, self.history)
-
-    def _pick_winnable_monster(self) -> str | None:
-        """Window-preferred winnable monster, with a liveness fallback.
-
-        PREFERRED: highest-level `_is_winnable` monster inside the
-        FightAction level window [max(1, char_level-1), char_level+2].
-        Trace 2026-06-06 16:34: picker returned yellow_slime (lvl 2) for
-        Robby (lvl 4); FightAction.is_applicable rejected it (below the
-        old hard window) and the dead target cascaded into an empty plan.
-        Honoring the window at picker time prevents that cascade.
-
-        FALLBACK (P0 no-combat deadlock, 2026-06-09 live repro): at
-        level 4 the only stat-winnable monsters were chicken (L1) and
-        yellow_slime (L2) — both below the window, so the picker returned
-        None forever and no combat goal was ever constructed. When the
-        window holds no winnable monster, fall back to the highest-level
-        winnable monster that still grants XP (`xp_per_kill > 0`; the
-        documented curve zeroes out at char_level - monster_level >= 10)
-        and is under the char_level+2 suicide guard.
-        FightAction.is_applicable enforces the SAME xp>0 lower gate, so
-        any fallback target is level-applicable. Returns None only when
-        nothing winnable grants XP — then gear progression is the only
-        path, which is correct. Decision logic lives in the pure core
-        `combat_picker.pick_winnable_monster_pure` (Lean-diff-locked).
-
-        Candidates are the monsters that SPAWN somewhere now
-        (`GameData.monster_locations`): the action factory builds a
-        `FightAction` only for those, so an event monster that is not up is a
-        target nothing can fight (live 2026-10-04: Robby, `full_moon_vampire`).
-        """
-        assert self.game_data is not None
-        assert self.state is not None
-        game_data = self.game_data
-        char_level = self.state.level
-        return pick_winnable_monster_pure(
-            char_level,
-            [(code, level) for code, level in game_data.monster_levels.items()
-             if game_data.monster_locations(code)],
-            self._is_winnable,
-            lambda code: game_data.xp_per_kill(code, char_level) > 0,
-        )
 
     def _task_aligned_monster(self) -> str | None:
         """The active task's monster when it is a PURSUE monster-task AND winnable.
@@ -3141,8 +2976,9 @@ class GamePlayer:
         a grey task monster yields a `GrindCharacterXPGoal` that is ranked,
         planned, and CANNOT plan. Live: HAL sat at `GrindCharacterXP(sheep)`
         priority 30.0, plan_len 0 in 3 nodes, for 12 consecutive cycles of `Wait`,
-        because sheep is level 5 against its 17. Tier 3
-        (`_pick_winnable_monster`) has always applied this filter; tier 1 did not,
+        because sheep is level 5 against its 17. The windowed pick
+        (`_pick_winnable_monster`, deleted in plan C Task 4) always applied this
+        filter; the task arm did not,
         so the task could inject a target the action layer would always reject.
 
         A grey task is not thereby abandoned — it is simply not a CHARACTER-XP
@@ -3667,7 +3503,8 @@ class GamePlayer:
             self._role_unservable_cycles = 0
             return
         item_code, quantity, demand = target
-        wanted = repr(SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand))
+        wanted = repr(SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand,
+                                     now=self._cycle_now))
         attempt = next((gt for gt in goals_tried if gt.get("goal") == wanted), None)
         if attempt is None:
             return
@@ -4232,6 +4069,12 @@ class GamePlayer:
                 if not turn_in_ready_pure(fleet_total, price):  # rule 2
                     continue
                 if not self._may_be_buyer(item_code, state, game_data):  # rules 3-4
+                    # A farmer that held the shortfall's election
+                    # (`_claim_currency_farm`) but cannot wear the item lets
+                    # it go the moment the fleet can pay, so the real buyer
+                    # takes it this cycle, not after `DEMAND_TTL` (review M4).
+                    if self._coordination.turn_in_holder(item_code, now) == self.character:
+                        self._coordination.release_turn_in(item_code)
                     continue
                 candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                          price=price, currency=code,
@@ -4272,6 +4115,69 @@ class GamePlayer:
         if remaining_own:
             self._adopt_sibling_claim(self._coordination, remaining_own, siblings,
                                       bank, now, game_data)
+        if self._turn_in is None:
+            self._turn_in = self._shortfall_farmer(self._coordination, own, siblings, bank,
+                                                   now, game_data)
+
+    def _shortfall_farmer(self, coordination: CoordinationStore, own: dict[str, int],
+                          siblings: dict[str, int], bank: dict[str, int],
+                          now: datetime, game_data: GameData) -> TurnIn | None:
+        """The SIBLING elected to farm a turn-in the fleet cannot yet pay
+        for, as a not-ready `TurnIn` naming it the buyer, or None.
+
+        The ticket farm (live 2026-10-31): Robby (`{medal: 5}`) and C3P0
+        (`{medal: 4}`) farmed the same 3-medal fleet shortfall and raced for
+        the bank's tickets (one drew HTTP 404 on `Withdraw(event_ticket)`). The
+        shortfall's farmer holds the SAME `claim_turn_in` election the
+        purchase does (`_claim_currency_farm` takes it when the farm runs), so
+        the farmer is the buyer once the fleet can pay. A non-buyer's piece
+        step stands down on it (`obtain_item_routing._equippable_goal`); being
+        not ready, it asks no buy and no surrender (`TurnIn.ready`). This
+        character's own claim is no stand-down, and is not reported. Highest
+        price first, as rule 5 elects; of equal price the one the fleet is
+        nearest paying (the larger fleet total), and of those the first in
+        the catalogue's vendor order (review M2: never the currency's name).
+        Every dual-role currency a vendor takes is asked, held or not: a
+        character holding none still stands down."""
+        farmed: list[TurnIn] = []
+        pooled = dict.fromkeys(currency for per_item in game_data.world.npc_buy_currency.values()
+                               for currency in per_item.values()
+                               if is_dual_role(currency, game_data))
+        for code in pooled:
+            fleet_total = fleet_total_pure(own, siblings, bank, code)
+            for item_code, npc_code, price in game_data.currency_sinks(code):
+                if turn_in_ready_pure(fleet_total, price):
+                    continue
+                holder = coordination.turn_in_holder(item_code, now)
+                if holder is None or holder == self.character:
+                    continue
+                farmed.append(TurnIn(item_code=item_code, npc_code=npc_code, price=price,
+                                     currency=code, buyer=holder, fleet_total=fleet_total))
+        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None
+
+    def _claim_currency_farm(self, goal: Goal | None, state: WorldState,
+                             game_data: GameData) -> None:
+        """Take (or renew) the turn-in election for the sink the fleet cannot
+        yet pay for that `goal` farms its dual-role currency for: the goal
+        this cycle runs is a `GatherMaterialsGoal` for a currency pooled across
+        the fleet (`is_dual_role`), farmed for the item `goal.farmed_for`. The
+        one character farming the fleet's shortfall holds the claim, and every
+        sibling's piece step stands down on it (`_shortfall_farmer`). Only that
+        piece's sink is claimed (review M3): the currency's other sinks stay
+        open to siblings. Renewed only while the farm runs, so a farmer that
+        stops lets the claim lapse to a sibling. No-op without a coordination
+        store, and for a farm for no sink of the currency."""
+        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)
+                or not is_dual_role(goal.target_item, game_data)):
+            return
+        now = datetime.now(tz=timezone.utc)
+        code = goal.target_item
+        fleet_total = fleet_total_pure(dual_role_holdings(state, game_data),
+                                       self._coordination.sibling_holdings(now),
+                                       state.bank_items or {}, code)
+        for item_code, _npc_code, price in game_data.currency_sinks(code):
+            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):
+                self._coordination.claim_turn_in(item_code, now)
 
     def _may_be_buyer(self, item_code: str, state: "WorldState",
                       game_data: GameData) -> bool:
@@ -4323,6 +4229,11 @@ class GamePlayer:
             for item_code, npc_code, price in game_data.currency_sinks(code):
                 holder = coordination.turn_in_holder(item_code, now)
                 if holder is None or holder == self.character:
+                    continue
+                if not turn_in_ready_pure(fleet_total, price):
+                    # A claim the fleet cannot pay yet elects the shortfall's
+                    # farmer (`_claim_currency_farm`): worn medals stay worn,
+                    # the fleet's storage, until there is a buy to spend them.
                     continue
                 claimed.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                       price=price, currency=code, buyer=holder,
@@ -4376,6 +4287,17 @@ class GamePlayer:
         assert self._bootstrap is not None
         return timing_of(self.history, self._bootstrap)
 
+    def _kind_seconds(self) -> tuple[tuple[str, Fraction], ...]:
+        """The measured seconds of one action of each priced kind: the learning
+        store's recorded server cooldowns, the account-log bootstrap's on a
+        fresh install (`learned_kind_seconds`), or the committed store
+        capture's offline, as `_timing` reads its fights."""
+        if self._offline_timing is not None:
+            return committed_kind_seconds()
+        assert self._bootstrap is not None
+        assert self.game_data is not None
+        return learned_kind_seconds(self.history, self._bootstrap, self.game_data.craft_yield)
+
     def _fetch_bootstrap(self, api: APIWrapper) -> FleetBootstrap:
         """The account-log bootstrap (ruling ZD), each fight at its
         character's sheet haste from `GET /my/characters`; every request is
@@ -4395,20 +4317,7 @@ class GamePlayer:
         # target the objective names set (`attach_gear_objective`), before
         # anything below reads it.
         task_monster = self._task_aligned_monster()
-        # CRAFT_RELIEF guard needs the long-term gear / tool targets so it
-        # can score craftable-from-inventory candidates that advance the
-        # equipment chain (not just the active task item).
-        target_gear: frozenset[str] = frozenset()
-        target_tools: frozenset[str] = frozenset()
-        near_term_targets: frozenset[str] = frozenset()
-        if self._objective is not None:
-            target_gear = frozenset(self._objective.target_gear.values())
-            target_tools = frozenset(self._objective.target_tools.values())
-            # Usable-now keepers for the skill-grind `wanted` preference.
-            near_term_targets = frozenset(
-                self._objective.near_term_gear(self.state).values()) | target_tools
-        task_keep = gear_keep_for(self.state, self.game_data, self.history,
-                                  task_monster, near_term_targets)
+        task_keep = gear_keep_for(self.state, self.game_data, self.history, task_monster)
         bank_blocker = self._blockers.get("bank")
         ctx = SelectionContext(
             # The cycle clock (rulings FR-8, FR-IA), stamped at the cycle's start.
@@ -4424,9 +4333,6 @@ class GamePlayer:
             # makes inside should_expand_bank's inputs).
             gold_reserve=reserve_floor(self.state, self.game_data, None),
             gold_short=self._gold_short(),
-            target_gear=target_gear,
-            target_tools=target_tools,
-            near_term_targets=near_term_targets,
             gear_keep=task_keep,
             # Cross-character coordination (Task 11): None whenever no
             # coordination store is attached (every single-character run),
@@ -4486,6 +4392,7 @@ class GamePlayer:
                            if self.history is not None else ()),
             fight_seconds=fight_seconds,
             action_seconds=action_seconds,
+            kind_seconds=self._kind_seconds(),
             # The server refused the last action for want of bag room: the
             # arbiter clears the bag before the next plan (Task 13e).
             bag_refused=self._last_outcome == BAG_FULL_OUTCOME,
@@ -4494,12 +4401,11 @@ class GamePlayer:
         )
         ctx = attach_gear_objective(self.state, self.game_data, ctx, self.history)
         # Skill demand first (spec 2026-10-13 §2): the loadout's make prices
-        # credit the skills it names, and it no longer reads the shortfall.
-        skills, level = xp_demand(
-            demand_roots(self._last_decision.chosen_root if self._last_decision is not None else None,
-                         self.state, ctx),
+        # credit the skills it names, and it no longer reads the shortfall. The
+        # tools its skills climb with come out of the same fixed point (C1-a).
+        ctx = objective_demand(
+            self._last_decision.chosen_root if self._last_decision is not None else None,
             self.state, self.game_data, ctx)
-        ctx = replace(ctx, skill_demand=skills, level_demanded=level)
         ctx = replace(ctx, loadout=self._party_fight_loadout()
                       or fight_ahead_loadout(self.state, self.game_data, ctx, self.history))
         # Whether the held items task pays enough to defer the level step
@@ -4521,8 +4427,12 @@ class GamePlayer:
             return ctx
         # Phase 5-2c-iii-c-2 #5 (USER 2026-10-07): a draw is owed by the
         # master's pool worth, not by a change of course. Read off the
-        # context it needs (gold need, grind target, target gear).
-        due, master = pool_draw(self.state, self.game_data, ctx, self.history)
+        # context it needs (gold need, grind target, target gear). One
+        # read-only `search_cache` episode: every task's horizon reads one
+        # achievable set (ruling C2-perf; nothing here writes the store).
+        with (self.history.search_cache() if self.history is not None
+              else nullcontext()):
+            due, master = pool_draw(self.state, self.game_data, ctx, self.history)
         return replace(ctx, draw_owed=due, draw_master=master)
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

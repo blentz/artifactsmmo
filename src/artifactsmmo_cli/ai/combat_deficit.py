@@ -27,20 +27,17 @@ the model was right every time and the bot fought anyway.
 
     A single-item answer would have hidden three of those four layers.
 
-TWO BARS, two questions (post-merge review 2026-10-16):
-
-  * FEASIBILITY (the default): can gear make this fight one the gate takes?
-    The bar is `predict_win` — P(win) at least this character's θ, worn
-    restore potions drunk — and it is what every pricing and task-worth
-    caller asks (`acquisition_cost`, `drop_evidence`, `decisions.obtain_item`,
-    `task_horizon`'s level-up arm, the censuses). It was `secure_win` for one
-    commit: a dropper fought at θ 0.488 and P 0.6 was priced unobtainable for
-    want of gear to reach 0.75.
-  * ROUTING (`secure=True`): what gear should be built first? The bar is
-    `secure_win` — max(θ, SECURE_WIN), USER 2026-10-15: below 75% we probably
-    need better gear — on BARE gear (`combat.unpotioned`), so a potion-propped
-    win never hides a gear upgrade. `has_combat_deficit` and
-    `deficit_upgrade_target` ask it.
+THE BAR is FEASIBILITY (post-merge review 2026-10-16): can gear make this
+fight one the gate takes? `predict_win` — P(win) at least this character's θ,
+worn restore potions drunk — is what every pricing caller asks
+(`acquisition_cost`, `drop_evidence`, `decisions.obtain_item`, the censuses and
+the `combat-deficit` diagnostic). It was `secure_win` for one commit: a dropper
+fought at θ 0.488 and P 0.6 was priced unobtainable for want of gear to reach
+0.75. WHAT TO BUILD for a held task's lost fight is no longer this walk's
+question, nor whether a level closes it: both are `L*` of the task monster
+(`task_horizon`, plan C Task 2). `has_combat_deficit` keeps the routing bar's
+existence fact,
+`secure_win` (max(θ, SECURE_WIN), USER 2026-10-15) on BARE gear.
 
 USER (2026-08-20), on what to do when no one item is enough: "that just means we
 need multiple upgrades before we can win that fight. the time it takes is just the
@@ -125,10 +122,12 @@ class CombatDeficit:
     those apart, because only the first one is progress.
 
     For a while it told them apart only for the reader: the `combat-deficit`
-    diagnostic printed CLOSES / DOES NOT CLOSE and the production consumer,
-    `deficit_upgrade_target`, branched on `chain` instead and committed to gear
-    from the second case as readily as the first. `deficit_upgrade_target` now
-    reads this field, which is the whole reason it exists.
+    diagnostic printed CLOSES / DOES NOT CLOSE and the production consumer of
+    the day branched on `chain` instead and committed to gear from the second
+    case as readily as the first (648 of 895 losing pairs on the bundle). Its
+    readers now are `acquisition_cost`, `drop_evidence` and
+    `decisions.obtain_item` (a drop route's fight), the xp-gate census and the
+    `combat-deficit` diagnostic.
     """
 
     monster: str
@@ -161,7 +160,7 @@ def _margin_owning(state: WorldState, game_data: GameData, monster: str,
 
     Owning, not wearing: `predict_win` / `pick_loadout` already choose the best
     on-hand loadout per monster's resistances, so the honest question for "is this
-    worth acquiring" is marginal — the same framing `weapon_winnability` uses.
+    worth acquiring" is marginal.
     """
     trial = dict(inventory)
     trial[code] = trial.get(code, 0) + 1
@@ -191,9 +190,8 @@ def _best_step(pool: tuple[tuple[str, ItemStats], ...], current: Fraction | int,
         if value <= current:
             continue  # cheap is no reason to acquire something that cannot help
         gain = value - current
-        # The slot comes from the SAME rule `deficit_upgrade_target` returns
-        # (`ITEM_TYPE_TO_SLOTS[type_][0]`), computed here because the pricer
-        # needs it: an ObtainItem's price includes the equip action exactly
+        # The slot is the first `ITEM_TYPE_TO_SLOTS` slot of the item's type,
+        # computed here because the pricer needs it: an ObtainItem's price includes the equip action exactly
         # when it carries a slot, and deriving that in the caller would be a
         # second producer of the slot rule. `slots` is never empty for a
         # default-pool candidate — `_pool` filters on `ITEM_TYPE_TO_SLOTS` — so
@@ -222,100 +220,16 @@ def blocked_task_monster(state: WorldState) -> str | None:
 
 def has_combat_deficit(state: WorldState, game_data: GameData) -> bool:
     """Is the held task's monster not secure — below max(θ, SECURE_WIN) at max
-    HP on bare gear? The CHEAP form of the routing walk's existence fact.
-
-    `combat_deficit` walks every candidate to name what closes the gap; this is
-    one `secure_win`. `task_horizon.resolve_task_horizon` runs every cycle and
-    first needs to know THAT a deficit exists, so the walk would be the wrong
-    thing to put there.
-
-    Exactly equivalent to `combat_deficit(..., secure=True) is not None` — pinned by a test,
-    because if the two ever disagreed the latch would arm for a deficit the gear
-    chain cannot name, and the character would review gear forever.
+    HP on bare gear (`combat.unpotioned`, so a potion-propped win never hides a
+    gear upgrade)? One `secure_win`: `task_horizon.resolve_task_horizon` first
+    needs to know THAT a deficit exists, and reads `L*` of the task monster
+    against the same bar.
     """
     monster = blocked_task_monster(state)
     if monster is None:
         return False
     return not secure_win(unpotioned(dataclasses.replace(state, hp=state.max_hp)),
                           game_data, monster)
-
-
-def deficit_upgrade_target(
-    state: WorldState,
-    game_data: GameData,
-    candidates: tuple[str, ...] | None = None,
-    actions_of: Callable[[str, str], int] | None = None,
-) -> tuple[str, str] | None:
-    """`(item_code, slot)` to build next to make the HELD TASK's monster winnable.
-
-    This is the causal link "lose fight -> upgrade gear" that the bot never had.
-    `map_guard`'s GEAR_REVIEW branch (deleted in Phase 4-3b) set its target with a monster-BLIND
-    `_best_by_value` scan: live it chose `iron_boots`, already worn and absent
-    from all 24 items that improved the pig margin, while the weapon that
-    actually moved `rounds_to_kill` went unbuilt for ten hours. The gear latch
-    knew a fight had been lost; nothing carried WHICH fight into the decision.
-
-    Scoped to the HELD TASK rather than to the last loss, deliberately. Once the
-    tier-1 bypass closed, an unwinnable task monster stops being the farm target,
-    so "the monster we last lost to" is a stale signal that decays as soon as it
-    matters. The task is what the character is actually blocked on — and building
-    toward being able to fight it is how S-052 ("work a task you cannot discard")
-    is honoured by a character that cannot fight it yet.
-
-    Returns None when there is nothing to fix — no monsters task, one already
-    finished, a monster already winnable, or a gap no gear closes. The generic
-    value scan then decides, unchanged.
-
-    That last clause is `deficit.closes`, and it used to be a lie. The call was
-    pinned at `max_chain=1` and the guard read `deficit.chain`, so ANY item that
-    moved the margin by one point was committed to as "the gear that wins this
-    fight" — over the whole scenario corpus, 648 of 895 losing (character,
-    monster) pairs returned a target that provably could not close. The visible
-    end of it was `l47_depth3_amulet` vs `dusk_beetle`: margin -6, nine
-    candidates all gaining exactly +1 at an identical (ceiling) price, and the
-    walk picked among nine equally futile items by catalogue order — a level-25
-    `emerald_amulet` for a level-47 character. No chain of ANY length closes
-    that fight (measured: -6 -> -4 at depth 2, then nothing improves), so the
-    pick was not a tie-break defect. It was a decision that should never have
-    been taken.
-
-    The bound is now the module's own `MAX_CHAIN` rather than 1, which costs
-    depth but cannot change the ANSWER: the walk is greedy and prefix-stable, so
-    the chain at depth k is the first k steps of the chain at depth 8. Measured
-    over all 895 pairs, `chain[0]` differed between `max_chain=1` and
-    `max_chain=8` in exactly 0 of them. Depth buys `closes` and nothing else —
-    122 of the 648 futile pairs turn out to have a closing chain (30 at depth 2,
-    59 by depth 3, 122 by depth 8) and keep the SAME first target, now honestly
-    justified; the other 526 fall through to the value scan, which is what
-    `strategy_driver`'s GEAR_REVIEW branch did with a None (that guard was
-    deleted in Phase 4-3b) — only the monster-scoped claim is withdrawn when
-    the monster cannot be reached by gear at all.
-
-    `closes` subsumes the old `chain` check: it is set only immediately after a
-    step is appended, so `closes` implies a non-empty chain.
-
-    The slot is the first in `ITEM_TYPE_TO_SLOTS` order for the item's type, the
-    same rule `UpgradeEquipmentGoal` uses, so the guard equips into a slot that
-    accepts it.
-    """
-    monster = blocked_task_monster(state)
-    if monster is None:
-        return None
-    deficit = combat_deficit(state, game_data, monster,
-                             candidates=candidates, actions_of=actions_of, secure=True)
-    if deficit is None or not deficit.closes:
-        return None
-    step = deficit.chain[0]
-    slots = ITEM_TYPE_TO_SLOTS.get(step.item_type, [])
-    if not slots:
-        # Totality guard, provably unreachable: an item can only improve the
-        # margin by being picked into a loadout, which requires a slot — and the
-        # default pool filters on `ITEM_TYPE_TO_SLOTS` besides. It stays because
-        # `candidates` is caller-supplied and `slots[0]` would IndexError rather
-        # than decline. Same idiom as `buy_source_venue.choose_buy_venue3`'s
-        # unreachable arm.
-        return None  # pragma: no cover
-    return step.code, slots[0]
 
 
 def combat_deficit(
@@ -325,11 +239,9 @@ def combat_deficit(
     candidates: tuple[str, ...] | None = None,
     max_chain: int = MAX_CHAIN,
     actions_of: Callable[[str, str], int] | None = None,
-    secure: bool = False,
 ) -> CombatDeficit | None:
     """The gear gap against `monster`, or None when the fight already clears
-    its bar: `predict_win` (feasibility), or with `secure` `secure_win` on bare
-    gear (routing) — see the module docstring.
+    its bar, `predict_win` (see the module docstring).
 
     Args:
       state:      the character. Evaluated at `max_hp`, NOT current hp — see the
@@ -358,12 +270,9 @@ def combat_deficit(
     # and the same character at 385/385 reported -10 with one that does. A gear
     # plan that moves with transient hp is the same defect as the 7,000x iron-gear
     # price swing, fixed the same way (PLAN_iron_gear_acquisition increment 2),
-    # and `tiers/objective.py` sets the precedent for building `rested` here.
+    # and `progression/objective.py` sets the precedent for building `rested` here.
     state = dataclasses.replace(state, hp=state.max_hp)
-    if secure:
-        state = unpotioned(state)
-    clears = secure_win if secure else predict_win
-    if clears(state, game_data, monster):
+    if predict_win(state, game_data, monster):
         return None
     baseline = combat_margin(state, game_data, monster)
     pool = _pool(state, game_data, candidates)
@@ -402,7 +311,7 @@ def combat_deficit(
             margin_after=current,
             acquire_cost=best_cost,
         ))
-        if clears(dataclasses.replace(state, inventory=inventory), game_data, monster):
+        if predict_win(dataclasses.replace(state, inventory=inventory), game_data, monster):
             closes = True
             break
     return CombatDeficit(monster=monster, baseline_margin=baseline,

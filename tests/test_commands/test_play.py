@@ -132,7 +132,8 @@ class TestPlayCommandWiring:
         """Ruling ZD: a `play --all` child reads the fleet's one account-log
         bootstrap from the file its supervisor wrote; a lone `play` passes
         none, and the player fetches its own at start."""
-        bootstrap = FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(10, 25))
+        bootstrap = FleetBootstrap(fights=((5, 8, 10.0),), cooldowns=(10, 25),
+                                   kinds=(("fight", 10, None, 1), ("crafting", 25, "cheese", 4)))
         path = tmp_path / "bootstrap.json"
         path.write_text(bootstrap.to_json())
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:

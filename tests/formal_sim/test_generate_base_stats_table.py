@@ -12,6 +12,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+from artifactsmmo_cli.ai.scenario import base_combat_stats
+
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2]
     / "formal"
@@ -55,6 +57,37 @@ def test_live_anchor_level_6() -> None:
     """Level 6 must have max_hp=145 (algebraic capture live anchor)."""
     doc = generate_base_stats_table.generate_table()
     assert doc["base_stats"]["6"]["max_hp"] == 145
+
+
+def test_the_2026_10_31_live_anchors_match_their_rows() -> None:
+    """Every read-only capture of 2026-10-31 (a live sheet less its worn gear,
+    review M2: each value measured per character) is its own subtraction, and
+    agrees with the derived row at its level (max_hp, initiative, crit,
+    attack, resistance) and with the level-invariant `combat_stats` block the
+    scenario harness reads (`scenario.base_combat_stats`)."""
+    doc = generate_base_stats_table.generate_table()
+    combat = doc["provenance"]["combat_stats"]
+    anchors = [a for a in doc["provenance"]["live_anchors"] if a.get("captured_at") == "2026-10-31"]
+    assert sorted(a["character"] for a in anchors) == ["C3P0", "HAL", "Lor", "R2D2", "Robby"]
+    for anchor in anchors:
+        for stat in ("initiative", "max_hp", "critical_strike"):
+            assert anchor["sheet"][stat] - anchor["gear"][stat] == anchor[stat], anchor["character"]
+        # Attack and resistance are recorded per element on both sides (Task 7
+        # re-review N2), so the zero base is a subtraction, not a template.
+        for stat in ("attack", "resistance"):
+            assert set(anchor["sheet"][stat]) == {"fire", "earth", "water", "air"}
+            for element, value in anchor[stat].items():
+                assert anchor["sheet"][stat][element] - anchor["gear"][stat][element] == value, (
+                    anchor["character"], stat, element)
+        assert any(anchor["sheet"]["attack"].values()), anchor["character"]
+        assert anchor["worn"], anchor["character"]
+        row = doc["base_stats"][str(anchor["level"])]
+        assert (row["max_hp"], row["initiative"], row["critical_strike"]) == (
+            anchor["max_hp"], anchor["initiative"], anchor["critical_strike"])
+        assert (row["attack"], row["resistance"]) == (anchor["attack"], anchor["resistance"])
+        assert (combat["initiative"], combat["critical_strike"]) == (
+            anchor["initiative"], anchor["critical_strike"])
+        assert base_combat_stats() == (anchor["initiative"], anchor["critical_strike"])
 
 
 def test_combat_stats_zero_and_initiative_100() -> None:

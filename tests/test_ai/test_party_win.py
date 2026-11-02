@@ -18,14 +18,31 @@ from artifactsmmo_cli.ai.party_win import (
     winning_party,
     wins_as_a_party,
 )
-from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state
+from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state, seed_census_gear
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
+
+
+HERO_LOADOUT = {
+    "weapon_slot": "hell_reaper", "rune_slot": "greater_lifesteal_rune",
+    "shield_slot": "earth_shield", "helmet_slot": "dust_helmet",
+    "body_armor_slot": "sonnengott_cloak", "leg_armor_slot": "duskpants",
+    "boots_slot": "vital_boots", "ring1_slot": "celest_ring", "ring2_slot": "celest_ring",
+    "amulet_slot": "dust_amulet", "artifact1_slot": "sandwhisper_codex",
+    "artifact2_slot": "ruby_book", "artifact3_slot": "sapphire_book",
+    "bag_slot": "sandwhisper_bag"}
+"""The level-60 hero's loadout, declared: the census's level-60 `L*` until plan
+C Task 7. Since then the census character starts at the base sheet's
+initiative 100 and its level-60 `L*`, chosen for its `m*`, is a `desert_whip`
+set in which no party of two or three beats duskworm, so the party arm would
+have no witness here. Declared, this file's subject stays the party."""
 
 
 def _gd() -> GameData:
     gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
     gd.active_event_codes = {"out_of_the_ground"}
+    seed_census_gear({(60, frozenset({"out_of_the_ground"}), True): HERO_LOADOUT}, gd)
     return gd
 
 
@@ -183,7 +200,8 @@ def test_the_factory_takes_the_party_to_the_boss() -> None:
     hero = _hero(gd)
     party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
     fights = {a.monster_code: a for a in build_actions(gd, party, None, bank_accessible=True,
-                                                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                                         now=cycle_now())
               if isinstance(a, FightAction)}
     assert fights["duskworm"].participants == ("R2D2", "Lor")
     assert fights["duskworm"].party_loadout == ("enhanced_health_potion",)

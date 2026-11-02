@@ -29,8 +29,8 @@ acquisition cost at all (S-004).
 THE XP CURVE IS NOT IN THE API. `WorldState.skill_max_xp` reports the requirement
 for the CURRENT level only; the server exposes no per-level curve. So levels
 beyond the next are assumed to cost the same as the current one — the identical
-assumption `cheapest_path_to_level` already makes for character levels, and
-recorded there as a known limit. It under-estimates on a rising curve, which is
+assumption the deleted `cheapest_path_to_level` made for character levels, a
+known limit. It under-estimates on a rising curve, which is
 the SAFE direction for a lower bound whose consumers prune with it.
 """
 

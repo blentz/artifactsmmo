@@ -68,8 +68,9 @@ CEILING = UNOBTAINABLE_PER_UNIT + EQUIP_ACTIONS
 
 `EQUIP_ACTIONS` is added by the wrapper AFTER `_capped`, so the ceiling a
 `actions_of` consumer actually sees is one action above the cap. It is a constant
-per call site — `deficit_upgrade_target`'s pricer passes `equip=True` for every
-candidate — so it shifts the whole tied set and cannot reorder it.
+per call site — a pricer passes `equip=True` for every candidate, as the
+`combat-deficit` diagnostic's does — so it shifts the whole tied set and cannot
+reorder it.
 """
 
 
@@ -200,19 +201,23 @@ def test_a_gain_tie_at_the_ceiling_falls_to_catalogue_order_and_takes_the_first(
 def test_the_dusk_beetle_chain_closes_only_with_a_lifesteal_rune() -> None:
     """A margin walk that stalls closes on the bare odds, at depth 3.
 
-    `l47_depth3_amulet` vs `dusk_beetle` on the real catalogue: the margin is -8
-    and the margin walk stalls at -5 — a `water_boost_potion` and a
-    `greater_sapphire_amulet`, after which nothing on offer moves the number.
+    `l47_depth3_amulet` vs `dusk_beetle` on the real catalogue: the margin is -7
+    and the margin walk stalls at -5 — a `water_boost_potion` and an
+    `enhanced_boost_potion`, after which nothing on offer moves the number.
     The stall falls back to the bare odds, and `greater_lifesteal_rune` lifts
     them past the bar: a lifesteal heals its share of the crit's DAMAGE
     (server logs 2026-10-17), not of the attack stat, which made every rune
     worth half of what it is. Until then this pair closed at no depth. (Its
     barrier, refreshed every 5 turns since 2026-10-17, moved the margin from -6
-    to -8 and the first two steps; the rune still closes it at depth 3.)
+    to -8 and the first two steps; the rune still closes it at depth 3. Plan C
+    Task 7 moved it from -8 to -7 and the second step from the
+    `greater_sapphire_amulet` to the `enhanced_boost_potion`: the derived
+    character starts at the base sheet's initiative 100, 320 in its gear, and so
+    moves first against the beetle's 250, which it did not at 220.)
 
     Also pinned: the answer does not move with the bound. The walk is greedy and
-    prefix-stable, which is what lets `deficit_upgrade_target` pay for `closes`
-    with depth without changing which item it targets.
+    prefix-stable, which is what let the walk's consumer (deleted in plan C
+    Task 2) pay for `closes` with depth without changing which item it targeted.
     """
     state = _rested("l47_depth3_amulet")
 
@@ -223,15 +228,15 @@ def test_the_dusk_beetle_chain_closes_only_with_a_lifesteal_rune() -> None:
     }
 
     assert all(d is not None for d in by_depth.values())
-    assert {d.baseline_margin for d in by_depth.values() if d is not None} == {-8}
+    assert {d.baseline_margin for d in by_depth.values() if d is not None} == {-7}
     # It closes once the walk may take the rune, and not before.
     assert {depth: d.closes for depth, d in by_depth.items() if d is not None} == {
         1: False, 2: False, 3: True, 8: True}
     deepest = by_depth[8]
     assert deepest is not None
-    assert [s.code for s in deepest.chain] == ["water_boost_potion", "greater_sapphire_amulet",
+    assert [s.code for s in deepest.chain] == ["water_boost_potion", "enhanced_boost_potion",
                                               "greater_lifesteal_rune"]
-    assert [s.margin_after for s in deepest.chain] == [-7, -5, -5]
+    assert [s.margin_after for s in deepest.chain] == [-6, -5, -5]
     # Prefix stability: every shallower chain is a prefix of the deepest one.
     for depth, deficit in by_depth.items():
         assert deficit is not None

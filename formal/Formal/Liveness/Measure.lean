@@ -112,8 +112,8 @@ structure State where
   skillLegXp : Nat := 1
   -- Phase 20a-v2 extensions — fields read by the production ladder.
   -- These fields exist solely to let `Formal.Liveness.ProductionLadder.fires`
-  -- mirror the production `_fires_*` predicates in `tiers/guards.py` /
-  -- `tiers/means.py`. Tier-1 apply functions (Fight/Gather/Deposit/Rest)
+  -- mirror the production `_fires_*` predicates in `progression/guards.py` /
+  -- `progression/means.py`. Tier-1 apply functions (Fight/Gather/Deposit/Rest)
   -- PRESERVE every one of these fields via `{ s with ... }` — none are
   -- mutated by Phase-19 progress actions.
   --
@@ -179,7 +179,7 @@ structure State where
   /-- O5.2 (2026-06-16): whether the objective tier's emitted step LEADS
       WITH A FIGHT — i.e. the committed objective is a combat/char-leveling
       goal whose first planned action is `Fight`. Production: the
-      `ReachCharLevel` meta-goal (`tiers/meta_goal.py::ReachCharLevel`,
+      `ReachCharLevel` meta-goal (`progression/meta_goal.py::ReachCharLevel`,
       satisfied when `state.level ≥ target`) and monster-task / combat
       objectives dispatch a plan led by `FightAction`. This is the model's
       ONLY faithful general char-XP-leveling path: `.fight` grants +10 char
@@ -193,7 +193,7 @@ structure State where
       head action is Fight" in production. -/
   objectiveStepIsFight : Bool := false
   /-- OPAQUE: production's CRAFT_RELIEF guard firing predicate. Mirrors
-      `tiers/guards.py::_fires(GuardKind.CRAFT_RELIEF, …)`: fires when
+      `progression/guards.py::_fires(GuardKind.CRAFT_RELIEF, …)`: fires when
       `used_fraction(state) ≥ CRAFT_RELIEF_FRACTION (0.70)` AND
       `craft_relief_candidates(state, game_data, …)` returns a non-empty
       list (i.e. some task / target_gear / target_tools item is craftable
@@ -202,7 +202,7 @@ structure State where
       assert the production computation matches this field. -/
   craftReliefFires : Bool
   /-- OPAQUE: production's REST_FOR_COMBAT guard combat conditions. Mirrors
-      `tiers/guards.py::_fires(GuardKind.REST_FOR_COMBAT, …)` clauses (a),
+      `progression/guards.py::_fires(GuardKind.REST_FOR_COMBAT, …)` clauses (a),
       (c), (d): a combat target is selected, `predict_win` at current hp is
       False, and `predict_win` at max hp is True. The remaining clause (b)
       — `state.hp < state.max_hp` — is NOT folded in here; it is checked
@@ -213,7 +213,7 @@ structure State where
       matches this field. -/
   restForCombatReady : Bool
   /-- OPAQUE: production's CRAFT_POTIONS guard firing predicate. Mirrors
-      `tiers/guards.py::_fires(GuardKind.CRAFT_POTIONS, …)` =
+      `progression/guards.py::_fires(GuardKind.CRAFT_POTIONS, …)` =
       `craft_potions_fires(state, game_data)`: fires when a utility-slot
       potion baseline is under-stocked and an alchemy-craftable (or buyable)
       potion can restock it. State-carried Bool (default false); a diff
@@ -222,7 +222,7 @@ structure State where
   craftPotionsFires : Bool := false
   /-- OPAQUE: the UNMET sibling demand this character's SUPPLY_BANK rung would
       serve (2026-08-01). Mirrors the THIRD component of `ctx.supply_target` in
-      `tiers/means.py::_fires(SUPPLY_BANK, …)` — the still-unmet quantity
+      `progression/means.py::_fires(SUPPLY_BANK, …)` — the still-unmet quantity
       `player._pick_supply_target` computed, already net of the requester's
       inventory and of the shared bank.
 
@@ -252,7 +252,7 @@ structure State where
   supplyDemand : Nat := 0
   /-- OPAQUE: production's SUPPLY_BANK asymmetry flag (2026-08-16, role-driven-
       supply epic Task 4). Mirrors the SECOND arm of
-      `tiers/means.py::_fires(SUPPLY_BANK, …)` =
+      `progression/means.py::_fires(SUPPLY_BANK, …)` =
       `target[2] >= SUPPLY_DEMAND_MIN or target[0] in ctx.asymmetric_demand`:
       `target[0] in ctx.asymmetric_demand` — whether the requested item code is
       one at least one sibling that asked for it is skill-gated out of
@@ -271,7 +271,7 @@ structure State where
   supplyAsymmetric : Bool := false
   /-- OPAQUE: production's CURRENCY_TURNIN means firing predicate (2026-08-16,
       fleet-currency-turn-in epic Task 6). Mirrors
-      `tiers/means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or
+      `progression/means.py::_fires(CURRENCY_TURNIN, …)` = `ctx.turn_in is not None or
       ctx.recall is not None`: THIS character's per-cycle resolved role in a
       fleet-wide dual-role-currency election — either the elected buyer
       (`ctx.turn_in`) or a losing candidate owing the winner its holding
@@ -293,7 +293,7 @@ structure State where
       The ladder differential asserts agreement with the real value. -/
   currencyTurnInActive : Bool := false
   /-- OPAQUE: production's PARTY_JOIN guard firing predicate (2026-10-11, group
-      fights). Mirrors `tiers/guards.py::_fires(PARTY_JOIN, …)` =
+      fights). Mirrors `progression/guards.py::_fires(PARTY_JOIN, …)` =
       `ctx.party_hold is not None`: a live party lease
       (`CoordinationStore.party_lease_for`) names THIS character as a member.
       The lease is threaded onto `SelectionContext` as DATA by the player, the
@@ -432,8 +432,8 @@ structure State where
   posX : Nat
   posY : Nat
   /-- Item 4c: pending move destination. Mirrors the per-cycle target
-      tile committed by the path planner (player.py builds a PathPlan
-      and the MoveAction reads its head). `.move` reads this to know
+      tile committed by the planner (the MoveAction's target).
+      `.move` reads this to know
       where to teleport (single-step abstraction). `.mapTransition`
       reads the same field for cross-map teleports. `none` = no move
       pending; the apply is a no-op. -/
@@ -791,7 +791,7 @@ structure Measure where
 
 /-- Bank-pressure threshold: 80 % of inventory capacity. Mirrors
     `DEPOSIT_FULL_FRACTION = 0.80` in
-    `src/artifactsmmo_cli/ai/tiers/guards.py`. -/
+    `src/artifactsmmo_cli/ai/progression/guards.py`. -/
 def bankPressureThreshold (inventoryMax : Nat) : Nat := inventoryMax * 4 / 5
 
 /-- Extract the measure tuple from a `State`. `noncomputable` because

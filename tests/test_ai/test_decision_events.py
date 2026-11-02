@@ -145,7 +145,7 @@ class TestPlayer:
         with (patch.object(player._arbiter, "select", return_value=(None, [], [])),
               patch.object(player, "_record_decision_targets", return_value=None),
               patch.object(player, "_selection_context", return_value=MagicMock())):
-            player._decide_band(make_state(), GameData(), [])
+            player._decide_and_select(make_state(), GameData(), [])
         assert player._events.drain() == [
             (Mechanism.ROOT_DECLINE, "Root(a)", "no_route:x")]
 
@@ -208,9 +208,13 @@ class TestPlayer:
         goal = MagicMock()
         goal.__repr__ = lambda self: "Goal(x)"  # type: ignore[method-assign,assignment]
         state = make_state()
-        with patch.object(player, "_decide_band", return_value=(goal, [], [])):
+        with patch.object(player, "_decide_and_select", return_value=(goal, [], [])):
             player._plan_or_reuse(state, GameData(), [])  # no cache: replan
-        player._plan_cache = PlanCache(selected_goal=goal, plan=[MagicMock()], crafting_target=None,
+        step = MagicMock()
+        # A stub reads no clock: the cycle's rebind (`on_cycle_clock`) is itself.
+        goal.on_cycle_clock.return_value = goal
+        step.on_cycle_clock.return_value = step
+        player._plan_cache = PlanCache(selected_goal=goal, plan=[step], crafting_target=None,
                                        plan_level=state.level, goal_repr="Goal(x)")
         goal.is_satisfied.return_value = False
         player._last_outcome = "ok"
@@ -231,13 +235,16 @@ class TestPlayer:
         goal.is_satisfied.return_value = False
         state = make_state()
         first, second = MagicMock(), MagicMock()
+        # Stubs read no clock: the cycle's rebind (`on_cycle_clock`) is itself.
+        for stub in (goal, first, second):
+            stub.on_cycle_clock.return_value = stub
         player._plan_cache = PlanCache(selected_goal=goal, plan=[first, second], crafting_target=None,
                                        plan_level=state.level, goal_repr="Goal(x)",
                                        cursor=1, cycles_since_replan=BANK_REFRESH_INTERVAL)
         player._last_outcome = "ok"
         fresh = MagicMock()
         with (patch.object(second, "is_applicable", return_value=True),
-              patch.object(player, "_decide_band", return_value=(goal, [fresh], []))):
+              patch.object(player, "_decide_and_select", return_value=(goal, [fresh], []))):
             chosen, plan, _tried, replanned = player._plan_or_reuse(state, GameData(), [])
         assert (chosen, plan, replanned) == (goal, [second], True)
         assert player._plan_cache.cycles_since_replan == 0
@@ -247,7 +254,7 @@ class TestPlayer:
         other.__repr__ = lambda self: "Goal(y)"  # type: ignore[method-assign,assignment]
         player._plan_cache.cycles_since_replan = BANK_REFRESH_INTERVAL
         with (patch.object(second, "is_applicable", return_value=True),
-              patch.object(player, "_decide_band", return_value=(other, [fresh], []))):
+              patch.object(player, "_decide_and_select", return_value=(other, [fresh], []))):
             chosen, plan, _tried, _replanned = player._plan_or_reuse(state, GameData(), [])
         assert (chosen, plan) == (other, [fresh])
 

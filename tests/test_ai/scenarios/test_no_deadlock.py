@@ -37,15 +37,15 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.progression_tree import decide_tree
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
@@ -164,7 +164,7 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     but unreached) crafting-skill gate — the old selected_goal was
     `GatherMaterials(feather, {feather:3})`: gather feathers, via
     Fight(chicken), for boots the character cannot craft at ANY quantity of
-    feathers. `CanICraftCurrentTier` now runs BEFORE the monster-drop check,
+    feathers. `CanICraftThisAtAll` now runs BEFORE the monster-drop check,
     so the skill-gated root raises gearcrafting instead — still never
     GrindCharacterXP, and now for the actual reason the craft chain was
     blocked rather than a masked one.
@@ -191,7 +191,18 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     the same grind. Since plan B Task 12a a drop farm is priced exactly
     (rounded once a route, not once a unit), so the chicken's feathers are
     cheaper and the cheaper gearcrafting rung is the `feather_coat`: a
-    chicken's feathers, the ash planks, then the coat."""
+    chicken's feathers, the ash planks, then the coat. Since plan C Task 7 (a
+    derived character starts at the base sheet's initiative 100) it moves first
+    against `chicken`, a fight one turn shorter, so the Rest a win forces costs
+    more of it (`cycles_per_kill`) and a feather is dearer: the coat's five
+    feathers take its chain from 80 to 82 actions, the legs' two take theirs
+    from 81 to 82, and of the two equal rungs the first listed is the
+    `copper_legs_armor`: the copper, a chicken's feathers, then the legs.
+    PRICING-UNIT DEPENDENCY (review I2), DISCHARGED by the merge of the
+    ticket-farm fix: every route is priced in measured seconds, so the
+    chicken's feathers and the copper ore compare by the time they take, and
+    the coat's chain (41 actions) is cheaper than the legs' (60) again: a
+    chicken's feathers, the ash planks, then the `feather_coat`."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
@@ -219,9 +230,19 @@ def test_l10_gearcrafting_gap_combat_blocked_no_winnable_monster() -> None:
     level-window `blue_slime`. The scenario has no honest combat block, so the
     tripwire now pins the derived pick: the ramp below no longer isolates a
     combat-blocked closure, and its guarantee (no XP thrash) is asserted on the
-    derived outcome."""
+    derived outcome.
+
+    RE-DERIVED plan C Task 4: the windowed pick it pinned (`blue_slime`) was
+    deleted with the three-tier cascade. The outcome now pinned is the grind
+    target `farm_target` names: the gear objective has a target, `red_slime`,
+    so the character is not combat-blocked, and with `L*` missing pieces no
+    fight is chosen for XP (spec 2026-10-18 §6.2)."""
     player, _gd = _player(CRITERION_1_RAMP)
-    assert player._pick_winnable_monster() == "blue_slime"
+    player.plan_from_state()
+    objective = player._last_ctx.gear_objective
+    assert objective is not None and objective.monster == "red_slime"
+    assert not objective.held
+    assert player._last_ctx.combat_monster is None
 
 
 def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
@@ -260,15 +281,19 @@ def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     RE-DERIVED Task 5 (global gear objective): the ramp and the main scenario
     now share their gear objective, so they share its answer — the
     weaponcrafting climb in front of `L*`'s first piece, `iron_sword`. The
-    guarantee holds: never GrindCharacterXP."""
+    guarantee holds: never GrindCharacterXP.
+
+    RE-DERIVED plan C Task 1 (ruling C1-a): the climb's rung is the
+    woodcutting tool `T*`, `copper_axe` (weaponcrafting 1), an objective code
+    the iron pieces' woodcutting demand names, so the grind's `wanted` credit
+    crafts it over `sticky_sword`. Same root, same goal."""
     report = _run(CRITERION_1_RAMP)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(weaponcrafting->6)"
     assert report.decision.chosen_root == ReachSkillLevel(skill="weaponcrafting", level=6)
     assert [repr(a) for a in report.plan] == [
-        "Fight(yellow_slime)", "Gather(copper_rocks×50)", "Craft(copper_bar×5)",
-        "Craft(sticky_sword×1)"]
+        "Gather(copper_rocks×60)", "Craft(copper_bar×6)", "Craft(copper_axe×1)"]
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
@@ -286,8 +311,9 @@ def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> No
     below. Wave 4 owns finding a scenario that can witness the original claim.
 
     l20_dual_utility is band-adequate (no structural upgrade) with a
-    winnable monster (highwayman) in reach: the REAL `_tree_band_adequate`-
-    wired decision (not the bare decide_tree default) must pick the
+    winnable monster (highwayman) in reach: the REAL band-adequacy-wired
+    decision (not the bare decide_tree default; plan C Task 4 deleted that
+    verdict) must pick the
     char-level trunk, and the arbiter must plan a combat grind against it —
     never a skill/craft goal.
 
@@ -342,7 +368,9 @@ def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> No
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
-    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): the cheapest gold is
+    # now the yellow slime's 5-second fights, not the highwayman's.
+    assert [repr(a) for a in report.plan] == ["Fight(yellow_slime)"]
     # The climb behind it is bounded (current + 1, not the whole gate), and
     # nothing offers a level grind while a piece is missing.
     assert report.decision.fallback_roots[0] == ReachSkillLevel(skill="weaponcrafting", level=16)
@@ -386,15 +414,23 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     `lifesteal_rune` is priced through gold earned by fighting, a finite price,
     so it orders ahead of the piece behind an unpriced climb."""
     player, _gd = _player(CRITERION_2_WALLED)
-    assert player._pick_winnable_monster() == "hellhound"
-    assert player._tree_band_adequate() is False
     report = player.plan_from_state()
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    # Plan C Task 4: the windowed pick (`hellhound`) and the band-adequacy
+    # verdict went with the three-tier cascade; `hellhound` is the objective's
+    # `m*`, and with a piece of `L*` missing there is no grind target.
+    assert player._last_ctx.gear_objective is not None
+    assert player._last_ctx.gear_objective.monster == "hellhound"
+    assert player._last_ctx.combat_monster is None
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 
@@ -418,7 +454,7 @@ def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
     mask the crafting-skill gate — the old goal was the feather grey-farm
     (`GatherMaterials(feather...)` via `Fight(chicken)`), gathering feathers
     for boots the character could not craft at ANY quantity of feathers.
-    `CanICraftCurrentTier` now runs BEFORE the monster-drop check, so the
+    `CanICraftThisAtAll` now runs BEFORE the monster-drop check, so the
     skill-gated root raises gearcrafting instead of grey-farming a material
     that could not have paid off yet — still never GrindCharacterXP, and the
     grey-farm route is picked back up once the skill has risen.

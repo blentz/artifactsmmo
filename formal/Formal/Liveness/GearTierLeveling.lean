@@ -1,24 +1,50 @@
 import Formal.CombatTargetExistence
+import Formal.GearObjectiveWalk
+import Formal.LivenessChain
 import Mathlib.Tactic
 
-/-! # GearTierLeveling — grounding the combat objective in gear-tier winnability (O5.2 part 2)
+/-! # GearTierLeveling — the combat objective below the cap, over the gear objective
 
 `FightReady` (the bank-independent leveling invariant) needs the perception inputs
-`objectiveStepFires` / `objectiveStepIsFight` true: the objective tier emits a Fight
-step. In production that holds exactly when the combat picker finds a target — and the
-picker finds one iff a WINNABLE, XP-positive monster exists under the suicide guard
-(`CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive`).
+`objectiveStepFires` / `objectiveStepIsFight`. In production (spec 2026-10-18 §2.4,
+ruling C4-b) the objective tier is the gear objective `(L*, m*)` read by the root
+walk's entry `WhichPieceIsNext` and the grind target `farm_target`. The chain has
+two halves:
 
-The GEAR-TIER guarantee is that such a monster exists AT EVERY LEVEL: as the bot
-gathers/crafts up the gear tiers, its winnability window always contains a beatable
-XP-positive monster (gear targets "self-unlock as gear/level improve" — objective.py).
-This module states that guarantee (`WinnableAtEveryLevel`) and proves it grounds
-combat-target existence at every level, reusing the existing picker machinery.
+* **`L*` held** — the root is one more character level and the grind target is
+  `m*`, so the objective step fights `m*` (`fight_armed_of_held`, composed with
+  `LivenessChain.chain_emits_fight_when_target_exists_and_applicable` in
+  `held_objective_emits_fight`);
+* **`L*` not held** — no fight is chosen for XP (`no_xp_fight_of_not_held`) and
+  the root is the step of the first missing piece the cycle serves
+  (`piece_root_of_not_held`), or no root when every missing piece is declined
+  (`no_root_when_every_piece_declined`).
 
-The residual is the O5.4 BINDING: the liveness `State.objectiveStepFires` /
-`objectiveStepIsFight` opaque bools equal "the objective tier's picker returns a Fight
-target." That binding (and the catalog/recipe derivation of `WinnableAtEveryLevel`
-itself) is the cycle-step SELECT differential — stated here as the named obligation.
+Both halves are bound to production by `formal/diff/test_gear_objective_arming_diff.py`,
+which drives the live `attach_gear_objective` / `farm_target` / `resolve_root` /
+`WhichPieceIsNext` / `piece_step` on the scenario bundle.
+
+The catalogue guarantee `WinnableAcrossBand` says a winnable, XP-positive monster
+under the suicide guard exists at every band level for the band's WITNESS loadout.
+Production's gear objective reads its own predicate instead: a `_candidates` monster
+whose `L*` fighter wins at the real state with `R > 0`. `ObjectiveCovers` is the
+hypothesis that such a candidate gives production an objective whose `m*` is one
+(bound by a bundle differential).
+
+WHAT THE CAPSTONE SAYS, PLAINLY. `objective_of_winning_candidate` is the hypothesis
+`hcov` applied to a winning candidate `hwin`: its first five conjuncts are `hcov hwin`
+verbatim, and its last two (the grind target is `m*` while `L*` is held, none while
+not) are definitional facts of `grindTarget`. It proves nothing about production
+beyond what `hcov` assumes; its content is that the assumption is the right one —
+satisfiable, not trivially true, and bound by the differential. The transfer from
+the catalogue witness to a winning `L*` at a real state is NOT proved here: it is a
+named residual of `LevelFiftyReachableP`.
+
+Plan C Task 4 retired the windowed-picker grounding this module used to carry
+(`combatTargetExists_of_gearTier`: the deleted picker returned `some` target):
+production no longer fights a winnable monster for XP while a piece of `L*` is
+missing, so a picker-existence claim was a guarantee about code the bot no
+longer runs.
 
 NO new axioms (standard set + LIV-001 via the imports).
 -/
@@ -26,6 +52,9 @@ NO new axioms (standard set + LIV-001 via the imports).
 namespace Formal.Liveness.GearTierLeveling
 
 open Formal.CombatTargetExistence
+open Formal.GearObjectiveWalk
+open Formal.LivenessChain
+open Formal.ActionApplicability
 
 /-! ## The leveling band — why `∀ Int` is the wrong quantifier
 
@@ -45,11 +74,8 @@ def InLevelingBand (L : Int) : Prop := 1 ≤ L ∧ L < 50
 
 /-- **The gear-tier winnability guarantee (band-restricted).** At every level the char
     actually reaches, the monster catalog `xs` contains a winnable, XP-positive monster
-    under the suicide guard. Faithfully: the bot's gear (crafted up the tiers) always
-    makes some window monster beatable across the whole leveling range. (The derivation
-    of this from the catalog + crafting recipes — or its statement as a named server
-    axiom — is the gear-tier modeling residual; here it is the hypothesis that grounds
-    the leveling loop, and it is satisfiable — see `winnableAcrossBand_satisfiable`.) -/
+    under the suicide guard — a candidate for the gear objective's `m*`. Discharged over
+    the live catalog by `WinnableGrounded.winnableAcrossBand_grounded`. -/
 def WinnableAcrossBand (winnable xpPos : WinnableFn) (xs : List Monster) : Prop :=
   ∀ L : Int, InLevelingBand L →
     ∃ m ∈ xs, winnable m = true ∧ xpPos m = true ∧ notOverleveled L m = true
@@ -68,24 +94,100 @@ theorem winnableAcrossBand_satisfiable :
   simp only [notOverleveled, decide_eq_true_eq]
   omega
 
-/-- **Gear-tier winnability ⇒ a combat target exists at every band level.** Direct from
-    the picker's anti-livelock headline: a winnable XP-positive monster forces a `some`
-    target. So the objective tier always has a Fight to emit — the grounding for
-    `objectiveStepFires`/`objectiveStepIsFight`. -/
-theorem combatTargetExists_of_gearTier
-    (winnable xpPos : WinnableFn) (xs : List Monster)
-    (h : WinnableAcrossBand winnable xpPos xs) (L : Int) (hL : InLevelingBand L) :
-    ∃ target, pickWinnableWindowed L winnable xpPos xs = some target :=
-  pickWinnableWindowed_some_of_winnable_xp_positive L winnable xpPos xs (h L hL)
+/-! ## The held half, end to end -/
 
-/-- The combat objective is live at every level below the cap — the leveling range
-    `1 ≤ L < 50` is exactly the band, so the grounding holds throughout the trajectory. -/
-theorem combatObjective_live_below_fifty
-    (winnable xpPos : WinnableFn) (xs : List Monster)
-    (h : WinnableAcrossBand winnable xpPos xs) :
-    ∀ L : Int, 1 ≤ L → L < 50 →
-      ∃ target, pickWinnableWindowed L winnable xpPos xs = some target := by
-  intro L hlo hhi
-  exact combatTargetExists_of_gearTier winnable xpPos xs h L ⟨hlo, hhi⟩
+/-- **The held half, end to end.** A held objective's grind target is dispatched to
+    `GrindCharacterXP` and, the fight being applicable, the chain emits a fight on
+    `m*` (`LivenessChain`). -/
+theorem held_objective_emits_fight (o : ObjectiveView) (bootstrapLevel : Int)
+    (fi : FightInputs) (hheld : o.held = true) (hApp : fightApplicable fi = true) :
+    chainEmitsFight { pathTarget := some o.monster, pathHeld := o.held,
+                      fightInputs := fi, bootstrapLevel := bootstrapLevel }
+      false none = some o.monster :=
+  chain_emits_fight_when_target_exists_and_applicable _ o.monster rfl hheld hApp
+
+/-! ## The link: a winning candidate gives production a gear objective
+
+`ObjectiveCovers` is a HYPOTHESIS about production at ONE state (ruling C4-R2), stated
+over production's own predicates and monster codes:
+
+* `cands` — `gear_objective._candidates` (real monster codes: the level ceiling,
+  positive XP, a reachable spawn, not party-only);
+* `fighterWins c` — the `L*(c)` fighter at this state wins against `c`
+  (`drop_fight_winnable` on `_targets`' fighter, the gate `_rated` applies);
+* `ratePos c` — the candidate's rate `R(c)` (`_rated`) is positive;
+* `objective` — production's `gear_objective` at this state.
+
+The hypothesis: if some candidate's fighter wins with `R > 0`, the objective exists,
+is well formed, and its `m*` is such a candidate. Production: `gear_objective`
+returns None only when no rated candidate has `R > 0`, and `m*` is the max-`R`
+rated candidate. Bound by `formal/diff/test_gear_objective_link_diff.py`, which
+evaluates exactly these predicates on the scenario bundle.
+
+NOT claimed: that the catalogue's band witness (`WinnableAcrossBand`, a witness
+row's own loadout over `catalogAsMonsters`) makes the antecedent true at a real
+state. That transfer — catalogue witness to an achievable `L*` — is a named
+residual of `LevelFiftyReachableP` (the same gear-progress gap as the not-held
+phase): a naked level-41 character has no winning candidate and no objective,
+while the band witness exists.
+
+Satisfiable (`objectiveCovers_satisfiable`) and not trivially true
+(`not_objectiveCovers_of_none`). -/
+
+/-- The production link at one state (a hypothesis, bound by the differential). -/
+def ObjectiveCovers (cands : List Int) (fighterWins ratePos : Int → Bool)
+    (objective : Option ObjectiveView) : Prop :=
+  (∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) →
+    ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
+      fighterWins o.monster = true ∧ ratePos o.monster = true
+
+/-- **Production's objective at a state with a winning candidate.** Plainly: the
+    hypothesis `hcov` applied to `hwin` (the first five conjuncts, verbatim), with
+    two definitional conjuncts appended (`grindTarget` is `m*` exactly while `L*` is
+    held, `fight_armed_of_held` / `no_xp_fight_of_not_held`), so the two halves of the
+    root walk read off the same objective. No production fact beyond `hcov`. -/
+theorem objective_of_winning_candidate
+    (cands : List Int) (fighterWins ratePos : Int → Bool)
+    (objective : Option ObjectiveView)
+    (hcov : ObjectiveCovers cands fighterWins ratePos objective)
+    (hwin : ∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) :
+    ∃ o, objective = some o ∧ WellFormed o ∧ o.monster ∈ cands ∧
+      fighterWins o.monster = true ∧ ratePos o.monster = true ∧
+      (o.held = true → grindTarget o = some o.monster) ∧
+      (o.held = false → grindTarget o = none) := by
+  obtain ⟨o, hat, hwf, hm, hw, hr⟩ := hcov hwin
+  exact ⟨o, hat, hwf, hm, hw, hr, fun hh => (fight_armed_of_held o (fun _ => true) hh).2,
+    no_xp_fight_of_not_held o⟩
+
+/-- The link is satisfiable, with its antecedent true. -/
+theorem objectiveCovers_satisfiable :
+    ∃ (cands : List Int) (fighterWins ratePos : Int → Bool)
+      (objective : Option ObjectiveView),
+      (∃ c ∈ cands, fighterWins c = true ∧ ratePos c = true) ∧
+      ObjectiveCovers cands fighterWins ratePos objective := by
+  refine ⟨[5], fun _ => true, fun _ => true, some ⟨5, true, []⟩,
+    ⟨5, List.mem_singleton.mpr rfl, rfl, rfl⟩, ?_⟩
+  intro _
+  exact ⟨⟨5, true, []⟩, rfl, by simp [WellFormed], List.mem_singleton.mpr rfl, rfl, rfl⟩
+
+/-- The link is not trivially true: a winning candidate and no objective violate it. -/
+theorem not_objectiveCovers_of_none :
+    ¬ ObjectiveCovers [5] (fun _ => true) (fun _ => true) none := by
+  intro hcov
+  obtain ⟨o, hat, _⟩ := hcov ⟨5, List.mem_singleton.mpr rfl, rfl, rfl⟩
+  exact absurd hat (by simp)
+
+/-! ## Non-vacuity of the end-to-end held half -/
+
+/-- The held half's end-to-end hypotheses are jointly satisfiable. -/
+theorem held_objective_emits_fight_nonvacuous :
+    chainEmitsFight
+      { pathTarget := some witnessHeld.monster, pathHeld := witnessHeld.held,
+        bootstrapLevel := 6,
+        fightInputs := { hasLocations := true, inventoryFree := 1, hp := 100,
+                         maxHp := 100, playerLevel := 5, monsterLevel := 5,
+                         minFreeSlots := 1, xpPerKill := 10 } }
+      false none = some 7 :=
+  held_objective_emits_fight witnessHeld 6 _ rfl (by decide)
 
 end Formal.Liveness.GearTierLeveling

@@ -1,7 +1,7 @@
 """CraftReliefGoal: convert raw materials into a goal item under inventory
 pressure, instead of depositing or discarding them.
 
-Fired by the CRAFT_RELIEF guard (tiers/guards.py) when inv >= ~70% AND the
+Fired by the CRAFT_RELIEF guard (progression/guards.py) when inv >= ~70% AND the
 bot can craft a target/gear/tools item from current inventory with NET
 relief (craft_relief.py gates 1:1 recipes out). Replaces the default ladder
 routing of DEPOSIT_FULL / DISCARD_HIGH for that cycle.

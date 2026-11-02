@@ -7,7 +7,7 @@ empty result rather than an error. It then behaves exactly like a cold start.
 
 That is what happened. `8c812fb3` (2026-05-24) deleted the dormant `FarmItems`
 and `FarmMonster` goals — the WRITERS — and left readers keyed on their reprs
-(`projections.cheapest_path_to_level`'s learned xp-per-cycle arm and
+(the since-deleted `projections.cheapest_path_to_level`'s learned xp-per-cycle arm and
 `GrindCharacterXPGoal.value`'s own priority among them). Measured against the
 live learning DB on 2026-08-07: `FarmMonster%` matched 0 of 22302 cycles and
 `FarmItems%` matched 0. So for ~2.5 months those readers silently fell back to

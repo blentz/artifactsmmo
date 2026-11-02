@@ -7,16 +7,15 @@ import artifactsmmo_cli.ai.decisions.root as _root_mod
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
-from artifactsmmo_cli.ai.tiers.strategy import (
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.progression_tree import decide_tree
+from artifactsmmo_cli.ai.progression.strategy import (
     StrategyEngine,
     _prereq_order,
     _producible,
@@ -27,8 +26,10 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     root_cost,
     unmet_closure_size,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data, stamped
 
 
 def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
@@ -42,7 +43,7 @@ def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    attack={"fire": 12}, crafting_skill="weaponcrafting", crafting_level=1),
@@ -75,7 +76,7 @@ def test_actionable_step_descends_to_ready_node():
 
 
 def test_actionable_step_blocked_returns_none():
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"a": {"a": 1}}  # self-referential, no gather/leaf path
     gd._item_stats = {"a": ItemStats(code="a", level=1, type_="resource")}
     assert actionable_step(ObtainItem("a"), make_state(), gd, ctx=NO_DROPS_CONTEXT) is None
@@ -102,7 +103,7 @@ def test_is_reachable_agrees_with_the_descent_ready_source():
     unproducible raw material, so the chain is unreachable UNTIL `part` itself
     is recyclable from a held `part_source`, at which point reachability is
     governed by `part`'s OWN craftability, not its raw material's."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "trinket": ItemStats(code="trinket", level=1, type_="ring"),
         "part": ItemStats(code="part", level=1, type_="resource"),
@@ -118,7 +119,7 @@ def test_is_reachable_agrees_with_the_descent_ready_source():
     assert is_reachable(ObtainItem("trinket"), state, gd, ctx=NO_DROPS_CONTEXT) is False
     state2 = make_state(inventory={"part_source": 2})
     assert is_reachable(ObtainItem("trinket"), state2, gd, frozenset(),
-                        NO_DROPS_CONTEXT) is True
+                        ctx=NO_DROPS_CONTEXT) is True
 
 
 def test_unmet_closure_size_counts_unmet_nodes():
@@ -162,7 +163,8 @@ def test_decide_delegates_to_the_progression_tree():
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
-    assert eng.decide(state, gd) == decide_tree(state, gd, obj)
+    ctx = stamped(NO_PROFILE_CONTEXT)
+    assert eng.decide(state, gd, ctx=ctx) == decide_tree(state, gd, obj, ctx=ctx)
 
 
 def test_decide_forwards_step_decline_and_it_changes_the_answer():
@@ -211,8 +213,8 @@ def test_decide_forwards_history_into_the_root_walk(monkeypatch: pytest.MonkeyPa
     store = LearningStore(db_path=":memory:", character="probe")
     store.start_session()
     try:
-        engine.decide(state, gd, history=store)
-        engine.decide(state, gd)
+        engine.decide(state, gd, history=store, ctx=stamped(NO_PROFILE_CONTEXT))
+        engine.decide(state, gd, ctx=stamped(NO_PROFILE_CONTEXT))
     finally:
         store.close()
 
@@ -221,7 +223,7 @@ def test_decide_forwards_history_into_the_root_walk(monkeypatch: pytest.MonkeyPa
 
 def test_unmet_closure_size_dedups_shared_prereq():
     # X -> {A, B}; A -> {C}; B -> {C}: C is reached twice and deduped.
-    gd = GameData()
+    gd = served_game_data()
     gd._crafting_recipes = {"X": {"A": 1, "B": 1}, "A": {"C": 1}, "B": {"C": 1}}
     gd._item_stats = {c: ItemStats(code=c, level=1, type_="resource") for c in "XABC"}
     assert unmet_closure_size(ObtainItem("X"), make_state(), gd, ctx=NO_DROPS_CONTEXT) == 4  # X,A,B,C once each
@@ -240,7 +242,7 @@ def test_a_self_blocked_root_is_reported_then_passed_over_when_declined():
     guarantee is the walk's own `step_decline`. Both halves are asserted,
     because the first alone would read as an accepted regression.
     """
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     gd._item_stats = {"cursed_blade": ItemStats(code="cursed_blade", level=1, type_="weapon", attack={"f": 5},
@@ -290,7 +292,7 @@ def test_root_cost_shrinks_with_a_ready_source():
 
 
 def _reach_gd():
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 50}),
         "iron_helm": ItemStats(code="iron_helm", level=1, type_="helmet", resistance={"fire": 10},
@@ -313,9 +315,9 @@ def _reach_gd():
 def test_producible():
     gd = _reach_gd()
     s = make_state(level=1)
-    assert _producible("iron_helm", s, gd) is True   # craftable
-    assert _producible("iron_ore", s, gd) is True     # gatherable (iron_rocks drops it)
-    assert _producible("drop_blade", s, gd) is False   # no recipe, drop, or winnable monster
+    assert _producible("iron_helm", s, gd, now=cycle_now()) is True   # craftable
+    assert _producible("iron_ore", s, gd, now=cycle_now()) is True     # gatherable (iron_rocks drops it)
+    assert _producible("drop_blade", s, gd, now=cycle_now()) is False   # no recipe, drop, or winnable monster
 
 
 def test_is_reachable_gatherable_and_craftable_chain():
@@ -342,7 +344,7 @@ def test_is_reachable_char_level():
 
 
 def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon():
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_level = {"dragon": 40}
     fill_monster_stat_defaults(gd)
     gd._item_stats = {"drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 9})}
@@ -352,7 +354,7 @@ def test_is_reachable_char_level_false_when_underequipped_and_no_makeable_weapon
 def test_is_reachable_satisfied_and_cycle():
     gd = _reach_gd()
     assert is_reachable(ReachCharLevel(1), make_state(level=5), gd, ctx=NO_DROPS_CONTEXT) is True
-    cyc = GameData()
+    cyc = served_game_data()
     cyc._crafting_recipes = {"a": {"a": 1}}
     cyc._item_stats = {"a": ItemStats(code="a", level=1, type_="resource")}
     assert is_reachable(ObtainItem("a"), make_state(), cyc, ctx=NO_DROPS_CONTEXT) is False
@@ -394,7 +396,7 @@ def test_actionable_step_descends_to_material_for_underskill_craftable() -> None
     skill is no longer emitted as a prerequisite node (P3b): under-skill gear
     grinds via UpgradeEquipmentGoal + the LevelSkill action, so actionable_step
     routes straight to the gatherable material."""
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "widget": ItemStats(code="widget", level=5, type_="ring",
                              crafting_skill="weaving", crafting_level=5),
@@ -422,8 +424,7 @@ def test_an_objective_and_game_data_that_disagree_is_an_error_not_a_skip():
     the same object to both."""
     gd_full = _reach_gd()
     obj = CharacterObjective.from_game_data(gd_full)
-    assert obj.target_gear.get("helmet_slot") == "iron_helm"
-    gd_empty = GameData()
+    gd_empty = served_game_data()
     gd_empty._monster_level = {"chicken": 1}  # char reachable; iron_helm not producible here
     fill_monster_stat_defaults(gd_empty)
     with pytest.raises(ValueError, match=r"names \['iron_helm'\], absent from game data"):
@@ -443,26 +444,13 @@ def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
     `weapon_slot` has none. The walk therefore chooses `iron_helm`, the one
     target it can actually pursue.
 
-    THIS TEST USED TO ASSERT THE OPPOSITE: that `gear_targets_with_blockers`
-    reported `drop_blade` as its own blocker and that the walk made it
-    `chosen_root`. That was the live defect, one layer below the `novice_guide`
-    root C3P0/Lor/R2D2 chased every cycle without ever planning an action for
-    it. The test's own docstring had already flagged the ordering (a drop-only
-    weapon ahead of a craftable helm) as the flip's largest open question —
-    see `.superpowers/sdd/PLAN_wave3a_cutover/task-6-report.md`.
-
-    The half this test used to carry that is still true — an unattainable but
-    MINTED target stays on the blocker sheet with its blocker — did not go
-    away; it is pinned on the real bundle by
-    `test_max_gear_for_level.py::test_an_unattainable_target_is_kept_and_carries_its_blocker`
-    and on a fixture by
-    `test_tiers_objective.py::test_gear_targets_keep_an_unattainable_but_producible_candidate`.
+    THIS TEST USED TO ASSERT THE OPPOSITE: that the old gear sheet reported
+    `drop_blade` as its own blocker and that the walk made it `chosen_root`.
+    That was the live defect, one layer below the `novice_guide` root
+    C3P0/Lor/R2D2 chased every cycle without ever planning an action for it.
     """
     gd = _reach_gd()  # drop_blade sourceless; iron_helm craftable-from-gatherables
     obj = CharacterObjective.from_game_data(gd)
-    assert "weapon_slot" not in obj.target_gear           # drop_blade excluded at build
-    assert obj.target_gear.get("helmet_slot") == "iron_helm"
-    assert "weapon_slot" not in obj.gear_targets_with_blockers(make_state(level=5), None)
     d = StrategyEngine(obj).decide(make_state(level=5), gd,
                                    ctx=_missing("helmet_slot", "iron_helm"))
     reprs = [rs.root_repr for rs in d.ranking]
@@ -473,7 +461,7 @@ def test_a_sourceless_item_is_off_the_target_sheet_AND_off_the_blocker_sheet():
 
 
 def _combat_gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon",
                                 crafting_skill="weaponcrafting", crafting_level=10,
@@ -493,10 +481,7 @@ def _combat_gd() -> GameData:
 
 
 def _combat_obj(gd: GameData) -> CharacterObjective:
-    return CharacterObjective(
-        target_char_level=50, target_skill_levels={},
-        target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
-        target_tools={"mining": "iron_pickaxe"})
+    return CharacterObjective.from_game_data(gd)
 
 
 def test_decide_returns_a_root_when_combat_capable():
@@ -515,15 +500,15 @@ def test_decide_returns_a_root_when_combat_capable():
 def test_producible_recognizes_task_earnable_currency():
     """tasks_coin is listed in task_reward_item_codes → _producible must
     return True without needing a recipe, resource-drop, or winnable fight."""
-    gd = GameData()
+    gd = served_game_data()
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
-    assert _producible("tasks_coin", make_state(), gd) is True
+    assert _producible("tasks_coin", make_state(), gd, now=cycle_now()) is True
 
 
 def _gd_task_vendor() -> GameData:
     """jasper_crystal sold by a permanent, located tasks_trader NPC for tasks_coin
     (a task-earnable currency). No recipe, no gather/drop, no monster."""
-    gd = GameData()
+    gd = served_game_data()
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
     gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
     gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
@@ -539,16 +524,16 @@ def test_producible_recognizes_currency_buy_with_task_earnable_currency():
     it is sold by a permanent vendor for tasks_coin (task-earnable) →
     _producible must return True (Finding A fix)."""
     gd = _gd_task_vendor()
-    assert _producible("jasper_crystal", make_state(), gd) is True
+    assert _producible("jasper_crystal", make_state(), gd, now=cycle_now()) is True
 
 
 def test_not_producible_for_currency_buy_with_unattainable_currency():
     """An NPC-sold item whose currency is neither gold nor task-earnable must
     NOT be producible — the flat currency check must not over-admit."""
-    gd = GameData()
+    gd = served_game_data()
     gd._task_reward_item_codes = frozenset()
     gd._npc_stock = {"mystery_shop": {"rare_gem": 1}}
     gd._npc_buy_currency = {"mystery_shop": {"rare_gem": "void_token"}}  # not earnable
     gd._npc_locations = {"mystery_shop": (3, 3)}
     gd._item_stats = {"rare_gem": ItemStats(code="rare_gem", level=1, type_="resource")}
-    assert _producible("rare_gem", make_state(), gd) is False
+    assert _producible("rare_gem", make_state(), gd, now=cycle_now()) is False

@@ -12,13 +12,13 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.root_group import ROOT_GROUPS
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.root_group import ROOT_GROUPS
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.root_group_census import GroupCounts, root_group_counts
-from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state
+from tests.test_ai.fixtures import LADDER_ITEM_STATS, make_state, served_game_data
 
 
 def test_store_migrates_root_group_columns(tmp_path: Path) -> None:
@@ -83,10 +83,10 @@ def _record(store: LearningStore, decision: StrategyDecision) -> list[Cycle]:
 
 
 def _guard_world() -> GameData:
-    """The smallest catalogue `_decide_band` can run against: one winnable
+    """The smallest catalogue `_decide_and_select` can run against: one winnable
     monster so the walk has a trunk to resolve, a bank and a taskmaster so the
     selection context is buildable, and the shared ladder item stats."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 10}
@@ -124,7 +124,7 @@ def _decide_and_record(player: GamePlayer, store: LearningStore) -> list[Cycle]:
     the real cycle write site against whatever that produced."""
     assert player.state is not None
     assert player.game_data is not None
-    selected_goal, _plan, _tried = player._decide_band(
+    selected_goal, _plan, _tried = player._decide_and_select(
         player.state, player.game_data, player._build_actions())
     prev = player.state
     player._record_learning_cycle(
@@ -185,7 +185,7 @@ def test_a_guard_cycle_clears_when_the_next_cycle_is_won_by_the_walk(
     it. A field only written when a guard wins would smear one guard over every
     subsequent cycle until the next one fired.
 
-    Both cycles run through the real `_decide_band`. The second one's group is
+    Both cycles run through the real `_decide_and_select`. The second one's group is
     `none`: this deliberately minimal catalogue (one chicken, no recipes, no
     gear targets) gives `resolve_root` nothing to resolve, so the walk returns
     no root. That is the honest reading of THIS world and the point stands —

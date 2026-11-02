@@ -105,9 +105,14 @@ echo "== (c'') openapi conformance (strict) =="; ( cd "$ROOT" && uv run python f
 # worst on `ai/obtain_sources`, which ELEVEN production modules import and both
 # plan producers run through. Those comments were true when written and were
 # never revisited, which is what makes it a class rather than two incidents.
-echo "== (c''') census (--check x14, + joint-walk report) =="
+# vocabulary gate added 2026-10-31 (plan C Task 8, spec 2026-10-18 §5 item 4),
+# `tokenize` over src/ in well under a second: no identifier names tier, rung,
+# band, ladder or milestone outside its allowance, so the deleted tier ladder
+# cannot return under a new name. Placed beside reachability-claims, its twin.
+echo "== (c''') census (--check x15, + joint-walk report) =="
 ( cd "$ROOT" \
   && uv run python scripts/gen_reachability_claims.py --check \
+  && uv run python scripts/gen_vocabulary_gate.py --check \
   && uv run python scripts/gen_liveness.py --check \
   && uv run python scripts/gen_skill_climb.py --check \
   && uv run python scripts/gen_shed_reachability.py --check \
@@ -139,9 +144,14 @@ echo "== (c''') census (--check x14, + joint-walk report) =="
 # and this restores the committed copy, so the gate never rewrites it. The
 # gate VERDICT does not depend on which copy is on disk -- the
 # undeclared/orphan arms read the source, not the store.
+# DROP_WALL_MATRIX.md is restored because `gen_drop_wall.py --check` always
+# rewrites it and never compares it: a local run left it dirty and green
+# (stale 7a3a219a..2026-09-20). Its verdicts are pinned by
+# tests/test_audit/test_drop_wall_census.py, which reads the census itself.
 ( cd "$ROOT" && git checkout -- docs/craft_completeness/MATRIX.md docs/craft_completeness/BACKLOG.md \
                                 docs/craft_completeness/CONDITIONS.md \
-                                docs/behavioral_completeness/LIVENESS_MATRIX.md )
+                                docs/behavioral_completeness/LIVENESS_MATRIX.md \
+                                docs/behavioral_completeness/DROP_WALL_MATRIX.md )
 # The recurring 120 s `ladder_fires` oracle timeouts (2026-09-25..27) were NOT
 # memory pressure, as first suspected: the oracle was asleep, blocked writing
 # out-of-bounds PANICs to an unread stderr pipe (the rich ladder harness sent

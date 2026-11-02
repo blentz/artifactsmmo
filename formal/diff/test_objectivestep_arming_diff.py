@@ -20,9 +20,12 @@ For `step = ReachCharLevel(target)`:
 
 So production yields a fight IFF a combat target is set AND we are NOT in the
 paying-items-task defer case. The Lean kernel half
-(`WinnableGrounded.winnableAcrossBand_grounded` →
-`GearTierLeveling.combatObjective_live_below_fifty`) PROVES that below 50 a
-winnable XP-positive combat target EXISTS. So the faithful binding is:
+(`WinnableGrounded.winnableAcrossBand_grounded`) PROVES that below 50 a band-witness
+candidate EXISTS; that production then names a combat target is the hypothesis
+`GearTierLeveling.ObjectiveCovers` (bound by `test_gear_objective_link_diff.py`)
+plus the named catalogue→`L*` residual, and the target itself is `farm_target`'s
+(`fight_armed_of_held`, bound by `test_gear_objective_arming_diff.py`). So the
+binding is:
 
     produced_fight  ==  (combat_target_exists AND level < 50 AND NOT defer_case)
 
@@ -53,9 +56,9 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.world_state import WorldState
 
 COMBAT_MONSTER = "chicken"
@@ -135,7 +138,6 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5,
         combat_monster=COMBAT_MONSTER if scn.combat_target_exists else None,
-        target_gear=frozenset(), target_tools=frozenset(),
         held_task_pays=scn.task_pays,
         )
 

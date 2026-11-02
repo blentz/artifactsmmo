@@ -41,13 +41,14 @@ from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_objective import achievable_fighter
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit import currency_wall_census as cwc
 from artifactsmmo_cli.audit.currency_wall_census import (
@@ -223,7 +224,17 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
 
     21 -> 22 (ruling T14a-B', capacity is priced): on `l20_relief_full_bank`
     the census's LEGACY rune price sold the one banked sap for 18,500 gold;
-    the sell route delivers 135, so the rune is honestly gold-walled there."""
+    the sell route delivers 135, so the rune is honestly gold-walled there.
+
+    7 -> 11 resolved roots, walls still 22 (ruling "seconds inside",
+    2026-10-31): on `l48_capstone_approach`, `l48_band_adequate`,
+    `l48_raid_active` and `l48_event_active` the rune was already a walled
+    alternative; it now heads the walk over `goblin_guard_shield`. Its gold is
+    fought for off a grey `highwayman` (4 gold a win) whose fight takes 5.2 s,
+    the 5 s cooldown floor every captured 1-3 turn fight shows, where it was
+    charged one ~36 s action a win: the rune fell from 5263 to 1224 actions.
+    The shield's ~1894 drop fights take ~46 s each, so it rose from 1897 to
+    2458. Gain per price now ranks the rune first."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
@@ -232,7 +243,8 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     assert {r.scenario for r in walls if r.is_resolved_root} == {
         "l32_items_task", "l32_held_task_workable", "l32_held_task_closable",
         "l32_held_task_open", "l20_dual_utility", "l20_dual_utility_one_stocked",
-        "l24_fisher_cooking_rung"}
+        "l24_fisher_cooking_rung", "l48_capstone_approach", "l48_band_adequate",
+        "l48_raid_active", "l48_event_active"}
     assert "walled 22" in summary_line(results)
 
 
@@ -299,25 +311,47 @@ def test_a_merely_cheaper_route_is_not_a_charge() -> None:
     assert obtainable > 1, "the claim needs obtainable roots to be about"
 
 
+def test_a_dropper_is_judged_by_the_fighter_not_the_worn_gear(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spec 2026-10-18 §2.3 (plan C Task 7): `currency_evidence` asks the
+    WINNABLE verdict of `fighter(monster)` (the census passes the per-monster
+    achievable fighter), never of the scenario's own state. Pinned with a
+    verdict that holds only for the fighter it is handed: the committed bundle
+    has no currency whose live dropper an achievable loadout beats and the worn
+    gear does not (`sandwarden` loses to both in every level-40+ scenario), so
+    the matrix did not move with this change."""
+    scenario = SCENARIOS[FUNDED_CELL]
+    game_data = declared_world(scenario, BUNDLE, {})
+    state = scenario_state(scenario, game_data)
+    achieved = dataclasses.replace(state, character="achievable")
+    monkeypatch.setattr(cwc, "drop_fight_winnable",
+                        lambda fighter, _gd, _monster: fighter.character == "achievable")
+    sand = currency_evidence("sandwhisper_coin", state, game_data, lambda _monster: achieved)
+    assert sand.winnable == ("sandwarden",)
+    worn = currency_evidence("sandwhisper_coin", state, game_data, lambda _monster: state)
+    assert worn.winnable == ()
+
+
 def test_the_evidence_decomposes_the_drop_conjuncts() -> None:
     """`currency_evidence` must ask what `_drop_sources` asks. Read on real
     catalogue data so the columns in the matrix are not fiction."""
     scenario = SCENARIOS[FUNDED_CELL]
     game_data = declared_world(scenario, BUNDLE, {})
     state = scenario_state(scenario, game_data)
+    fighter = achievable_fighter(state, game_data, TIMED_NO_PROFILE_CONTEXT)
 
-    gem = currency_evidence("corrupted_gem", state, game_data)
+    gem = currency_evidence("corrupted_gem", state, game_data, fighter)
     assert set(gem.droppers) == {"corrupted_ogre", "corrupted_owlbear",
                                  "grimlet"}
     assert gem.on_live_tiles == ()
     assert set(gem.event_gated) == set(gem.droppers)
     assert not gem.task_earnable
 
-    sand = currency_evidence("sandwhisper_coin", state, game_data)
+    sand = currency_evidence("sandwhisper_coin", state, game_data, fighter)
     assert "sandwarden" in sand.on_live_tiles
     assert sand.winnable == ()
 
-    coin = currency_evidence(FUNDED_CURRENCY, state, game_data)
+    coin = currency_evidence(FUNDED_CURRENCY, state, game_data, fighter)
     assert coin.task_earnable
     assert coin.droppers == ()
 
@@ -487,9 +521,10 @@ def test_forcing_one_world_hides_the_only_funded_arm() -> None:
     forced: list[CurrencyResult] = []
     for name, scenario in SCENARIOS.items():
         state = scenario_state(scenario, default_world)
+        fighter = achievable_fighter(state, default_world, TIMED_NO_PROFILE_CONTEXT)
         for index, candidate in enumerate(_offered(state, default_world)):
             forced.extend(cwc._candidate_cells(name, candidate, index == 0, state,
-                                               default_world, currencies,
+                                               default_world, currencies, fighter,
                                                _cycle(state, default_world)))
 
     assert len(forced) >= MIN_CELLS, "the forced grid must be full-sized"
@@ -586,6 +621,17 @@ def test_the_demand_breakdown_states_the_residual_scope(
     # No charged cell moves.
     # 24 -> 25, gold 21 -> 22 (ruling T14a-B'): `l20_relief_full_bank`'s rune,
     # once priced by selling one banked sap for 18,500 gold, is gold-walled.
+    # 1491 -> 1484 (plan C Task 2): an unwinnable task roots `L*` of its
+    # monster. `l13_drop_recipe_grind`'s cow task asks `iron_legs_armor` for
+    # the deficit walk's `sticky_sword` (same 7 cells), and
+    # `l32_held_task_closable`'s ogre task, whose `L*` is held and loses, asks
+    # for nothing where the walk asked `earth_boost_potion` (-7). No charged
+    # cell moves.
+    # 1484 -> 1491 (plan C Task 7, a derived character starts at the base
+    # sheet's initiative 100): `l13_drop_recipe_grind`'s walk offers a 7th
+    # root, `leather_boots` (+7), and `l15_midband`'s `m*` moves from
+    # `highwayman` to `red_slime`, whose `L*` asks the `leather_boots` where
+    # the jewelrycrafting climb was (same count). No charged cell moves.
     assert "25 of 1491 cells are CHARGED (2 distinct currencies) — gold 22, tasks_coin 3" in line
     assert FUNDED_CURRENCY in line
     assert demand_breakdown([]) .endswith(

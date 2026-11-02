@@ -17,7 +17,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | BankSelection | bank, items, crafting | safety |
 | BestLoadout | consumables, combat | dominance, totality, validity |
 | BuySourceVenue | grandexchange | dominance, totality, safety, monotonicity |
-| CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |
 | CommittedLoop | core, planner | termination, sufficiency |
 | CompleteTaskIncome | core, tasks | monotonicity |
@@ -33,7 +32,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | DominancePareto | equipment, selling | safety |
 | DropChance | monsters, resources, cost | boundedness, monotonicity, validity |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
-| EquipmentProfile | equipment-profile | safety, validity, totality |
 | EquipmentScoring | items, gear | validity, dominance |
 | EscrowConservation | grandexchange | conservation, liveness |
 | EventWindow | events | totality, safety, dominance, monotonicity, reachability |
@@ -50,6 +48,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GatherSelection | resources | dominance, monotonicity, totality, reachability |
 | GePostPricing | grandexchange, undercut | fail-closed, dominance, boundedness |
 | GearObjective | gear-objective | termination, monotonicity, validity, dominance |
+| GearObjectiveWalk | gear-objective, combat | safety, totality |
 | GearPolicy | items, characters | dominance, safety |
 | GearTaxonomy | core, gear | validity, monotonicity, safety |
 | GearValue | items, gear | validity, dominance |
@@ -94,7 +93,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | PrerequisiteGraph | crafting, items | safety, totality |
 | PriorityBand | core, planner | safety |
 | ProgressionReserve | core, economy | deduction-accounting, monotonicity |
-| ProgressionTree | progression | safety, totality, dominance |
 | PurposeRouting | items, characters | dominance |
 | RealizableLoadout | items, characters | safety |
 | RecycleProtection | items, crafting | safety |
@@ -105,7 +103,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | SkillXpPositive | crafting, gathering, planner | safety |
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
-| StrategicValue | items, characters | safety, monotonicity |
 | StrategyTraversal | crafting, planner | reachability, totality |
 | StuckDetector | core | safety |
 | Synergy | synergy | safety, boundedness |

@@ -22,12 +22,13 @@ from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grind_heal_prep import heal_prep_goal
+from artifactsmmo_cli.ai.inventory_keep import CarriedKeep
 from artifactsmmo_cli.ai.loop_rate import FoodOffer, LoopRate, food_menu, loop_rate
 from artifactsmmo_cli.ai.strategy_driver import _fight_step_prep
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 
 _CTX = TIMED_NO_PROFILE_CONTEXT
 _UTILITY = dict(level=1, type_="utility")
@@ -107,7 +108,7 @@ def _bare(state: WorldState, gd: GameData) -> LoopRate:
     """The no-potion loop over `state`'s food menu: what the pick ranks the
     potions against."""
     loop = loop_rate(state, gd, "ogre", [], food_menu(state, gd, _CTX), {}, _CTX.timing(),
-                     _CTX.drops(), 0)
+                     _CTX.drops(), CarriedKeep(0, 0))
     assert loop is not None
     return loop
 
@@ -131,7 +132,7 @@ class TestBest:
         assert best.loadout == ("fire_res_potion",)
         food = food_menu(state, gd, _CTX)
         expected = loop_rate(state, gd, "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
-                             food, {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
+                             food, {"fire_res_potion": None}, _CTX.timing(), _CTX.drops(), CarriedKeep(0, 0))
         assert best.rate == expected
         assert best.rate.win is True
         # one boost a fight, and the held apples the recovery eats
@@ -197,7 +198,7 @@ class TestBest:
         state = _state(bank_items={"fire_res_potion": 40, "water_boost": 40})
         assert list(candidate_potions(state, gd, _CTX)) == ["water_boost", "fire_res_potion"]
         pair = loop_rate(state, gd, "ogre", [("water_boost", 1), ("fire_res_potion", 1)], (),
-                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing(), _CTX.drops(), 0)
+                         {"water_boost": None, "fire_res_potion": None}, _CTX.timing(), _CTX.drops(), CarriedKeep(0, 0))
         best = best_loadout(state, gd, _CTX, "ogre")
         assert pair is not None and pair.xp_per_second == best.rate.xp_per_second > 0
         assert best.loadout == ("fire_res_potion",)
@@ -218,7 +219,7 @@ class TestBest:
         bare = _bare(state, _gd())
         fire = loop_rate(state, _gd(), "ogre", [("fire_res_potion", UTILITY_SLOT_MAX_STACK)],
                          food_menu(state, _gd(), _CTX), {"fire_res_potion": None}, _CTX.timing(),
-                         _CTX.drops(), 0)
+                         _CTX.drops(), CarriedKeep(0, 0))
         assert fire is not None
         assert seen == [[(bare.xp_per_second, units_used(bare)), (fire.xp_per_second, 3)]]
 
@@ -270,7 +271,7 @@ class TestChosen:
         assert loadout_for(state, gd, _CTX, "ogre") == got
         prep = heal_prep_goal(state, gd, replace(ctx, loadout=got), got)
         assert repr(prep) == repr(GatherMaterialsGoal(target_item="apple", needed={"apple": 3},
-                                                      carry=True))
+                                                      carry=True, now=cycle_now()))
         step = _fight_step_prep(state, gd, replace(ctx, loadout=got), got)
         assert repr(step) == repr(prep)
 
@@ -304,7 +305,7 @@ def _refuse(*_args: object, **_kw: object) -> best_mod.BestLoadout:
 
 def _rate(used: tuple[tuple[str, int], ...], eaten: tuple[tuple[str, int], ...] = ()) -> LoopRate:
     return LoopRate(Fraction(0), 0, False, Fraction(0), Fraction(30), Fraction(0), Fraction(0), 100, 0,
-                    used, eaten, True)
+                    used, eaten, True, Fraction(0))
 
 
 def test_a_priced_potion_nothing_stocks_is_no_candidate(monkeypatch: pytest.MonkeyPatch) -> None:

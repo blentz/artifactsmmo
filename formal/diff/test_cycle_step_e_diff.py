@@ -25,12 +25,12 @@ from pathlib import Path
 
 ORACLE = Path(__file__).resolve().parents[1] / ".lake/build/bin/oracle"
 
-# GROUNDED 2026-07-20 (increment 3). Was 8, which was FALSE against the
-# repository's own fixture: 20 of the 49 `acquirableWitness` rows carry loadouts
-# larger than 8, up to 11. Now pinned in-kernel by
-# `GearedDescent.witness_loadout_le_gear_cap` (bound) and
-# `witness_loadout_attains_gear_cap` (tightness).
-GEAR_CAP = 11
+# GROUNDED 2026-07-20 (increment 3) at 11, the largest band-witness loadout.
+# RE-GROUNDED plan C Task 4 (ruling C4-R2) at production's gear slot count, 14:
+# `gearGap` is `len(gear_objective.missing)`, one piece per slot at most, pinned by
+# `test_gear_objective_e_binding_diff.py`. Moves in lockstep with
+# `CycleStepE.GEAR_CAP`.
+GEAR_CAP = 14
 
 # RE-DERIVED 2026-08-15 from the learning store. Was 270, a "B1 trace
 # measurement: max observed 270" taken on ONE character's play trace. Against

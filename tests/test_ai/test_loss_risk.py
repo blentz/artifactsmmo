@@ -12,8 +12,9 @@ from pathlib import Path
 import pytest
 
 import artifactsmmo_cli.ai.gear_objective_context as ctx_mod
+import artifactsmmo_cli.ai.objective_demand as objective_demand_mod
 import artifactsmmo_cli.ai.player as player_mod
-import artifactsmmo_cli.ai.tiers.skill_grind_target as grind_mod
+import artifactsmmo_cli.ai.progression.skill_grind_target as grind_mod
 from artifactsmmo_cli.ai.acquisition_cost import _loss_surcharge, _priced, route_options
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.game_data import GameData
@@ -24,8 +25,8 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loss_risk_core import loss_surcharge
 from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.skill_grind_target import _cache_key, build_selectable_grind_candidates
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.skill_grind_target import _cache_key, build_selectable_grind_candidates
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
 
 CTX = TIMED_NO_PROFILE_CONTEXT
@@ -113,8 +114,9 @@ class TestTheDropPrice:
 
 class TestTheGrindRungs:
     def test_the_records_are_part_of_the_memo_key(self, state, game_data) -> None:
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
-            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty(), _NOW)
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW, (None, None, None)) \
+            != _cache_key(
+            "cooking", state, game_data, (("rat", 9, 4),), LearnedDrops.empty(), _NOW, (None, None, None))
 
     def test_the_rung_prices_see_the_records(self, state, game_data, monkeypatch) -> None:
         seen = []
@@ -134,8 +136,9 @@ class TestTheGrindRungs:
         """Ruling T16a: a new observation reprices the rungs' drops, so the
         memo cannot serve a list priced at another cycle's evidence."""
         seen = LearnedDrops((("chicken", 9),), ((("chicken", "feather"), 4),), Fraction(0))
-        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW) != _cache_key(
-            "cooking", state, game_data, (), seen, _NOW)
+        assert _cache_key("cooking", state, game_data, (), LearnedDrops.empty(), _NOW, (None, None, None)) \
+            != _cache_key(
+            "cooking", state, game_data, (), seen, _NOW, (None, None, None))
 
     def test_the_rung_prices_see_the_drop_evidence(self, state, game_data, monkeypatch) -> None:
         """The rungs are priced at the cycle's evidence, and a second evidence
@@ -172,7 +175,7 @@ class TestThePlayerContext:
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="probe")
         player = self._player(monkeypatch, store)
         monkeypatch.setattr(player_mod, "supply_shortfall", lambda *a: ())
-        monkeypatch.setattr(player_mod, "xp_demand", lambda *a: (frozenset(), False))
+        monkeypatch.setattr(objective_demand_mod, "xp_demand", lambda *a: (frozenset(), False))
         assert player._selection_context().fight_records == records
         store.close()
 

@@ -33,7 +33,7 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -314,11 +314,11 @@ def test_the_walk_reads_the_event_window_on_the_cycle_clock(game_data):
     state = replace(make_state(gold=10_000), x=2, y=2,
                     active_events={"gemstone_week": opens + timedelta(hours=1)})
     buy = [NpcBuyAction(npc_code="event_vendor", item_code="event_only_item", quantity=1,
-                        npc_location=(2, 2))]
+                        npc_location=(2, 2), now=cycle_now())]
 
     def declined(at: datetime) -> list[str]:
         reasons: list[str] = []
-        decompose(GatherMaterialsGoal("event_only_item", {"event_only_item": 1}), state,
+        decompose(GatherMaterialsGoal("event_only_item", {"event_only_item": 1}, now=cycle_now()), state,
                   game_data, buy, replace(TIMED_NO_PROFILE_CONTEXT, now=at), reasons)
         return reasons
 

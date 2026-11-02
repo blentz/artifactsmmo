@@ -301,8 +301,25 @@ class LocationCatalog:
             return tile
         raise RuntimeError("Taskmaster location not found in map data")
 
+    def event_npc_tiles(self, npc_code: str) -> list[tuple[int, int]]:
+        """The overworld tiles event NPC `npc_code` stands on now: the read maps
+        of its event while that event is live (an event stands on ONE of its
+        catalogue maps per instance, the event-tile takeover), the read's layer
+        dropped as `_live_tiles` drops it for event monsters. Empty with no
+        live read, or for a permanent NPC (Task 8a I-3, M-3)."""
+        event = self.npc_event_codes.get(npc_code)
+        if event is None or event not in self.active_event_codes:
+            return []
+        return [(x, y) for x, y, _layer in self.active_event_maps.get(event, [])]
+
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
-        """Location of a named NPC: static map scan first, then event spawn tile."""
+        """Location of a named NPC: the tile its live event reads first
+        (`event_npc_tiles`, Task 8a I-3: the pricer's vendor gate and the
+        buy and sell actions read one tile), then the static map scan, then
+        the event's catalogue spawn tile."""
+        live = self.event_npc_tiles(npc_code)
+        if live:
+            return live[0]
         loc = self.npc_tiles.get(npc_code)
         if loc is not None:
             return loc
@@ -316,7 +333,14 @@ class LocationCatalog:
         Before 2026-10-10 every NPC action travelled in "overworld": the
         underground sorceress had no location at all (its fire_crystal could
         never be bought: 9 recipes), and the island's sandwhisper_trader was
-        priced as a walk inside the main overworld."""
+        priced as a walk inside the main overworld.
+
+        An event NPC read on one of its maps travels in that tile's overworld
+        region (`event_npc_tiles`), so an event read on the island is bridged
+        to through the boat (Task 8a I-3)."""
+        live = self.event_npc_tiles(npc_code)
+        if live:
+            return self.region_of(live[0][0], live[0][1], "overworld")
         tile = self.npc_tiles.get(npc_code)
         if tile is None:
             return "overworld"

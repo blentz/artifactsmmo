@@ -13,7 +13,8 @@ recycled 199,983 times and, with no reference and no finalizer, served a stale
 entry on every one of them. It bit production code twice before this module
 existed: `kit_selection._tool_caches` (a state-only key served one test's items
 to another — six `formal/diff/test_bank_selection_diff` failures that passed in
-isolation), and `weapon_winnability.beatable_count`, which returned 0 for a
+isolation), and `weapon_winnability.beatable_count` (module deleted in plan C
+Task 4), which returned 0 for a
 weapon that unlocks a monster at 97 % of a SERIAL `tests/test_ai/` run and passed
 run-alone and under xdist.
 
@@ -35,7 +36,8 @@ weakref per catalogue instead — a fixed handful of bytes — and reclaims the
 sub-cache at exactly the moment the catalogue itself is reclaimed.
 
 WHY THIS IS A MODULE AND NOT A HABIT. `loadout_cache`, `kit_selection`,
-`tiers/skill_grind_target` and `weapon_winnability` each hand-rolled their own
+`progression/skill_grind_target` and the since-deleted `weapon_winnability` each
+hand-rolled their own
 `_cache_for`, and the fifth site (`unlock_boost`, since retired) hand-rolled it WRONG — no
 reference, no finalizer, no purge. Four copies of an argument about CPython
 deallocation order is four chances to drop the load-bearing line. There is one

@@ -23,25 +23,24 @@ from artifactsmmo_cli.ai.fleet_work import (
     supply_due,
     turn_in_due,
 )
-from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.goals.currency_turnin import CurrencyTurnInGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.surrender_currency import SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.plan_tree import _label
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
-from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
     ReachFleetOutcome,
     ReachTaskOutcome,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.strategy import root_category
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.strategy import root_category
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from tests.test_ai import test_grey_farm
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_state, served_game_data, stamped
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 TROPHY = TurnIn(item_code="lich_race_trophy", npc_code="archaeologist",
@@ -179,15 +178,15 @@ class TestFleetRoots:
 
 class TestTheNode:
     def test_it_is_never_satisfied_itself(self) -> None:
-        assert SUPPLY.is_satisfied(make_state(), GameData()) is False
+        assert SUPPLY.is_satisfied(make_state(), served_game_data()) is False
 
     def test_it_has_no_prerequisites_and_is_a_fleet_root(self) -> None:
-        assert prerequisites(SUPPLY, make_state(), GameData()) == []
+        assert prerequisites(SUPPLY, make_state(), served_game_data(), ctx=stamped(NO_PROFILE_CONTEXT)) == []
         assert root_category(TURN_IN) == "fleet"
         assert _label(SUPPLY) == ("fleet supply copper_ore", "fleet")
 
     def test_a_supply_run_costs_obtaining_the_unmet_demand(self) -> None:
-        state, gd = make_state(), GameData()
+        state, gd = make_state(), served_game_data()
         ctx = _ctx(supply_target=("copper_ore", 40, 12))
         real = route_mod.route_price
 
@@ -199,14 +198,14 @@ class TestTheNode:
         assert inner.call_args.args[0] == ObtainItem("copper_ore", 12)
 
     def test_a_supply_run_the_context_no_longer_names_is_one_booking(self) -> None:
-        state, gd = make_state(), GameData()
+        state, gd = make_state(), served_game_data()
         assert route_price(SUPPLY, state, gd, _ctx(), None) == 1
         other = _ctx(supply_target=("iron_ore", 40, 12))
         assert route_price(SUPPLY, state, gd, other, None) == 1
 
     def test_a_turn_in_is_one_booking(self) -> None:
         ctx = _ctx(turn_in=TROPHY, supply_target=("lich_race_trophy", 40, 12))
-        assert route_price(TURN_IN, make_state(), GameData(), ctx, None) == 1
+        assert route_price(TURN_IN, make_state(), served_game_data(), ctx, None) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -215,26 +214,26 @@ class TestTheNode:
 
 class TestSupplyStep:
     def test_the_step_banks_the_requested_material(self) -> None:
-        goal = objective_step_goal(SUPPLY, make_state(), GameData(),
+        goal = objective_step_goal(SUPPLY, make_state(), served_game_data(),
                                    _ctx(supply_target=("copper_ore", 40, 12)))
         assert isinstance(goal, SupplyBankGoal)
         assert repr(goal) == "SupplyBank(copper_orex40)"
         assert goal._demand == 12
 
     def test_no_step_once_the_request_is_no_longer_due(self) -> None:
-        state, gd = make_state(), GameData()
+        state, gd = make_state(), served_game_data()
         assert objective_step_goal(SUPPLY, state, gd, _ctx()) is None
         small = _ctx(supply_target=("copper_ore", 9, SUPPLY_DEMAND_MIN - 1))
         assert objective_step_goal(SUPPLY, state, gd, small) is None
 
     def test_no_step_when_the_context_names_another_material(self) -> None:
         ctx = _ctx(supply_target=("iron_ore", 40, 12))
-        assert objective_step_goal(SUPPLY, make_state(), GameData(), ctx) is None
+        assert objective_step_goal(SUPPLY, make_state(), served_game_data(), ctx) is None
 
     def test_no_step_once_the_bank_holds_the_target(self) -> None:
         ctx = _ctx(supply_target=("copper_ore", 40, 12))
         state = make_state(bank_items={"copper_ore": 40})
-        assert objective_step_goal(SUPPLY, state, GameData(), ctx) is None
+        assert objective_step_goal(SUPPLY, state, served_game_data(), ctx) is None
 
 
 class TestTurnInStep:

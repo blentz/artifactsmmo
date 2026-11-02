@@ -15,8 +15,9 @@
   An items task: its completion gold over the actions to obtain the items.
 * other gold per cycle: the fight gold of what the character would otherwise
   fight (`ctx.combat_monster`) — USER "The grind target's gold".
-* DROPS: the task monster drops an item still SHORT for the unmet target gear
-  or near-term targets, the bag and bank used up first (`short_items`).
+* DROPS: the task monster drops an item still SHORT for the missing pieces of
+  the gear objective `L*` or the tools `T*` its demanded skills climb with, the
+  bag and bank used up first (`short_items`).
 """
 
 from collections import Counter
@@ -30,6 +31,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gold_rate import fight_gold_rate
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.objective_codes import objective_codes
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.task_alignment import task_advances_progression
 from artifactsmmo_cli.ai.task_horizon import HORIZON_OUT_OF_REACH, resolve_task_horizon
@@ -38,8 +40,8 @@ from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
 def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -> frozenset[str]:
-    """The items still SHORT for one copy of each unmet target (target gear not
-    worn, and the near-term targets): the recipe closure walked with
+    """The items still SHORT for one copy of each missing `L*` piece and
+    each `T*` tool (`objective_codes`) and the supply shortfall: the recipe closure walked with
     quantities, the bag and the bank used up first. A drop already banked in
     enough copies is no reason to work a task (live 2026-10-07: wolf, pig and
     skeleton all read "aligned" by an unquantified closure while the bank held
@@ -47,8 +49,7 @@ def short_items(state: WorldState, game_data: GameData, ctx: SelectionContext) -
     stock: Counter[str] = Counter(state.inventory)
     stock.update(state.bank_items or {})
     short: set[str] = set()
-    worn = {code for code in state.equipment.values() if code is not None}
-    stack = [(code, 1) for code in ctx.target_gear | ctx.near_term_targets if code not in worn]
+    stack = [(code, 1) for code in objective_codes(ctx)]
     stack.extend(ctx.supply_shortfall)
     while stack:
         code, qty = stack.pop()
@@ -105,7 +106,7 @@ def task_worth_for(code: str, task_type: str | None, remaining: int, state: Worl
     probe = replace(state, task_code=code, task_type=task_type,
                     task_progress=0, task_total=remaining)
     if task_type == "monsters":
-        horizon = resolve_task_horizon(probe, game_data)
+        horizon = resolve_task_horizon(probe, game_data, ctx, history)
         feasible = horizon is None or horizon.verdict != HORIZON_OUT_OF_REACH
         short = short_items(state, game_data, ctx)
         drop_aligned = any(item in short for item, *_ in game_data.monster_drops(code))

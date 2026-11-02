@@ -15,13 +15,15 @@ import json
 import re
 from pathlib import Path
 
-from formal.diff.test_winnable_across_band_diff import (
+from formal.sim.winnable_witness import (
+    BAND_HI,
+    BAND_LO,
     BASE_STATS_PATH,
     SNAPSHOT_PATH,
-    _game_data_from_snapshot,
-    _item_stats_from_snapshot,
+    build_witness_row,
+    game_data_from_snapshot,
+    item_stats_from_snapshot,
 )
-from formal.sim.winnable_witness import BAND_HI, BAND_LO, build_witness_row
 
 FIXTURE = Path(__file__).resolve().parents[1] / "Formal/Liveness/GameDataFixture.lean"
 
@@ -66,8 +68,8 @@ def test_acquirability_tables_match_independent_recompute():
     assert _lean_str_list(src, "acquirableCert") == expected_cert
 
     # Production sweep over the cert-restricted pool: frontier + row identity.
-    stats = _item_stats_from_snapshot(snap)
-    gd = _game_data_from_snapshot(snap, stats)
+    stats = item_stats_from_snapshot(snap)
+    gd = game_data_from_snapshot(snap, stats)
     cert = set(expected_cert)
     acq_stats = {c: s for c, s in stats.items() if c in cert}
     base = json.loads(Path(BASE_STATS_PATH).read_text())["base_stats"]

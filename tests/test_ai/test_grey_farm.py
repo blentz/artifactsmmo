@@ -16,13 +16,13 @@ from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.grey_farm import (
-    GREY_FARM_NEXT_TIER_MARGIN,
+    GREY_FARM_NEXT_RECIPE_MARGIN,
     grey_farm_allowed,
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, served_game_data
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -64,7 +64,7 @@ def fill_monster_stat_defaults(gd: GameData) -> None:
 def _gd(alchemy_next_tier_level: int | None = 20) -> GameData:
     """chicken (L1) drops feather; health_potion (alchemy 5) consumes feather;
     optionally a same-family next-tier recipe at `alchemy_next_tier_level`."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
@@ -168,8 +168,8 @@ class TestGreyFarmPolicy:
     def test_boundary_exactly_margin_away_is_close(self) -> None:
         """gap == margin: still 'close' (grind it), > margin: farm."""
         gd = _gd(alchemy_next_tier_level=20)
-        at_margin = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_TIER_MARGIN})
-        beyond = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_TIER_MARGIN - 1})
+        at_margin = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_RECIPE_MARGIN})
+        beyond = make_state(level=12, skills={"alchemy": 20 - GREY_FARM_NEXT_RECIPE_MARGIN - 1})
         assert grey_farm_allowed("feather", at_margin, gd) is False
         assert grey_farm_allowed("feather", beyond, gd) is True
 
@@ -183,7 +183,7 @@ def _gd_gap9() -> GameData:
     consume feather. The old lowest-consumer heuristic evaluated only
     low_glove (close -> suppress); the ANY-consumer policy allows because
     iron_boots is non-obsolete."""
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 60}
@@ -300,7 +300,7 @@ class TestGatherEmitsDropFarmFights:
         state = dataclasses.replace(
             make_state(level=12, skills={"alchemy": 5}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
         plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
@@ -311,7 +311,7 @@ class TestGatherEmitsDropFarmFights:
         gd = _gd(alchemy_next_tier_level=20)
         state = make_state(level=12, skills={"alchemy": 19},
                            inventory={}, bank_items={})
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
@@ -338,11 +338,11 @@ class TestGatherEmitsDropFarmFights:
             inventory_max=100, inventory_slots_max=20)
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
-        plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         assert decompose(plain, state, gd, actions, NO_DROPS_CONTEXT) is None, \
             "vacuous: the directive does not suppress the plain gather"
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2},
-                                   skill_grind=True)
+                                   skill_grind=True, now=cycle_now())
         plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
         assert plan[0].drop_target == ("feather", 2)
@@ -362,7 +362,7 @@ class TestGatherEmitsDropFarmFights:
         state = dataclasses.replace(
             make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty()),
                    FightAction(monster_code="hawk", locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())]
@@ -386,7 +386,7 @@ class TestGatherEmitsDropFarmFights:
         gd = _gd(alchemy_next_tier_level=20)
         state = make_state(level=3, skills={"alchemy": 5},
                            inventory={}, bank_items={})
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         relevant = goal.relevant_actions([fight], state, gd)
         kept = [a for a in relevant if isinstance(a, FightAction)]

@@ -34,7 +34,7 @@ open Formal.Liveness.Measure
 open Formal.Liveness
 
 /-- Item 7a: MetaGoal inductive mirroring the production protocol
-    in `src/artifactsmmo_cli/ai/tiers/meta_goal.py`. -/
+    in `src/artifactsmmo_cli/ai/progression/meta_goal.py`. -/
 inductive MetaGoal where
   | reachCharLevel (target : Nat)
   | obtainItem (code : String) (quantity : Nat)

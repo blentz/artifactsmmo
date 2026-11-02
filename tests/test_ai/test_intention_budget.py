@@ -34,7 +34,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 YIELDED = "ReachSkill(jewelrycrafting->21)"
 
@@ -229,7 +229,7 @@ def test_the_player_hands_its_turns_to_the_arbiter():
     with (patch.object(player._arbiter, "select", return_value=(None, [], [])) as select,
           patch.object(player, "_record_decision_targets", return_value=None),
           patch.object(player, "_selection_context", return_value=MagicMock())):
-        player._decide_band(make_state(), GameData(), [])
+        player._decide_and_select(make_state(), GameData(), [])
     assert select.call_args.kwargs["turns"] == {YIELDED: 1}
 
 
@@ -344,8 +344,8 @@ def test_a_turn_is_kept_per_kind_of_work_not_per_quantity():
 
 
 def test_a_resized_goal_keeps_spending_the_same_budget(tmp_path):
-    big = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 60})
-    small = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 20})
+    big = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 60}, now=cycle_now())
+    small = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 20}, now=cycle_now())
     player = _player()
     for goal, cycles in ((big, BUDGET_CYCLES - 1), (small, 1)):
         player._arbiter._committed_repr = repr(goal)

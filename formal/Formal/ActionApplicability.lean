@@ -218,9 +218,9 @@ theorem fightApplicable_false_above_level_window
 /-- **Composition theorem**: winnability still does not imply
 applicability — a winnable monster whose kill grants zero XP is not
 applicable (it serves no leveling objective). This is the post-P0 form of
-the orthogonality contract: the picker's fallback tier must filter
-winnable candidates by `xp_per_kill > 0`, exactly what
-`CombatTargetExistence.pickWinnableWindowed` does. -/
+the orthogonality contract: a target chosen for XP must grant XP
+(`xp_per_kill > 0`), which the gear objective's `m*` candidates do (`gear_objective`
+reads only monsters paying XP). -/
 theorem winnable_does_not_imply_applicable
     (i : FightInputs) (winnable : Bool)
     (hZero : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) (hTask : i.taskFight = false) :

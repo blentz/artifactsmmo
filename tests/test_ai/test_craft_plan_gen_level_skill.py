@@ -5,8 +5,12 @@ expanded at execution. The walk opens a gate only when the skill can be ground
 from here (`skill_is_grindable`), and declines, naming the item, when it
 cannot."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
+import pytest
+
+from artifactsmmo_cli.ai import craft_plan_gen
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -15,10 +19,11 @@ from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import DECOMPOSE_POLICY
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 from tests.test_ai.test_craft_plan_gen import _copper_ring_actions, _ctx, _gd_copper_ring
 
 
@@ -64,12 +69,34 @@ class TestASkillGateIsASubTask:
         del gd._item_stats["trinket"]
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
         actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                now=cycle_now())
         declined: list[str] = []
 
-        assert decompose(GatherMaterialsGoal("widget", {"widget": 1}), state, gd, actions,
+        assert decompose(GatherMaterialsGoal("widget", {"widget": 1}, now=cycle_now()), state, gd, actions,
                          _ctx(), declined) is None
         assert declined == ["infeasible:widget:no_route:widget"]
+
+    def test_the_gate_is_asked_on_the_contexts_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Ruling T8b: whether a gate can be ground open is asked at the
+        cycle's instant (`ctx.now`), never at the wall clock."""
+        instant = datetime(2026, 1, 1, 12, tzinfo=UTC)
+        seen: list[datetime] = []
+        real = craft_plan_gen.skill_is_grindable
+
+        def spy(skill: str, level: int, state: WorldState, gd: GameData, now: datetime) -> bool:
+            seen.append(now)
+            return real(skill, level, state, gd, now)
+
+        monkeypatch.setattr(craft_plan_gen, "skill_is_grindable", spy)
+        gd = _gd()
+        state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
+        actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
+                                bank_accessible=True, task_exchange_min_coins=0,
+                                learned_drops=LearnedDrops.empty(), now=instant)
+        decompose(GatherMaterialsGoal("widget", {"widget": 1}, now=cycle_now()), state, gd, actions,
+                  replace(_ctx(), now=instant), [])
+        assert seen == [instant]
 
 
 class TestTheGrindDecomposition:
@@ -89,7 +116,7 @@ class TestTheGrindDecomposition:
         state = make_state(inventory={}, bank_items={"copper_ore": 5},
                            skills={"mining": 5, "jewelrycrafting": 5})
         declined: list[str] = []
-        legs = decompose(GatherMaterialsGoal("copper_ore", {"copper_ore": 10}), state, gd,
+        legs = decompose(GatherMaterialsGoal("copper_ore", {"copper_ore": 10}, now=cycle_now()), state, gd,
                          _copper_ring_actions(), _ctx(), declined)
         assert [repr(a) for a in legs or []] == ["Withdraw(copper_ore×5)"]
         assert declined == ["infeasible:copper_bar:no_route:"]
@@ -102,7 +129,8 @@ class TestAGrindCycleEndsInItsEarningLeg:
         gd = _gd()
         state = make_state(inventory={}, bank_items={}, skills={"gearcrafting": 1})
         actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                now=cycle_now())
         legs = decompose(ReachSkillGoal("gearcrafting", 2), state, gd, actions, _ctx())
         assert [repr(a) for a in legs or []] == ["Gather(gear_ore_rocks×1)", "Craft(trinket×1)"]
 

@@ -1,8 +1,8 @@
 # Item 12 — Mutation kill-rate audit (enumeration surface)
 
 Source of truth: formal/diff/mutate.py
-Total run_group calls: 73
-Total enumerated mutations: 190
+Total run_group calls: 72
+Total enumerated mutations: 187
 
 ## Per-source-constant breakdown
 
@@ -88,8 +88,6 @@ Total enumerated mutations: 190
     PRIORITY_BAND_MUTATIONS (4) → formal/diff/test_priority_band_diff.py
   PROGRESSION_GOAL_SRC — 1 mutations across 1 test(s)
     PROGRESSION_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
-  PROJECTIONS_SRC — 3 mutations across 1 test(s)
-    CHEAPEST_PATH_MUTATIONS (3) → formal/diff/test_cheapest_path_diff.py
   PROJECTION_SRC — 3 mutations across 1 test(s)
     PROJECTION_MUTATIONS (3) → formal/diff/test_loadout_projection_diff.py
   PURSUE_TASK_GOAL_SRC — 2 mutations across 1 test(s)
@@ -155,7 +153,6 @@ Total enumerated mutations: 190
   formal/diff/test_bank_expansion_diff.py — 2 mutations across 1 src(s)
   formal/diff/test_bank_selection_diff.py — 5 mutations across 1 src(s)
   formal/diff/test_calculate_path_diff.py — 6 mutations across 1 src(s)
-  formal/diff/test_cheapest_path_diff.py — 3 mutations across 1 src(s)
   formal/diff/test_cycle_step_diff.py — 4 mutations across 1 src(s)
   formal/diff/test_cycles_for_progress_diff.py — 3 mutations across 1 src(s)
   formal/diff/test_decide_key_diff.py — 4 mutations across 1 src(s)

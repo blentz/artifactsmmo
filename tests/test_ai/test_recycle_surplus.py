@@ -4,8 +4,8 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai.fixtures import make_state
 
 
@@ -56,7 +56,7 @@ def test_surplus_includes_overstocked_recyclable_gear():
 
 def test_target_tool_hoard_keeps_ONE_and_recycles_the_REST():
     """THE live hoard (Robby 2026-07-12): 18 copper_axe — the axe is the best
-    woodcutting tool AND a `target_tools` code, so the old blanket
+    woodcutting tool AND was a `target_tools` code, so the old blanket
     `recycle_protected_codes` fallback (`target_gear | target_tools`, used
     whenever no loadout profile is recorded) hid the WHOLE CODE from every
     recycle path while the weaponcrafting grind kept manufacturing more.
@@ -66,8 +66,7 @@ def test_target_tool_hoard_keeps_ONE_and_recycles_the_REST():
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
-    ctx = _ctx(target_tools=frozenset({"copper_axe"}))
-    assert recyclable_surplus(state, gd, ctx) == {"copper_axe": 17}
+    assert recyclable_surplus(state, gd, _ctx()) == {"copper_axe": 17}
     assert state.inventory["copper_axe"] - 17 == 1
 
 
@@ -256,7 +255,7 @@ def test_goal_satisfied_when_no_surplus():
 
 
 def test_fires_on_idle_surplus_not_under_pressure_or_objective():
-    from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
+    from artifactsmmo_cli.ai.progression.means import MeansKind, _fires
     gd = _gd()
     # Idle (low fill), surplus copper_helmet, nothing demands it -> fires.
     idle = make_state(level=5, skills={"gearcrafting": 1},
@@ -272,8 +271,8 @@ def test_fires_on_idle_surplus_not_under_pressure_or_objective():
 
 
 def test_map_means_returns_recycle_goal():
+    from artifactsmmo_cli.ai.progression.means import MeansKind
     from artifactsmmo_cli.ai.strategy_driver import map_means
-    from artifactsmmo_cli.ai.tiers.means import MeansKind
     g = map_means(MeansKind.RECYCLE_SURPLUS, _gd(), _ctx(), make_state())
     assert isinstance(g, RecycleSurplusGoal)
 

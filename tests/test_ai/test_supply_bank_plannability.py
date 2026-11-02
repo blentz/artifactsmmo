@@ -27,8 +27,9 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from tests.test_ai.fixtures import cycle_now
 from tests.test_ai.search_bounds import NO_CLOCK, SEARCH_NODE_BUDGET
 
 _ORE = "supply_ore"
@@ -108,7 +109,7 @@ def _state(gd: GameData, *, bank: dict[str, int] | None = None,
 def _actions(gd: GameData, state) -> list:
     objective = CharacterObjective.from_game_data(gd)
     return build_actions(gd, state, objective, bank_accessible=True,
-                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
 
 
 def test_planner_produces_a_plan_for_a_realistic_demand() -> None:
@@ -117,7 +118,7 @@ def test_planner_produces_a_plan_for_a_realistic_demand() -> None:
     above ~14."""
     gd = _gd()
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20, now=cycle_now())
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     planner = GOAPPlanner()
@@ -145,7 +146,7 @@ def test_the_plan_is_longer_than_the_inherited_depth_bound() -> None:
     than deleted — the override still decides reachability, just further out."""
     gd = _gd()
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=480, demand=480)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=480, demand=480, now=cycle_now())
 
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd)
@@ -167,7 +168,7 @@ def test_planner_banks_the_remainder_when_the_bank_is_partly_stocked() -> None:
     removes exactly those copies."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 12})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=8)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=8, now=cycle_now())
     assert goal.is_satisfied(state) is False
 
     planner = GOAPPlanner()
@@ -184,7 +185,7 @@ def test_planner_plans_a_crafted_supply_target() -> None:
     craft have to be admitted, and the bar has to reach the bank."""
     gd = _gd()
     state = _state(gd, bank={}, inventory={_ORE: 16})
-    goal = SupplyBankGoal(item_code=_BAR, quantity=4, demand=4)
+    goal = SupplyBankGoal(item_code=_BAR, quantity=4, demand=4, now=cycle_now())
 
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd)
@@ -200,7 +201,7 @@ def test_relevant_actions_scopes_the_search_to_the_closure_plus_deposit() -> Non
     heuristic, an unscoped Dijkstra)."""
     gd = _gd()
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20, now=cycle_now())
     actions = _actions(gd, state)
 
     admitted = goal.relevant_actions(actions, state, gd)
@@ -223,7 +224,7 @@ def test_relevant_actions_on_a_satisfied_goal_still_returns_a_usable_set() -> No
     other way. `_production_goal`'s floor keeps the set honest."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 20})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20, now=cycle_now())
     assert goal.is_satisfied(state) is True
 
     admitted = goal.relevant_actions(_actions(gd, state), state, gd)
@@ -241,7 +242,7 @@ def test_a_deep_chain_from_an_empty_bank_plans() -> None:
     (`search_bounds.py`). Phase 3-2 deleted the `is_plannable` gate this test
     also used to pin."""
     gd = _deep_chain_gd()
-    goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1)
+    goal = SupplyBankGoal(item_code="deep_widget", quantity=1, demand=1, now=cycle_now())
     state = _state(gd, bank={})
 
     planner = GOAPPlanner()
@@ -263,7 +264,7 @@ def test_an_unaffordable_buy_only_target_finds_no_plan_at_once() -> None:
     gd._npc_buy_currency = {"rune_vendor": {"rare_rune": "gold"}}
     gd._npc_locations = {"rune_vendor": (8, 13)}
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code="rare_rune", quantity=2, demand=2)
+    goal = SupplyBankGoal(item_code="rare_rune", quantity=2, demand=2, now=cycle_now())
     assert goal.is_satisfied(state) is False
 
     planner = GOAPPlanner()
@@ -277,11 +278,11 @@ def test_an_unaffordable_buy_only_target_finds_no_plan_at_once() -> None:
 def test_max_depth_tracks_demand_not_the_bank_inflated_quantity() -> None:
     """`quantity` is `banked + demand`, so a well-stocked bank would inflate the
     search depth without adding a single action to plan."""
-    stocked = SupplyBankGoal(item_code=_ORE, quantity=508, demand=8)
-    bare = SupplyBankGoal(item_code=_ORE, quantity=8, demand=8)
+    stocked = SupplyBankGoal(item_code=_ORE, quantity=508, demand=8, now=cycle_now())
+    bare = SupplyBankGoal(item_code=_ORE, quantity=8, demand=8, now=cycle_now())
 
     assert stocked.max_depth == bare.max_depth
-    assert SupplyBankGoal(item_code=_ORE, quantity=90, demand=90).max_depth == 9000
+    assert SupplyBankGoal(item_code=_ORE, quantity=90, demand=90, now=cycle_now()).max_depth == 9000
 
 
 def test_an_unvisited_bank_still_plans_the_full_quantity() -> None:
@@ -291,7 +292,7 @@ def test_an_unvisited_bank_still_plans_the_full_quantity() -> None:
     to be produced."""
     gd = _gd()
     state = _state(gd, bank=None)
-    goal = SupplyBankGoal(item_code=_ORE, quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=6, demand=6, now=cycle_now())
 
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd)
@@ -322,7 +323,7 @@ def test_the_plan_never_withdraws_the_item_it_is_supplying() -> None:
     of the target, and a real deficit on top."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 59}, inventory={_ORE: 20}, bag=120)
-    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46, now=cycle_now())
     actions = _actions(gd, state)
     assert _target_withdraws(actions, _ORE), (
         "the pool must OFFER a withdraw of the target, or this proves nothing")
@@ -349,7 +350,7 @@ def test_the_plan_reaches_the_target_and_never_lowers_the_banked_count() -> None
     property the goal actually promises."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 59}, inventory={_ORE: 20}, bag=120)
-    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46, now=cycle_now())
 
     plan = GOAPPlanner().plan(state, goal, _actions(gd, state), gd)
     assert plan
@@ -371,7 +372,7 @@ def test_relevant_actions_refuses_the_target_withdraw_but_keeps_the_inputs() -> 
     the delegate's whole point. Only the target's own withdraw is a null cycle."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 40, _BAR: 3})
-    goal = SupplyBankGoal(item_code=_BAR, quantity=7, demand=4)
+    goal = SupplyBankGoal(item_code=_BAR, quantity=7, demand=4, now=cycle_now())
     actions = _actions(gd, state)
     assert _target_withdraws(actions, _BAR), "the pool must offer the bar withdraw"
 
@@ -388,7 +389,7 @@ def test_a_banked_input_is_withdrawn_for_a_crafted_supply_target() -> None:
     and craft — the plan must actually take it."""
     gd = _gd()
     state = _state(gd, bank={_ORE: 40})
-    goal = SupplyBankGoal(item_code=_BAR, quantity=4, demand=4)
+    goal = SupplyBankGoal(item_code=_BAR, quantity=4, demand=4, now=cycle_now())
 
     planner = GOAPPlanner()
     plan = planner.plan(state, goal, _actions(gd, state), gd)
@@ -412,7 +413,7 @@ def test_two_producers_of_the_same_item_do_not_churn_the_bank() -> None:
     bank = {_ORE: 59}
     first = _state(gd, bank=bank, inventory={_ORE: 20}, bag=120, name="r2d2")
     second = _state(gd, bank=bank, inventory={}, bag=120, name="sibling")
-    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=105, demand=46, now=cycle_now())
 
     plans = [GOAPPlanner().plan(s, goal, _actions(gd, s), gd)
              for s in (first, second)]
@@ -431,6 +432,6 @@ def test_no_heuristic_override() -> None:
     override is a conscious decision with its own admissibility argument."""
     gd = _gd()
     state = _state(gd, bank={})
-    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20)
+    goal = SupplyBankGoal(item_code=_ORE, quantity=20, demand=20, now=cycle_now())
 
     assert goal.heuristic(state, gd) == 0.0

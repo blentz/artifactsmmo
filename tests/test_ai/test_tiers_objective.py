@@ -6,16 +6,11 @@ from unittest.mock import patch
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
-from artifactsmmo_cli.ai.tiers import objective as objective_mod
-from artifactsmmo_cli.ai.tiers.objective import (
-    CharacterObjective,
-    is_attainable,
-    is_attainable_now,
-    is_suppliable,
-)
-from artifactsmmo_cli.ai.world_state import SKILL_NAMES
+from artifactsmmo_cli.ai.progression import objective as objective_mod
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, feasible_now, is_attainable, near_term_model
+from artifactsmmo_cli.ai.suppliable import is_suppliable
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, obtainable_now
 
 
 def _gd() -> GameData:
@@ -36,42 +31,6 @@ def _gd() -> GameData:
     gd._resource_drops = {"rocks": "bar"}
     gd._resource_skill = {"rocks": ("mining", 1)}
     return gd
-
-
-def test_target_char_and_skill_levels():
-    obj = CharacterObjective.from_game_data(_gd())
-    assert obj.target_char_level == 50
-    assert obj.target_skill_levels == {s: 50 for s in SKILL_NAMES}
-
-
-def test_best_gear_per_slot():
-    obj = CharacterObjective.from_game_data(_gd())
-    assert obj.target_gear["weapon_slot"] == "iron_sword"  # higher attack wins
-    assert "copper_ore" not in obj.target_gear.values()    # resources excluded
-
-
-def test_paired_ring_slots_duplicate_best_over_second_distinct():
-    """RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are duplicate-
-    allowed (DUPLICATE_SLOT_TYPES), so a 2nd copy of the best ring
-    (gold_ring, hp_bonus 8) strictly dominates the 2nd-ranked DISTINCT ring
-    (ruby_ring, hp_bonus 6) — both slots target gold_ring. Previously pinned
-    ring1=gold_ring/ring2=ruby_ring encoded the same "ranked-distinct" quirk
-    Task 2 fixed for artifacts; rings share `_slot_assignments` and shared
-    the bug."""
-    obj = CharacterObjective.from_game_data(_gd())
-    assert obj.target_gear["ring1_slot"] == "gold_ring"
-    assert obj.target_gear["ring2_slot"] == "gold_ring"
-
-
-def test_slot_with_no_candidate_is_omitted():
-    gd = GameData()
-    gd._item_stats = {"only_weapon": ItemStats(code="only_weapon", level=1, type_="weapon", attack={"f": 1})}
-    gd._crafting_recipes = {"only_weapon": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    assert "weapon_slot" in obj.target_gear
-    assert "boots_slot" not in obj.target_gear
 
 
 def test_is_attainable_gatherable_and_craftable_chain():
@@ -96,78 +55,6 @@ def test_is_attainable_false_for_cycle():
     gd = GameData()
     gd._crafting_recipes = {"a": {"a": 1}}
     assert is_attainable("a", gd) is False
-
-
-def test_target_gear_prefers_attainable_over_higher_value_drop():
-    gd = GameData()
-    gd._item_stats = {
-        "drop_blade": ItemStats(code="drop_blade", level=1, type_="weapon", attack={"f": 99}),  # unattainable
-        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon", attack={"f": 20}),    # craftable
-    }
-    gd._crafting_recipes = {"iron_blade": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    assert obj.target_gear["weapon_slot"] == "iron_blade"  # attainable wins despite lower value
-
-
-def _gd_with_tools() -> GameData:
-    """Fixture with combat weapons + skill tools sharing weapon_slot."""
-    gd = GameData()
-    gd._item_stats = {
-        # Combat weapon: high attack, no skill_effects.
-        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                  attack={"earth": 5}),
-        # Mining tool: 0 attack, mining cooldown reduction.
-        "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
-                                   skill_effects={"mining": -1}),
-        # Woodcutting tool.
-        "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
-                               skill_effects={"woodcutting": -1}),
-        # Stronger mining tool: cooldown reduction 2.
-        "iron_pickaxe": ItemStats(code="iron_pickaxe", level=5, type_="weapon",
-                                 skill_effects={"mining": -2}),
-    }
-    gd._crafting_recipes = {
-        c: {"bar": 1}
-        for c in ("copper_dagger", "copper_pickaxe", "copper_axe", "iron_pickaxe")
-    }
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    return gd
-
-
-def test_target_tools_picks_best_per_gathering_skill():
-    """CharacterObjective.target_tools must include the highest-magnitude
-    tool per gathering skill. iron_pickaxe beats copper_pickaxe for mining
-    (effect -2 vs -1); copper_axe wins woodcutting unopposed."""
-    obj = CharacterObjective.from_game_data(_gd_with_tools())
-    assert obj.target_tools.get("mining") == "iron_pickaxe"
-    assert obj.target_tools.get("woodcutting") == "copper_axe"
-    # No fishing or alchemy tool → omitted.
-    assert "fishing" not in obj.target_tools
-    assert "alchemy" not in obj.target_tools
-
-
-def test_target_gear_weapon_slot_unaffected_by_tools():
-    """The combat-weapon target stays the highest-attack weapon. Tools
-    score 0 on the combat axis so they never compete with copper_dagger
-    for the weapon_slot gear pick."""
-    obj = CharacterObjective.from_game_data(_gd_with_tools())
-    assert obj.target_gear.get("weapon_slot") == "copper_dagger"
-
-
-def test_tools_default_empty_for_backward_compat_constructor():
-    """Direct constructor (legacy test fixtures) defaults target_tools to
-    empty dict so existing call sites stay green."""
-    gd = GameData()
-    obj = CharacterObjective(
-        target_char_level=50,
-        target_skill_levels={s: 50 for s in SKILL_NAMES},
-        target_gear={},
-        _game_data=gd,
-    )
-    assert obj.target_tools == {}
 
 
 def _gd_near_term() -> GameData:
@@ -210,75 +97,6 @@ def _crafted_at(gd: GameData, skill: str, *codes: str) -> None:
     gd._workshop_locations = {**gd._workshop_locations, skill: (0, len(gd._workshop_locations))}
 
 
-def test_near_term_gear_picks_best_usable_at_level():
-    """Level 5: copper_armor (usable) wins body_armor_slot; iron (10) and
-    dragon (40) are over-level and excluded."""
-    obj = CharacterObjective.from_game_data(_gd_near_term())
-    state = make_state(level=5)
-    targets = obj.near_term_gear(state)
-    assert targets["body_armor_slot"] == "copper_armor"
-    assert targets["helmet_slot"] == "copper_helmet"
-
-
-def test_near_term_gear_respects_level_gate():
-    """Level 12: iron_armor becomes the near-term pick over copper."""
-    obj = CharacterObjective.from_game_data(_gd_near_term())
-    targets = obj.near_term_gear(make_state(level=12))
-    assert targets["body_armor_slot"] == "iron_armor"
-
-
-def test_near_term_gear_requires_strict_upgrade():
-    """A slot already holding the best usable item gets no target."""
-    obj = CharacterObjective.from_game_data(_gd_near_term())
-    state = make_state(level=5, equipment={"body_armor_slot": "copper_armor"})
-    targets = obj.near_term_gear(state)
-    assert "body_armor_slot" not in targets
-
-
-def test_near_term_gear_skips_unattainable_items():
-    """drop_only_boots has no recipe and no resource drop → unattainable →
-    boots slot has no near-term target."""
-    obj = CharacterObjective.from_game_data(_gd_near_term())
-    targets = obj.near_term_gear(make_state(level=5))
-    assert "boots_slot" not in targets
-
-
-def test_near_term_gear_fills_paired_ring_slots():
-    """RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are duplicate-
-    allowed, so both ring slots target the single best usable ring
-    (silver_ring, attack 4) rather than the 2nd-ranked distinct copper_ring
-    (attack 2) — duplicating the best strictly dominates. See
-    test_paired_ring_slots_duplicate_best_over_second_distinct."""
-    obj = CharacterObjective.from_game_data(_gd_near_term())
-    targets = obj.near_term_gear(make_state(level=5))
-    assert targets["ring1_slot"] == "silver_ring"
-    assert targets["ring2_slot"] == "silver_ring"
-
-
-def test_near_term_gear_asks_one_obtain_model_per_state() -> None:
-    """Plan B Task 14c: every candidate of one `near_term_gear` call is asked
-    of one state, so one obtain model (which memoises each item's routes)
-    answers them all, and its picks are the ones `is_attainable_now` gives
-    each candidate alone."""
-    gd = _gd_near_term()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=5)
-    built: list[ObtainModel] = []
-    real = objective_mod.ObtainModel
-
-    def counting(*args: object) -> ObtainModel:
-        model = real(*args)  # type: ignore[arg-type]
-        built.append(model)
-        return model
-
-    with patch.object(objective_mod, "ObtainModel", counting):
-        targets = obj.near_term_gear(state)
-    assert len(built) == 1
-    assert targets == {"body_armor_slot": "copper_armor", "helmet_slot": "copper_helmet",
-                       "ring1_slot": "silver_ring", "ring2_slot": "silver_ring"}
-    assert all(is_attainable_now(code, state, gd) for code in targets.values())
-
-
 def _gd_drop_recipes() -> GameData:
     """Armor recipes that include MONSTER DROPS — the real low-level shape
     (copper_armor needs wool, life_amulet needs feather). chicken is winnable
@@ -311,46 +129,42 @@ def _gd_drop_recipes() -> GameData:
     return gd
 
 
-def test_is_attainable_now_accepts_winnable_monster_drop_chain():
+def test_obtainable_now_accepts_winnable_monster_drop_chain():
     """Trace 2026-06-11 17:21 inert-fix bug: copper_armor (wool from a
     trivially-winnable monster) was rejected by the gathering-only
     is_attainable, leaving zero armor roots. The state-aware predicate must
     accept craft chains bottoming out in winnable, located monster drops."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5})   # sheet attack → chicken winnable
-    assert is_attainable_now("feather_coat", state, gd) is True
-    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
-    assert targets["body_armor_slot"] == "feather_coat"
+    assert obtainable_now("feather_coat", state, gd) is True
 
 
-def test_is_attainable_now_rejects_unwinnable_monster_drop():
+def test_obtainable_now_rejects_unwinnable_monster_drop():
     """dragon_scale only drops from an unbeatable monster → dragon_helm is
     NOT a near-term target (self-unlocks later as gear/level improve)."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5})
-    assert is_attainable_now("dragon_helm", state, gd) is False
-    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
-    assert "helmet_slot" not in targets
+    assert obtainable_now("dragon_helm", state, gd) is False
 
 
-def test_is_attainable_now_requires_known_spawn():
+def test_obtainable_now_requires_known_spawn():
     """A winnable dropper with no known map location does not count
     (mirrors strategy._producible's spawn-location gate)."""
     gd = _gd_drop_recipes()
     gd._monster_locations = {"dragon": [(9, 9)]}   # chicken spawn unknown
     state = make_state(level=5, attack={"air": 5})
-    assert is_attainable_now("feather_coat", state, gd) is False
+    assert obtainable_now("feather_coat", state, gd) is False
 
 
-def test_is_attainable_now_cycle_safe():
+def test_obtainable_now_cycle_safe():
     gd = GameData()
     gd._crafting_recipes = {"a": {"a": 1}}
-    assert is_attainable_now("a", make_state(), gd) is False
+    assert obtainable_now("a", make_state(), gd) is False
 
 
 # ---------------------------------------------------------------------------
 # is_suppliable — CAN this character ever hold the code, as opposed to
-# `is_attainable_now`'s can it get one TODAY. Live case: `novice_guide`.
+# `classify_target`'s can it get one TODAY. Live case: `novice_guide`.
 #
 # Coverage note (this project sets `branch = false`): every arm below is pinned
 # to BOTH outcomes, not merely executed once.
@@ -373,12 +187,12 @@ def test_is_suppliable_true_for_a_producible_target_that_is_blocked_today():
     """THE INVARIANT THAT MUST NOT BREAK. `dragon_helm` crafts from a drop off
     an unbeatable monster: unattainable NOW, but something mints it, so it is
     suppliable and the walk must keep grinding toward it. If this ever flips to
-    False the gate has become a second `is_attainable_now` and it has silently
+    False the gate has become a second near-term walk and it has silently
     cancelled every skill-grind and gear-grind root in the game."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, attack={"air": 5})
-    assert is_attainable_now("dragon_helm", state, gd) is False
-    assert is_suppliable("dragon_helm", state, gd) is True
+    assert obtainable_now("dragon_helm", state, gd) is False
+    assert is_suppliable("dragon_helm", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_false_for_a_fixed_supply_item_with_no_free_copy():
@@ -389,13 +203,13 @@ def test_is_suppliable_false_for_a_fixed_supply_item_with_no_free_copy():
     exists on the account and a sibling wears it."""
     gd = _gd_fixed_supply()
     state = make_state(level=5)
-    assert is_suppliable("relic", state, gd) is False
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is False
 
 
 def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_inventory():
     gd = _gd_fixed_supply()
     state = make_state(level=5, inventory={"relic": 1})
-    assert is_suppliable("relic", state, gd) is True
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_the_bank():
@@ -403,7 +217,7 @@ def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_the_bank():
     character withdraws it first."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, bank_items={"relic": 1})
-    assert is_suppliable("relic", state, gd) is True
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
@@ -416,47 +230,37 @@ def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
     gd._task_reward_item_codes = {"coin"}
     state = make_state(level=5)
     assert gd.is_task_earnable("coin") is True
-    assert is_suppliable("coin", state, gd) is True
-
-
-def test_gear_targets_drop_an_unsuppliable_candidate_and_fall_through():
-    """`relic` outranks nothing else for the artifact slot, so before the gate
-    it took that slot and `classify_target` reached its LAST arm — no recipe and
-    not attainable, therefore its OWN blocker — handing the root walk an
-    `ObtainItem` no step graph could ever plan. The slot must now be absent
-    rather than carry a target the character can never hold."""
-    gd = _gd_fixed_supply()
-    state = make_state(level=5, attack={"air": 5})
-    obj = CharacterObjective.from_game_data(gd)
-    targets = obj.gear_targets_with_blockers(state, None)
-    assert all(t.code != "relic" for t in targets.values())
+    assert is_suppliable("coin", state, gd, now=cycle_now()) is True
 
 
 def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
-    """`classify_target`'s FOURTH shape, pinned HERE because the suppliability
-    gate made it unreachable through `gear_targets_with_blockers`.
-
-    That walk used to be the arm's only witness: an item with no recipe and no
-    acquisition source classified `blocker == code`, and `IsThisTargetBlocked`
-    turned it into an `ObtainItem` root with nothing to route to — the
-    `novice_guide` failure. `is_suppliable` now drops such a candidate before it
-    can be classified, so no candidate reaching `classify_target` from that walk
-    can land on this arm any more. The arm itself must stay: the material loop
-    exhausts whenever a recipe's materials are all attainable-now, and
-    `classify_target` is public. Asserting it directly keeps it pinned without
-    pretending the walk can still produce it."""
+    """`classify_target`'s FOURTH shape: an item with no recipe and no
+    acquisition source classifies as its own blocker (`blocker == code`). The
+    arm must stay: the material loop exhausts whenever a recipe's materials
+    are all attainable-now, and `classify_target` is public."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, attack={"air": 5})
-    target = CharacterObjective.from_game_data(gd).classify_target("relic", state)
+    target = CharacterObjective.from_game_data(gd).classify_target("relic", state, now=cycle_now())
     assert target.attainable is False
     assert target.blocking_skill is None
     assert target.blocker == "relic"
 
 
+def test_classify_target_asks_the_near_term_question_it_publishes() -> None:
+    """`classify_target`'s attainability is production's `feasible_now` of
+    the same model: the one question the fixtures ask too."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5})
+    obj = CharacterObjective.from_game_data(gd)
+    for code in ("feather_coat", "dragon_helm"):
+        assert obj.classify_target(code, state, now=cycle_now()).attainable == feasible_now(
+            near_term_model(state, gd, now=cycle_now()), code)
+
+
 def test_classify_target_asks_one_obtain_model_per_call() -> None:
     """Plan B Task 14c fix round 1: the target and each of its recipe's
     materials are asked of one state, so one obtain model answers them all;
-    the classification is the one `is_attainable_now` gives each alone."""
+    the classification is the one the near-term model gives each alone."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5})
     obj = CharacterObjective.from_game_data(gd)
@@ -469,26 +273,13 @@ def test_classify_target_asks_one_obtain_model_per_call() -> None:
         return model
 
     with patch.object(objective_mod, "ObtainModel", counting):
-        helm = obj.classify_target("dragon_helm", state)
-        coat = obj.classify_target("feather_coat", state)
+        helm = obj.classify_target("dragon_helm", state, now=cycle_now())
+        coat = obj.classify_target("feather_coat", state, now=cycle_now())
     assert len(built) == 2
     assert (helm.attainable, helm.blocker) == (False, "dragon_scale")
-    assert not is_attainable_now("dragon_helm", state, gd)
-    assert not is_attainable_now("dragon_scale", state, gd)
+    assert not obtainable_now("dragon_helm", state, gd)
+    assert not obtainable_now("dragon_scale", state, gd)
     assert (coat.attainable, coat.blocker) == (True, None)
-
-
-def test_gear_targets_keep_an_unattainable_but_producible_candidate():
-    """The other half of the contract: `gear_targets_with_blockers`
-    DELIBERATELY keeps unattainable targets so `IsThisTargetBlocked` can route
-    to the blocker in front of them. The suppliability gate must not touch
-    those. `dragon_helm` is unattainable now and still a target."""
-    gd = _gd_fixed_supply()
-    state = make_state(level=5, attack={"air": 5})
-    obj = CharacterObjective.from_game_data(gd)
-    targets = obj.gear_targets_with_blockers(state, None)
-    assert targets["helmet_slot"].code == "dragon_helm"
-    assert targets["helmet_slot"].attainable is False
 
 
 def test_is_attainable_accepts_known_spawn_monster_drop():
@@ -503,10 +294,10 @@ def test_is_attainable_accepts_known_spawn_monster_drop():
 def test_is_attainable_ignores_winnability_for_perfect_sheet():
     """State-INDEPENDENT: dragon_helm crafts from dragon_scale (the dragon is
     unbeatable NOW, but at max progression it is farmable). The perfect sheet
-    targets it; only is_attainable_now gates on current winnability."""
+    targets it; only the near-term model gates on current winnability."""
     gd = _gd_drop_recipes()
     assert is_attainable("dragon_helm", gd) is True
-    assert is_attainable_now("dragon_helm", make_state(level=5, attack={"air": 5}), gd) is False
+    assert obtainable_now("dragon_helm", make_state(level=5, attack={"air": 5}), gd) is False
 
 
 def test_is_attainable_requires_known_spawn():
@@ -516,15 +307,6 @@ def test_is_attainable_requires_known_spawn():
     gd = _gd_drop_recipes()
     gd._monster_locations = {"dragon": [(9, 9)]}   # chicken spawn unknown
     assert is_attainable("feather_coat", gd) is False
-
-
-def test_target_gear_surfaces_monster_drop_armor():
-    """The headline #11 fix: monster-drop-crafted armor now appears in the
-    perfect sheet's target_gear, not only in near_term_gear. Both feather_coat
-    (body) and dragon_helm (helmet) are state-independently attainable."""
-    obj = CharacterObjective.from_game_data(_gd_drop_recipes())
-    assert obj.target_gear["body_armor_slot"] == "feather_coat"
-    assert obj.target_gear["helmet_slot"] == "dragon_helm"
 
 
 def _gd_npc_rune() -> GameData:
@@ -599,22 +381,15 @@ def test_is_attainable_buy_cycle_safe():
     assert is_attainable("a", gd) is False
 
 
-def test_target_gear_surfaces_npc_purchased_rune():
-    """The headline #12 fix: an NPC-bought rune now appears in target_gear, so
-    the rune_slot is targeted by the perfect sheet."""
-    obj = CharacterObjective.from_game_data(_gd_npc_rune())
-    assert obj.target_gear["rune_slot"] == "lifesteal_rune"
-
-
-def test_is_attainable_now_gold_purchase_gated_on_affordability():
+def test_obtainable_now_gold_purchase_gated_on_affordability():
     """Near-term: a gold purchase is attainable_now only when the character can
     afford it. 20000-gold rune: yes at 25000 gold, no at 5000."""
     gd = _gd_npc_rune()
-    assert is_attainable_now("lifesteal_rune", make_state(level=20, gold=25000), gd) is True
-    assert is_attainable_now("lifesteal_rune", make_state(level=20, gold=5000), gd) is False
+    assert obtainable_now("lifesteal_rune", make_state(level=20, gold=25000), gd) is True
+    assert obtainable_now("lifesteal_rune", make_state(level=20, gold=5000), gd) is False
 
 
-def test_is_attainable_now_item_currency_recurses():
+def test_obtainable_now_item_currency_recurses():
     """Near-term buy paid in an ITEM currency: attainable_now iff the currency is
     attainable_now. magic_dust is gatherable, so the rune is buyable now even at
     0 gold (no gold price to meet)."""
@@ -626,10 +401,10 @@ def test_is_attainable_now_item_currency_recurses():
     gd._resource_drops = {"dust_node": "magic_dust"}  # magic_dust gatherable
     gd._resource_skill = {"dust_node": ("alchemy", 1)}
     gd._resource_locations = {"dust_node": [(5, 5)]}
-    assert is_attainable_now("dust_rune", make_state(level=20, gold=0), gd) is True
+    assert obtainable_now("dust_rune", make_state(level=20, gold=0), gd) is True
 
 
-def test_is_attainable_now_buy_cycle_safe():
+def test_obtainable_now_buy_cycle_safe():
     """Near-term purchase cycle (a paid in b, b paid in a), neither otherwise
     obtainable: not attainable_now — the path guard breaks the loop."""
     gd = GameData()
@@ -638,97 +413,17 @@ def test_is_attainable_now_buy_cycle_safe():
     gd._npc_stock = {"v": {"a": 1, "b": 1}}
     gd._npc_buy_currency = {"v": {"a": "b", "b": "a"}}
     gd._npc_locations = {"v": (0, 0)}
-    assert is_attainable_now("a", make_state(level=5, gold=10000), gd) is False
+    assert obtainable_now("a", make_state(level=5, gold=10000), gd) is False
 
 
-def test_is_attainable_now_judges_winnability_at_full_hp():
+def test_obtainable_now_judges_winnability_at_full_hp():
     """A transiently-damaged character (hp 1) must not lose its gear
     targets: strategic attainability rests first (G3 winnable_at_max_hp).
     Live repro 2026-06-11 18:46+: Robby at 31/175 post-fight had every
     armor root evaporate and chosen_root flipped to a 0.24 skill root."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, hp=1, max_hp=150)
-    assert is_attainable_now("feather_coat", state, gd) is True
-
-
-def test_ring_slots_duplicate_fill_when_one_attainable():
-    """Only copper_ring attainable -> BOTH ring slots target it (you can wear
-    two identical rings) instead of leaving ring2_slot untargeted."""
-    gd = GameData()
-    gd._item_stats = {
-        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", hp_bonus=2),
-        "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon", attack={"fire": 5}),
-    }
-    gd._crafting_recipes = {"copper_ring": {"bar": 1}, "iron_sword": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    assert obj.target_gear["ring1_slot"] == "copper_ring"
-    assert obj.target_gear["ring2_slot"] == "copper_ring"
-
-
-def test_artifact_slots_are_not_duplicate_filled():
-    """Artifacts are NOT duplicate-allowed (revert 2026-08-22 — the live probe
-    the 2026-07-03 assertion asked for returned HTTP 485 on a 2nd copy into an
-    EMPTY sibling slot). One attainable artifact therefore targets exactly ONE
-    artifact slot; the other two are honestly untargeted rather than aimed at a
-    copy whose equip the server would refuse forever."""
-    gd = GameData()
-    gd._item_stats = {"ancient_relic": ItemStats(code="ancient_relic", level=1,
-                                                  type_="artifact", hp_bonus=3)}
-    gd._crafting_recipes = {"ancient_relic": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    assert obj.target_gear["artifact1_slot"] == "ancient_relic"
-    assert obj.target_gear.get("artifact2_slot") is None
-    assert obj.target_gear.get("artifact3_slot") is None
-
-
-def test_near_term_gear_duplicate_fills_empty_second_ring():
-    """near_term_gear: ring1 already holds copper_ring, ring2 empty, only
-    copper_ring attainable-now -> ring2_slot also targets copper_ring."""
-    gd = GameData()
-    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
-                                               hp_bonus=2)}
-    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
-    _crafted_at(gd, "jewelrycrafting", "copper_ring")
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    gd._resource_locations = {"rocks": [(1, 0)]}
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
-    nt = obj.near_term_gear(state)
-    assert nt.get("ring2_slot") == "copper_ring"  # empty 2nd ring slot still targeted
-
-
-def test_artifact_slots_take_ranked_distinct_never_a_second_copy():
-    """The INVERSE of the 2026-07-08 GAP-2 quirk, after the 2026-08-22 artifact
-    revert. With TWO distinct attainable artifacts, artifact2_slot takes the
-    2nd-ranked DISTINCT item (lesser_relic, hp_bonus 5) — NOT a 2nd copy of the
-    higher-valued perfect_relic (hp_bonus 100), even though that copy would
-    score better. A 2nd copy is worth nothing at all: the server refuses its
-    equip with HTTP 485, so the higher "value" is unrealizable.
-
-    artifact3_slot has no third distinct candidate and stays untargeted.
-
-    The duplicate-best rule itself is unchanged and still applies to rings,
-    which have a real HTTP-200 probe — see
-    test_paired_ring_slots_duplicate_best_over_second_distinct."""
-    gd = GameData()
-    gd._item_stats = {
-        "perfect_relic": ItemStats(code="perfect_relic", level=1, type_="artifact",
-                                    hp_bonus=100),
-        "lesser_relic": ItemStats(code="lesser_relic", level=1, type_="artifact",
-                                   hp_bonus=5),
-    }
-    gd._crafting_recipes = {"perfect_relic": {"bar": 1}, "lesser_relic": {"bar": 1}}
-    gd._resource_drops = {"rocks": "bar"}
-    gd._resource_skill = {"rocks": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    assert obj.target_gear["artifact1_slot"] == "perfect_relic"
-    assert obj.target_gear["artifact2_slot"] == "lesser_relic"
-    assert obj.target_gear.get("artifact3_slot") is None
+    assert obtainable_now("feather_coat", state, gd) is True
 
 
 # --- C1: task-currency leaf ---
@@ -759,69 +454,13 @@ def test_is_attainable_satchel_via_task_currency_chain():
     assert is_attainable("satchel", gd) is True
 
 
-def _gd_with_potions() -> GameData:
-    gd = GameData()
-    gd._item_stats = {
-        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 4}),
-        "small_health_potion": ItemStats(code="small_health_potion", level=5,
-            type_="utility", hp_restore=50, crafting_skill="alchemy", crafting_level=5),
-        "enhanced_health_potion": ItemStats(code="enhanced_health_potion", level=45,
-            type_="utility", hp_restore=300, crafting_skill="alchemy", crafting_level=45),
-    }
-    gd._crafting_recipes = {
-        "copper_dagger": {"bar": 1},
-        "small_health_potion": {"sunflower": 3},
-        "enhanced_health_potion": {"sunflower": 3},
-    }
-    gd._resource_drops = {"rocks": "bar", "sunflower_field": "sunflower"}
-    gd._resource_skill = {"rocks": ("mining", 1), "sunflower_field": ("alchemy", 1)}
-    return gd
-
-
-def test_target_gear_excludes_utility():
-    obj = CharacterObjective.from_game_data(_gd_with_potions())
-    assert all("utility" not in slot for slot in obj.target_gear)
-    assert "enhanced_health_potion" not in obj.target_gear.values()
-
-
-def test_near_term_gear_excludes_utility():
-    obj = CharacterObjective.from_game_data(_gd_with_potions())
-    targets = obj.near_term_gear(make_state(level=10, skills={**make_state().skills, "alchemy": 16}))
-    assert all("utility" not in slot for slot in targets)
-
-
-def test_utility_potion_targets_picks_craftable_now():
-    obj = CharacterObjective.from_game_data(_gd_with_potions())
-    targets = obj.utility_potion_targets(make_state(level=10, skills={**make_state().skills, "alchemy": 16}))
-    assert targets == {"utility1_slot": "small_health_potion"}
-
-
-def test_utility_potion_targets_is_empty_with_no_heal_in_the_catalogue():
-    """`bootstrap_potion_target` returning None short-circuits BOTH slots — a
-    catalogue with no heal offers nothing to stock, and slot 2 must not be
-    filled from a slot-1 target that does not exist.
-
-    Added by wave 3a as a direct unit. The early return used to be reached
-    only through `decide_tree`'s candidate pass against a mismatched GameData,
-    and that pass is gone.
-
-    A LOW ALCHEMY SKILL IS NOT ENOUGH to reach it: `bootstrap_potion_target`
-    falls back to the cheapest heal to UNLOCK when none is craftable yet, so
-    an under-skilled character still gets a target. The catalogue itself has to
-    contain no heal."""
-    gd = GameData()
-    gd._item_stats = {"pebble": ItemStats(code="pebble", level=1, type_="resource")}
-    obj = CharacterObjective.from_game_data(gd)
-    assert obj.utility_potion_targets(make_state(level=10)) == {}
-
-
-def test_is_attainable_now_credits_task_earnable_currency():
+def test_obtainable_now_credits_task_earnable_currency():
     """A leaf priced in a TASK-EARNABLE currency (jasper_crystal @ 8
     tasks_coin) is attainable-now even with 0 coins on hand: the C4 funding
     loop (accept -> fight -> complete, 2ba14d9c) is always available, so the
     currency is producible the same way a winnable monster drop is. The old
     now-leaf only consulted gather/winnable-drop/vendor-affordable and
-    silently dropped satchel from near_term_gear forever (live 2026-07-06:
+    silently dropped satchel from the near-term gear forever (live 2026-07-06:
     bag_slot's only root was an unequippable L50 BiS bag)."""
     gd = _gd_drop_recipes()
     gd._item_stats["satchel"] = ItemStats(code="satchel", level=5, type_="bag",
@@ -836,13 +475,11 @@ def test_is_attainable_now_credits_task_earnable_currency():
     gd._task_reward_item_codes = {"tasks_coin"}
     state = make_state(level=5, attack={"air": 5})
     assert state.inventory.get("tasks_coin") is None
-    assert is_attainable_now("jasper_crystal", state, gd) is True
-    assert is_attainable_now("satchel", state, gd) is True
-    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
-    assert targets.get("bag_slot") == "satchel"
+    assert obtainable_now("jasper_crystal", state, gd) is True
+    assert obtainable_now("satchel", state, gd) is True
 
 
-def test_is_attainable_now_still_rejects_unaffordable_gold_leaf():
+def test_obtainable_now_still_rejects_unaffordable_gold_leaf():
     """The task-earnable arm must not weaken the gold gate: a gold-priced
     leaf with insufficient gold stays not-attainable-now."""
     gd = _gd_drop_recipes()
@@ -854,32 +491,32 @@ def test_is_attainable_now_still_rejects_unaffordable_gold_leaf():
     gd._npc_locations = {"jeweler": (1, 1)}
     gd._task_reward_item_codes = {"tasks_coin"}
     state = make_state(level=5, attack={"air": 5}, gold=10)
-    assert is_attainable_now("gold_helm", state, gd) is False
+    assert obtainable_now("gold_helm", state, gd) is False
 
 
-# --- GAP-1: held/banked stock credits is_attainable_now (2026-07-07) --------
+# --- GAP-1: held/banked stock credits the near-term model (2026-07-07) --------
 
-def test_is_attainable_now_credits_banked_leaf():
+def test_obtainable_now_credits_banked_leaf():
     """A recipe-leaf material with NO current acquisition source (dragon,
     its only dropper, is unwinnable) still reads attainable-now when the
     full recipe demand is already sitting in the bank — held stock is its
     own acquisition source, independent of gather/drop/task/vendor."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 2})
-    assert is_attainable_now("dragon_scale", state, gd) is True
-    assert is_attainable_now("dragon_helm", state, gd) is True  # propagates
+    assert obtainable_now("dragon_scale", state, gd) is True
+    assert obtainable_now("dragon_helm", state, gd) is True  # propagates
 
 
-def test_is_attainable_now_credits_inventory_leaf():
+def test_obtainable_now_credits_inventory_leaf():
     """Same held-stock credit via CARRIED inventory instead of the bank —
     either counts (mirrors strategy._producible's `inventory or bank`)."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, inventory={"dragon_scale": 2})
-    assert is_attainable_now("dragon_scale", state, gd) is True
-    assert is_attainable_now("dragon_helm", state, gd) is True
+    assert obtainable_now("dragon_scale", state, gd) is True
+    assert obtainable_now("dragon_helm", state, gd) is True
 
 
-def test_is_attainable_now_credits_banked_crafted_item_itself():
+def test_obtainable_now_credits_banked_crafted_item_itself():
     """Held stock of the CRAFTED item itself short-circuits the recipe walk:
     a banked dragon_helm reads attainable-now even though its material
     (dragon_scale) is neither held NOR producible — the walk never needs to
@@ -887,11 +524,11 @@ def test_is_attainable_now_credits_banked_crafted_item_itself():
     hand."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_helm": 1})
-    assert is_attainable_now("dragon_scale", state, gd) is False  # material alone: still closed
-    assert is_attainable_now("dragon_helm", state, gd) is True    # but the crafted item short-circuits
+    assert obtainable_now("dragon_scale", state, gd) is False  # material alone: still closed
+    assert obtainable_now("dragon_helm", state, gd) is True    # but the crafted item short-circuits
 
 
-def test_is_attainable_now_bank_none_not_credited():
+def test_obtainable_now_bank_none_not_credited():
     """`bank_items=None` means UNKNOWN (bank not yet visited), not zero —
     but it must not be conflated with 'everything available' either: with
     no bank data and nothing carried, an otherwise-unattainable material
@@ -899,11 +536,11 @@ def test_is_attainable_now_bank_none_not_credited():
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, bank_items=None)
     assert state.bank_items is None
-    assert is_attainable_now("dragon_scale", state, gd) is False
-    assert is_attainable_now("dragon_helm", state, gd) is False
+    assert obtainable_now("dragon_scale", state, gd) is False
+    assert obtainable_now("dragon_helm", state, gd) is False
 
 
-def test_is_attainable_now_counts_stock_in_the_quantity_the_recipe_needs():
+def test_obtainable_now_counts_stock_in_the_quantity_the_recipe_needs():
     """Holding 1 of the 2 dragon_scale the recipe needs, with the dragon
     unwinnable, makes the scale attainable but NOT the helm. The old walk
     credited any single copy, and the helm then became a target that could not
@@ -911,10 +548,10 @@ def test_is_attainable_now_counts_stock_in_the_quantity_the_recipe_needs():
     docs/PLAN_decision_architecture_redesign.md)."""
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 1})
-    assert is_attainable_now("dragon_scale", state, gd) is True
-    assert is_attainable_now("dragon_helm", state, gd) is False
+    assert obtainable_now("dragon_scale", state, gd) is True
+    assert obtainable_now("dragon_helm", state, gd) is False
     full = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 2})
-    assert is_attainable_now("dragon_helm", full, gd) is True
+    assert obtainable_now("dragon_helm", full, gd) is True
 
 
 def _gd_item_currency_no_other_source() -> GameData:
@@ -922,7 +559,7 @@ def _gd_item_currency_no_other_source() -> GameData:
     (magic_dust) that has NO gather/drop/task/vendor acquisition path of
     its own — the only way to credit it is the held/banked-stock arm
     threaded into the currency-recursion `_attainable_closure` call inside
-    `is_attainable_now`'s `leaf_ok` (objective.py ~:210, GAP-1 fold-in)."""
+    the near-term walk's `leaf_ok` (GAP-1 fold-in)."""
     gd = GameData()
     gd._item_stats = {
         "dust_rune": ItemStats(code="dust_rune", level=5, type_="rune"),
@@ -933,7 +570,7 @@ def _gd_item_currency_no_other_source() -> GameData:
     return gd
 
 
-def test_is_attainable_now_credits_held_bank_currency():
+def test_obtainable_now_credits_held_bank_currency():
     """GAP-1 fold-in (task-2 review): a purchase paid in an ITEM currency
     the character already holds in the BANK is attainable-now through the
     stock short-circuit, even though magic_dust has no other production
@@ -943,10 +580,10 @@ def test_is_attainable_now_credits_held_bank_currency():
     held stock before it would otherwise fail every leaf arm."""
     gd = _gd_item_currency_no_other_source()
     state = make_state(level=5, gold=0, bank_items={"magic_dust": 20})
-    assert is_attainable_now("dust_rune", state, gd) is True
+    assert obtainable_now("dust_rune", state, gd) is True
 
 
-def test_is_attainable_now_bank_none_currency_not_credited():
+def test_obtainable_now_bank_none_currency_not_credited():
     """Negative twin: `bank_items=None` (bank unknown) must not be conflated
     with 'the currency is available' — with no bank data and nothing
     carried, and no other acquisition source for magic_dust, the purchase
@@ -954,10 +591,10 @@ def test_is_attainable_now_bank_none_currency_not_credited():
     gd = _gd_item_currency_no_other_source()
     state = make_state(level=5, gold=0, bank_items=None)
     assert state.bank_items is None
-    assert is_attainable_now("dust_rune", state, gd) is False
+    assert obtainable_now("dust_rune", state, gd) is False
 
 
-def test_is_attainable_now_counts_no_ge_order():
+def test_obtainable_now_counts_no_ge_order():
     """Goal emission fills a GE order only as the cheaper venue for an item an
     NPC also sells, so a target a GE order alone supplies would be a root
     nothing plans. Live 2026-09-27: counting fills gave every character 8-10
@@ -969,26 +606,26 @@ def test_is_attainable_now_counts_no_ge_order():
     state = make_state(level=20, gold=1000)
     model = ObtainModel(state, gd, NO_DROPS_CONTEXT, datetime.now(UTC))
     assert model.feasible("lifesteal_rune", 1, LEGACY), "vacuous: the GE order is no route"
-    assert is_attainable_now("lifesteal_rune", state, gd) is False
+    assert obtainable_now("lifesteal_rune", state, gd) is False
 
 
-def test_is_attainable_now_counts_a_reachable_underground_resource():
+def test_obtainable_now_counts_a_reachable_underground_resource():
     """A resource with no overworld tile but a reachable layered one is
     gathered by the action pool (an underground `gold_rocks`), so a gear piece
     made from it is attainable now."""
     gd = _gd_near_term()
     gd._resource_locations = {}
     state = make_state(level=5)
-    assert is_attainable_now("copper_armor", state, gd) is False
+    assert obtainable_now("copper_armor", state, gd) is False
     # Its layered tile lies in the character's own region (ruling I-3: a
     # gather counts where the walk reaches).
     with (patch.object(GameData, "resource_spawn_known", return_value=True),
           patch.object(GameData, "layered_locations",
                        return_value=[(state.x, state.y, state.layer)])):
-        assert is_attainable_now("copper_armor", state, gd) is True
+        assert obtainable_now("copper_armor", state, gd) is True
 
 
-def test_is_attainable_now_pays_from_the_pocket_not_from_future_fights():
+def test_obtainable_now_pays_from_the_pocket_not_from_future_fights():
     """Near-term attainability is about what the character can afford NOW:
     a winnable monster that pays gold does not make an unaffordable vendor
     item attainable (the step graph, which works toward a target over time,
@@ -1004,4 +641,4 @@ def test_is_attainable_now_pays_from_the_pocket_not_from_future_fights():
     model = ObtainModel(state, gd, NO_DROPS_CONTEXT, datetime.now(UTC))
     assert model.feasible("gold", 20000, replace(LEGACY, fight_gold=True)), \
         "vacuous: the chicken is no gold route"
-    assert is_attainable_now("lifesteal_rune", state, gd) is False
+    assert obtainable_now("lifesteal_rune", state, gd) is False

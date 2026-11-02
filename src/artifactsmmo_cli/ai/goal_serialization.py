@@ -3,6 +3,7 @@ resume after restart. Transient guard/means goals are not serializable here and
 re-plan cold. GameData (and SkillXpCurve) are re-injected from the live arbiter,
 never stored. See docs/superpowers/specs/2026-06-23-plan-cache-macro-learning-design.md."""
 
+from datetime import datetime
 from typing import cast
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -25,14 +26,17 @@ def goal_to_dict(goal: object) -> dict[str, object] | None:
     return result
 
 
-def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
-    """Rehydrate a plan-bearing goal, injecting live GameData where needed."""
+def goal_from_dict(data: dict[str, object], game_data: GameData | None,
+                   now: datetime) -> Goal:
+    """Rehydrate a plan-bearing goal, injecting live GameData where needed and
+    the rehydrating cycle's clock (`now`, ruling T8b) where the goal mints a
+    time-gated action."""
     t = data["type"]
     if t == "GatherMaterialsGoal":
         return GatherMaterialsGoal(
             cast(str, data["target_item"]),
             cast(dict[str, int], data["needed"]),
-            carry=cast(bool, data.get("carry", False)))
+            carry=cast(bool, data.get("carry", False)), now=now)
     if t == "CraftReliefGoal":
         return CraftReliefGoal(
             cast(str, data["target_item"]),

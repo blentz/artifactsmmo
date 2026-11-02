@@ -15,7 +15,7 @@ def _snap(**ov) -> CycleSnapshot:
                 xp=0, max_xp=100, hp=10, max_hp=10, gold=0, selected_goal="g",
                 action="a", outcome="ok", max_level=40,
                 chosen_root="ObtainItem(code='life_amulet', quantity=1)",
-                projected_cycles_to_max=18.0, plan_tree=(node,))
+                plan_tree=(node,))
     base.update(ov)
     return CycleSnapshot(**base)
 

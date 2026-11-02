@@ -28,7 +28,33 @@ Option-A residual set:
   invariants, restated over `cycleStepPN`/the refreshed selection states.
 * **`hfightFiresP`** — which Brick 4 reduces to
   `BlockersQuietBelowCapInfinitelyOftenP` alone (CombatPersistent in-model).
-* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming faithfulness.
+* **`WinnableAcrossBand`** — baked into `perceptionRefresh`'s arming: since plan C
+  Task 4 (ruling C4-b) through the gear objective's held half
+  (`GearObjectiveWalk.fight_armed_of_held`) and the production link
+  `GearTierLeveling.ObjectiveCovers` (a hypothesis, at one state).
+* **catalogue → `L*` (NAMED RESIDUAL, ruling C4-R2)** — the band witness
+  (`WinnableAcrossBand`, a witness row's own loadout over `catalogAsMonsters`) makes
+  production's antecedent true: some `_candidates` monster's `L*` fighter wins at the
+  real state with `R > 0`. Not proved, and false at a naked high-level character
+  (`gear_objective` None). The same gear-progress gap as the not-held phase below.
+* **keep fills the bag ⇒ `R = 0` ⇒ no objective (NAMED RESIDUAL, ruling C4-R2)** —
+  every candidate can win on its `L*` fighter and still rate `R = 0` when the
+  loop cannot run (no bag room for a kill's drops: a bag the carried keep fills).
+  `gear_objective` then returns None (tested:
+  `test_gear_objective.py::test_none_when_every_winning_candidate_rates_zero`), so
+  there is no root and no grind target. Plan C Task 8c's food-carry fix narrows it
+  but does not close it: a food's carry is now the least of the horizon, the bag's
+  room for it and (no replacement) the units held (`chosen_loadout.food_carry`), so a
+  carry past the bag or past the stock no longer zeroes `R`; a bounded carry that
+  fills the room (a made food eaten several a fight in a small bag) or a carried keep
+  that fills the bag still does.
+* **not-held phase (NAMED RESIDUAL, ruling C4-R)** — the not-held phase terminates and
+  `L*` is held again after a level-up. While `L*` misses a piece production fights
+  nothing for XP (`GearTierLeveling.no_xp_fight_of_not_held`; the root is a piece's
+  acquisition, `piece_root_of_not_held`), but `perceptionRefresh` arms the fight
+  unconditionally below the cap. So the refreshed cycle is optimistic over that
+  phase, as over the items-task defer case, and nothing here proves the phase ends
+  or that a level-up's new `L*` is reached.
 * **LIV-001** — the server xp-curve axiom.
 
 ## Why the existing engine is NOT reusable (the corrected finding)

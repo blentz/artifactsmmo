@@ -16,10 +16,10 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.planner import PlanStats
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def _gd() -> GameData:
@@ -191,7 +191,7 @@ def test_suppress_task_complete_allows_step():
     """remaining == 0 => the reservation is inert and the step passes."""
     state = _task_state(task_progress=11)
     goal = GatherMaterialsGoal(target_item="copper_helmet",
-                               needed={"copper_helmet": 1})
+                               needed={"copper_helmet": 1}, now=cycle_now())
     out = _suppress(goal, state)
     assert out is goal
 
@@ -241,7 +241,7 @@ def test_a_surplus_gather_of_the_task_item_passes():
     state = _task_state(task_progress=20, task_total=21,
                         inventory={"copper_bar": 2})
     goal = GatherMaterialsGoal(target_item="copper_bar",
-                               needed={"copper_bar": 8})
+                               needed={"copper_bar": 8}, now=cycle_now())
     out = _suppress(goal, state)
     assert out is goal
 
@@ -271,7 +271,7 @@ def test_the_step_that_makes_the_task_item_is_never_deferred():
     the character waited out its turn."""
     state = _task_state(inventory={"copper_bar": 6})
     task_item = state.task_code
-    goal = GatherMaterialsGoal(target_item=task_item, needed={task_item: 10})
+    goal = GatherMaterialsGoal(target_item=task_item, needed={task_item: 10}, now=cycle_now())
     assert _suppress(goal, state) is goal
 
 

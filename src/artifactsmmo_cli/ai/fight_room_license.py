@@ -44,8 +44,8 @@ def refused_fight(ctx: SelectionContext) -> str | None:
 def is_refused(action: Action, refused: str | None) -> bool:
     """`action` is a solo fight against the `refused` monster. The verdict is
     the solo loop's (its bag has no room for the drops); a party fight's loop
-    counts no trips and always runs (`party_loop`), so it is never refused on
-    it (T13e re-review minor 3)."""
+    counts no trips and always runs, so it is never refused on it (T13e
+    re-review minor 3)."""
     return (isinstance(action, FightAction) and not action.participants
             and action.monster_code == refused)
 

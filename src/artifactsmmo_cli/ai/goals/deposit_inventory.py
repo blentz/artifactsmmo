@@ -1,6 +1,9 @@
 """DepositInventoryGoal: deposit bankable inventory to the bank as it fills up."""
 
+import copy
 import dataclasses
+from dataclasses import replace
+from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -8,9 +11,9 @@ from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression.guards import used_fraction
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
-from artifactsmmo_cli.ai.tiers.guards import used_fraction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
@@ -42,6 +45,13 @@ class DepositInventoryGoal(Goal):
         self._bank_accessible = bank_accessible
         self._game_data = game_data
         self._ctx = ctx
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

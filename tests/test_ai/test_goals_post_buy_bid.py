@@ -13,10 +13,11 @@ from artifactsmmo_cli.ai.ge_bid import ge_bid_candidates
 from artifactsmmo_cli.ai.ge_order_config import TTL_CYCLES
 from artifactsmmo_cli.ai.goals.post_buy_bid import POST_BUY_BID_VALUE, PostBuyBidGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
+from artifactsmmo_cli.ai.progression.means import MeansKind, means_fires
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import map_means
-from artifactsmmo_cli.ai.tiers.means import MeansKind, means_fires
 from tests.test_ai.fixtures import make_state
 
 
@@ -74,10 +75,10 @@ def _steel_gd(**over) -> GameData:
 
 
 def _ctx(step_profile) -> SelectionContext:
-    return SelectionContext(
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        step_profile=step_profile, learned_drops=LearnedDrops.empty())
+        step_profile=step_profile, learned_drops=LearnedDrops.empty()))
 
 
 def _state(**over):

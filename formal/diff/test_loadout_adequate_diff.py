@@ -7,6 +7,11 @@ capstone — and until this file it was ASSERTED and never checked. Opened as
 `docs/PLAN_c2_composed_liveness.md:238-241`; the adversarial review of 2026-07-20
 flagged the E layer as having zero production binding.
 
+SINCE RULING C4-R the field has a second, production-decision binding:
+`test_gear_objective_e_binding_diff.py` binds `loadoutAdequate := gear_objective.held`
+and `gearGap := len(gear_objective.missing)`, the verdict the gear decisions read.
+This file keeps the witness-loadout reading, which grounds the band's `GEAR_CAP`.
+
 WHAT THIS PINS, AND WHAT IT CANNOT
 -----------------------------------
 It pins that the predicate is SATISFIABLE and DISCRIMINATING in production:
@@ -63,12 +68,12 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.world_state import WorldState
-from formal.diff.test_winnable_across_band_diff import (
+from formal.sim.winnable_witness import (
     BASE_STATS_PATH,
     SNAPSHOT_PATH,
-    _game_data_from_snapshot,
-    _item_stats_from_snapshot,
-    _snapshot_has_combat_fields,
+    game_data_from_snapshot,
+    item_stats_from_snapshot,
+    snapshot_has_combat_fields,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "Formal/Liveness/GameDataFixture.lean"
@@ -130,10 +135,10 @@ def _holding_state(level: int, base_row: dict[str, Any],
 
 def _setup():
     snapshot = json.loads(Path(SNAPSHOT_PATH).read_text())
-    if not _snapshot_has_combat_fields(snapshot):
+    if not snapshot_has_combat_fields(snapshot):
         pytest.skip("snapshot predates the combat-field capture")
-    stats = _item_stats_from_snapshot(snapshot)
-    gd = _game_data_from_snapshot(snapshot, stats)
+    stats = item_stats_from_snapshot(snapshot)
+    gd = game_data_from_snapshot(snapshot, stats)
     base = json.loads(Path(BASE_STATS_PATH).read_text())
     return snapshot, stats, gd, base
 

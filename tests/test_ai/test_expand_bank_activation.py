@@ -27,11 +27,12 @@ from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import served_game_data
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -74,7 +75,7 @@ def _state(bank_item_count: int) -> WorldState:
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
     gd._monster_hp = {"chicken": 0}

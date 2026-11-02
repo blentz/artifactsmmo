@@ -22,8 +22,8 @@ from artifactsmmo_cli.ai.equip_value import tool_value
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel, StepDecline
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel, StepDecline
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -58,14 +58,17 @@ def tool_target(skill: str, state: WorldState, game_data: GameData,
     return None
 
 
-def tool_first(climb: ReachSkillLevel, state: WorldState, game_data: GameData,
-               ctx: SelectionContext, now: datetime,
+def tool_first(climb: ReachSkillLevel, ctx: SelectionContext,
                step_decline: StepDecline) -> ObtainItem | ReachSkillLevel:
     """The best tool's `ObtainItem` while the character does not yet own the
     best tool it could for the climbed skill (§2.6), else `climb`. The tool is
-    an accelerator, not a gate (ruling T8a): a tool whose step `step_decline`
-    refuses this cycle leaves the plain climb, never a declined piece."""
-    tool = tool_target(climb.skill, state, game_data, ctx, now)
+    the cycle's own (`ctx.objective_tools`, the fixed point `objective_demand`
+    found `tool_target` for each demanded skill, ruling C1-R), never a second
+    lookup: the tool a climb fetches is the tool the demand counted. The tool
+    is an accelerator, not a gate (ruling T8a): a tool whose step
+    `step_decline` refuses this cycle leaves the plain climb, never a declined
+    piece."""
+    tool = ctx.objective_tools.get(climb.skill)
     if tool is None:
         return climb
     root = ObtainItem(tool, 1)

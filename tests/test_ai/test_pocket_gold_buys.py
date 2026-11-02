@@ -21,6 +21,7 @@ from fractions import Fraction
 from math import ceil
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, acquisition_options, cheapest_route
 from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
@@ -48,13 +49,13 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, PIECE_POLICY
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi, spendable_pocket
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 from tests.test_ai.shared_world import attached, shared_world
 from tests.test_ai.test_gold_funded_piece import (
     BUNDLE,
@@ -261,8 +262,20 @@ def test_pocket_and_bank_gold_are_priced_alike() -> None:
     assert poor.gold == 100
     rich = replace(poor, bank_gold=50_000, bank_items={})
     ctx = attached(rich, world, TIMED_NO_PROFILE_CONTEXT, None)
-    per_gold = gold_spend_actions(rich, world, ctx)
+    # The charge a gold piece pays: the faster of `m*`'s gold rate and the
+    # closure's own gold fights (`_gold_priced`). Since ruling "seconds
+    # inside" (2026-10-31) a fight costs its measured seconds, and the yellow
+    # slime's 5-second fights earn gold faster than `m*`'s rate.
+    gold = acquisition_options(RUNE.code, rich, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    per_gold = min([Fraction(r.actions_per_application) / r.yield_per
+                    for r in gold if r.kind == SourceKind.GOLD_DROP.value]
+                   + [gold_spend_actions(rich, world, ctx)])
     assert 0 < per_gold < 1
+    # The gold withdraw is ONE action of its recorded seconds (2.9 s), a
+    # fraction of a planner action, not rounded up to a whole one.
+    withdraw = next(r for r in gold if r.kind == SourceKind.WITHDRAW.value)
+    assert withdraw.actions_per_application == (ctx.seconds_of(LogType.WITHDRAW_GOLD)
+                                                 / ctx.action_seconds_of()) < 1
 
     def price(state: WorldState) -> tuple[int, SourceKind | None]:
         return cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
@@ -270,10 +283,14 @@ def test_pocket_and_bank_gold_are_priced_alike() -> None:
 
     banked, route = price(rich)
     assert route is SourceKind.BUY
-    assert banked == 3 + ceil(100 * per_gold) + ceil(1 + (PRICE - 100) * per_gold)
+    # The buy's measured 3 seconds is a fraction of an action, rounded with the
+    # route's gold once rather than charged a whole action: one rounding.
+    assert banked - (3 + ceil(100 * per_gold) + ceil(1 + (PRICE - 100) * per_gold)) in (-1, 0)
     pocketed, _ = price(replace(rich, gold=50_000, bank_gold=0))
     assert pocketed == 2 + ceil(PRICE * per_gold)
-    assert banked - pocketed in (2, 3)  # the withdraw and its hop; one rounding
+    # The withdraw and its hop, each fraction of an action rounded with the
+    # route it rides on (ruling "seconds inside").
+    assert banked - pocketed in (1, 2, 3)
 
 
 def test_the_player_withdraws_then_buys_the_rune() -> None:
@@ -318,7 +335,7 @@ def test_the_fast_path_withdraws_the_shortfall_then_fills() -> None:
     order = world.ge_best_sell_order(SHARD)
     assert order is not None
     cost = order[1] * 3
-    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
+    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True, now=cycle_now())
     short = replace(state, gold=cost - SHORT, bank_gold=50_000, bank_items={})
     assert spendable_pocket(short, world, frozenset({SHARD})) == cost - SHORT
     plan = decompose(goal, short, world, actions, _fighting_ctx(short))
@@ -341,7 +358,7 @@ def test_the_fast_path_buys_nothing_when_the_bank_cannot_cover_it() -> None:
     world, state, actions = _piece_world()
     order = world.ge_best_sell_order(SHARD)
     assert order is not None
-    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
+    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True, now=cycle_now())
     short = replace(state, gold=order[1] * 3 - SHORT, bank_gold=SHORT - 1, bank_items={})
     plan = decompose(goal, short, world, actions, _fighting_ctx(short))
     assert plan is not None
@@ -431,8 +448,9 @@ def test_a_closure_that_spends_no_gold_reads_no_gold_rate() -> None:
     (which the rate refuses), copper ore still prices."""
     world = _world()
     state = _state(world)
-    ctx = _crystal_ctx()
-    assert ctx.gear_objective is not None and ctx.gear_objective.fighter is None
+    objective = _crystal_ctx().gear_objective
+    assert objective is not None
+    ctx = replace(_crystal_ctx(), gear_objective=replace(objective, fighter=None))
     with pytest.raises(ValueError, match="no fighter"):
         gold_spend_actions(state, world, ctx)
     assert acquisition_actions("copper_ore", 1, replace(state, inventory={}), world, ctx,
@@ -470,9 +488,11 @@ def test_a_gold_fight_the_closure_offers_prices_spent_gold() -> None:
 def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     """While `L*` is being chosen no objective is on the context yet, so each
     candidate's pieces are priced with that candidate's provisional `m*`: the
-    rune's piece price is its route's price at `m*`'s gold rate (the pig's,
-    cheaper here than any gold fight), plus the equip. The gold is banked, so
-    it is SPENT, not fought for: the rate is what prices it."""
+    rune's piece price is its route's price at that candidate's gold rate,
+    plus the equip. The gold is banked, so it is SPENT, not fought for: the
+    cheaper of `m*`'s rate and the closure's gold fights prices it (since
+    ruling "seconds inside", 2026-10-31, the yellow slime's 5-second fights,
+    cheaper than the pig's rate)."""
     world = _world()
     state = replace(_state(world), bank_gold=50_000, bank_items={})
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
@@ -481,10 +501,38 @@ def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
     fight = min(Fraction(r.actions_per_application) / r.yield_per
                 for r in gold if r.kind == SourceKind.GOLD_DROP.value)
-    assert gold_spend_actions(state, world, ctx) < fight
+    assert fight < gold_spend_actions(state, world, ctx)
     piece = next(p for p in objective.missing if p.code == RUNE.code)
     price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
                                    pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    assert piece.price == price + 1
+
+
+def test_a_piece_s_spent_gold_is_charged_at_its_candidate_s_rate_when_that_is_cheaper() -> None:
+    """Where `m*`'s gold rate beats every gold fight the closure offers (here a
+    fight record that loses almost every fight surcharges the closure's
+    fights), the rune's banked gold is charged at the candidate's own rate,
+    which only a context carrying that candidate's provisional objective can
+    read: the piece price is the price under the objective's `m*`, plus the
+    equip."""
+    world = _world()
+    state = replace(_state(world), bank_gold=50_000, bank_items={})
+    lossy = replace(TIMED_NO_PROFILE_CONTEXT,
+                    fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+    ctx = attached(state, world, lossy, None)
+    objective = ctx.gear_objective
+    assert objective is not None
+    gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    fight = min(Fraction(r.actions_per_application) / r.yield_per
+                for r in gold if r.kind == SourceKind.GOLD_DROP.value)
+    assert gold_spend_actions(state, world, ctx) < fight
+    assert gold_spend_actions(state, world, lossy) == UNOBTAINABLE_PER_UNIT
+    piece = next(p for p in objective.missing if p.code == RUNE.code)
+    price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
+                                   pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    bare, _route = cheapest_route(RUNE.code, 1, state, world, lossy, None, policy=PIECE_POLICY,
+                                  pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    assert price < bare
     assert piece.price == price + 1
 
 
@@ -549,12 +597,12 @@ def test_a_resumed_upgrade_keeps_its_priced_fill() -> None:
         goal = UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot"), ge_fill=ge_fill)
         data = goal_to_dict(goal)
         assert data is not None
-        back = goal_from_dict(data, None)
+        back = goal_from_dict(data, None, cycle_now())
         assert isinstance(back, UpgradeEquipmentGoal) and back.ge_fill is ge_fill
     legacy = goal_to_dict(UpgradeEquipmentGoal(committed_target=("crown", "helmet_slot")))
     assert legacy is not None
     legacy.pop("ge_fill")
-    back = goal_from_dict(legacy, None)
+    back = goal_from_dict(legacy, None, cycle_now())
     assert isinstance(back, UpgradeEquipmentGoal) and back.ge_fill is False
 
 

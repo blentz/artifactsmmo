@@ -67,13 +67,13 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.strategy import StrategyDecision
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 
 CENSUS_LEVEL = 11
@@ -355,7 +355,7 @@ def drive_selector(cell: ShedCell, state: WorldState,
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     step = ReachCharLevel(level=CENSUS_STEP_LEVEL)
     decision = StrategyDecision(interrupt=None, chosen_root=step,

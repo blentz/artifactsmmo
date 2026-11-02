@@ -1,9 +1,9 @@
 """One reader for the harnesses that replay `cycles` rows: the learning store,
 not traces.
 
-FIVE harnesses import this module — `gather_xp_replay`, `level_cost_replay`,
+FOUR harnesses import this module — `gather_xp_replay`,
 `trace_characterize`, `trace_lockstep`, `xp_formula_replay` — and each of the
-five used to hand-roll its own loader over `play-trace-*.jsonl` files,
+four used to hand-roll its own loader over `play-trace-*.jsonl` files,
 producing dicts shaped `{"cycle": n, "state": {...}, "action": ...}` and then
 recovering per-cycle deltas by DIFFERENCING CONSECUTIVE STATE SNAPSHOTS. Those
 files are a debugging artifact the user deletes; they were never the durable

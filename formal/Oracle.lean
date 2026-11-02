@@ -4,7 +4,6 @@ import Formal.AccumulationSell
 import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.PotionProvisionQty
-import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.GearObjective
@@ -204,15 +203,6 @@ def runEquipCapValue (isEquippable isDominated : Int) : Json :=
 def runConsumableCapValue (hpRestore : Int) : Json :=
   Json.mkObj [("consumable_cap", Json.num (consumableCapValue hpRestore))]
 
-/-- Evaluate the extracted `strategic_value_pure` (efficiency-weighted scorer,
-    #16). args layout (10 ints): combat_raw, wisdom, prospecting,
-    inventory_space, haste, combat_weight, wisdom_weight, prospecting_weight,
-    inventory_weight, haste_weight. Returns the Lean-computed strategic value. -/
-def runStrategicValue (args : Array Json) : Json :=
-  Json.mkObj [("value", Json.num (Extracted.StrategicValue.strategic_value_pure
-    (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3) (intArg args 4)
-    (intArg args 5) (intArg args 6) (intArg args 7) (intArg args 8) (intArg args 9)))]
-
 /-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
     args layout: equippable(0/1), slotCount, peer_count, then for each
     peer: fitsAllSlots(0/1), strictlyHigher(0/1), coversSkillEffects(0/1),
@@ -284,7 +274,7 @@ def runRankValue (args : Array Json) : Json :=
 
 /-- Evaluate the HAND `Formal.GearValue.rankCombat` and `rankEfficiency` — the
     two terms the ONE gear ruler is the SUM of, and the pair the ECONOMICS layer
-    (`tiers/pursuit_value`) reads. Replaces the retired `runCombatRaw`, whose
+    (an economics layer) reads. Replaces the retired `runCombatRaw`, whose
     subject (a flat 8-stat sum) no longer exists.
 
     args layout (25 ints): isWeapon(0/1), isTool(0/1), the standard 18-int item
@@ -680,31 +670,6 @@ def runObjectiveAttainable (args : Array Json) : Json :=
     (buyEdges.filter (fun e => decide (e.1 = item))).map Prod.snd
   Json.mkObj [("is_attainable",
     Json.bool (Formal.Objective.isAttainable r hasRec drop buys fuel queryItem))]
-
-/-- Run `bestAttainableGear`: choose the first-slot item for a gear type.
-
-args layout: `[n, code0, value0, attain0, code1, value1, attain1, ...]` — `n`
-items, each `(code, equip_value, attainable(0/1))`. Emits the chosen code (or -1
-if none attainable), and its equip_value. -/
-def runObjectiveBestGear (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let items : List Formal.Objective.Gear :=
-    (List.range n).map (fun k =>
-      { code := intArg args (1 + 3*k), value := intArg args (2 + 3*k) })
-  let attainBits : List Bool :=
-    (List.range n).map (fun k => intArg args (3 + 3*k) != 0)
-  -- attain by position: map each gear to its bit via code+value identity is
-  -- fragile under dup codes, so we attach the bit by index using a parallel list.
-  let codeVal := fun (it : Formal.Objective.Gear) => (it.code, it.value)
-  let pairs : List (Formal.Objective.Gear × Bool) := items.zip attainBits
-  let attain : Formal.Objective.Gear → Bool := fun it =>
-    match pairs.find? (fun p => decide (codeVal p.1 = codeVal it)) with
-    | some p => p.2
-    | none => false
-  let chosen := Formal.Objective.bestAttainableGear attain items
-  let code : Int := match chosen with | some it => it.code | none => -1
-  let val : Int := match chosen with | some it => it.value | none => 0
-  Json.mkObj [("chosen_code", Json.num code), ("chosen_value", Json.num val)]
 
 /-- Build a `StrategyTraversal.Graph` from a flat node encoding and return it
 together with the node count.
@@ -1661,18 +1626,6 @@ def runOptimalBuyMix (args : Array Json) : Json :=
   let b := Formal.OptimalBuyMix.optimalBuyMix needs held prices gold maxBatch
   Json.mkObj [("batch", Json.num (Int.ofNat b))]
 
-/-- Compute one potion_baseline result using the SAME proved
-`Formal.PotionBaseline.potionBaseline`.
-
-args layout (5 Ints): `[level, low_level, low_qty, high_level, high_qty]`, all read
-via `.toNat`; emits `{"baseline": <int>}` matching the Python `potion_baseline_pure`
-return in the differential test. -/
-def runPotionBaseline (args : Array Json) : Json :=
-  let b := Formal.PotionBaseline.potionBaseline
-    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
-    (intArg args 3).toNat (intArg args 4).toNat
-  Json.mkObj [("baseline", Json.num (Int.ofNat b))]
-
 /-- Compute one bank_expansion_timing result using the SAME proved
 `Formal.BankExpansionTiming.shouldExpandBank`.
 
@@ -2000,26 +1953,36 @@ def runDropFitK (args : Array Json) : Json :=
   let r := Formal.DropChance.fitK samples
   Json.mkObj [("num", Json.num r.1), ("den", Json.num r.2)]
 
-/-- The foods of a recovery row: `count` at `[4]`, then `[restore, priceTag,
-price, held]` each, a tag of 0 meaning no replacement. -/
+/-- The foods of a recovery row: `count` at `[6]`, then `[restore, priceTag,
+price, held, room]` each, a tag of 0 meaning no replacement. -/
 def loopFoods (n : Nat → Nat) : List Formal.LoopRate.Food :=
-  (List.range (n 4)).map (fun i =>
-    (n (5 + 4 * i), (if n (6 + 4 * i) = 0 then none else some (n (7 + 4 * i))), n (8 + 4 * i)))
+  (List.range (n 6)).map (fun i =>
+    (n (7 + 5 * i), (if n (8 + 5 * i) = 0 then none else some (n (9 + 5 * i))), n (10 + 5 * i),
+     n (11 + 5 * i)))
 
 /-- The cheapest recovery (`Formal.LoopRate.recovery`), scaled seconds. Args:
-`[scale, eat, maxHp, missing, count, restore_0, priceTag_0, price_0, held_0, ...]`. -/
+`[scale, eat, maxHp, missing, qty, slots, count, restore_0, priceTag_0, price_0,
+held_0, room_0, ...]`. -/
 def runLoopRecovery (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
   Json.mkObj [("recovery", Json.num (Int.ofNat
-    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) (loopFoods n) (n 3))))]
+    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) (loopFoods n) (n 3) (n 4) (n 5))))]
 
 /-- What a count vector costs (`Formal.LoopRate.planCost`), scaled seconds. Args:
 the `runLoopRecovery` row, then one count per food. -/
 def runLoopPlanCost (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
-  let counts := (List.range (n 4)).map (fun i => n (5 + 4 * n 4 + i))
+  let counts := (List.range (n 6)).map (fun i => n (7 + 5 * n 6 + i))
   Json.mkObj [("cost", Json.num (Int.ofNat
     (Formal.LoopRate.planCost (n 0) (n 1) (n 2) (loopFoods n) counts (n 3))))]
+
+/-- The foods' shares of the one room (`Formal.LoopRate.shares`). Args:
+`[slots, qFree, count, eaten_0, bag_0, ...]`. -/
+def runLoopShares (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let foods := (List.range (n 2)).map (fun i => (n (3 + 2 * i), n (4 + 2 * i)))
+  Json.mkObj [("shares", Json.arr ((Formal.LoopRate.shares foods (n 0) (n 1)).map
+    (fun v => Json.num (Int.ofNat v))).toArray)]
 
 /-- The consumed price (`Formal.LoopRate.consumedPrice`), scaled seconds. Args:
 `[count, used_0, priceTag_0, price_0, held_0, ...]`. Emits `none` and `cost`. -/
@@ -2280,70 +2243,44 @@ def codeToOptStr : Int → Option String
 
 /-- Compute one winnable_cascade result via the SAME proved
 `winnableFarmTargetPure`.
-args: [taskCode, pathCode, pathWinnable(0/1), pickCode]
+args: [taskCode, pathCode, pathWinnable(0/1)]
     where *Code is the small-int encoding above. -/
 def runWinnableCascade (args : Array Json) : Json :=
   let i : Formal.WinnableCascade.CascadeInputs :=
     { taskMonster := codeToOptStr (intArg args 0)
       pathMonster := codeToOptStr (intArg args 1)
-      pathWinnable := intArg args 2 != 0
-      pickWinnable := codeToOptStr (intArg args 3) }
+      pathWinnable := intArg args 2 != 0 }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
-/-- Compute one combat_picker result via the SAME proved
-`pickWinnableWindowed` (window-preferred picker with the P0-2026-06-09
-xp>0 liveness fallback).
-args layout:
-  [charLevel, nMonsters,
-   m0.code, m0.level, m0.winnable(0/1), m0.xpPositive(0/1),
-   m1.code, m1.level, m1.winnable(0/1), m1.xpPositive(0/1), ...]
-Monster codes are small ints (unique per request — the predicates are
-keyed by code via first-match lookup).
-Output: { result: code | null }. -/
-def runCombatPicker (args : Array Json) : Json :=
-  let charLevel := intArg args 0
-  let n := (intArg args 1).toNat
-  let entry := fun (k : Nat) =>
-    (intArg args (2 + 4 * k), intArg args (3 + 4 * k),
-     intArg args (4 + 4 * k) != 0, intArg args (5 + 4 * k) != 0)
-  let entries : List (Int × Int × Bool × Bool) := (List.range n).map entry
-  let monsters : List Formal.CombatTargetExistence.Monster :=
-    entries.map (fun e => { code := e.1, level := e.2.1 })
-  let winnable : Formal.CombatTargetExistence.WinnableFn := fun m =>
-    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.1)).getD false
-  let xpPos : Formal.CombatTargetExistence.WinnableFn := fun m =>
-    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.2)).getD false
-  match Formal.CombatTargetExistence.pickWinnableWindowed
-      charLevel winnable xpPos monsters with
-  | none => Json.mkObj [("result", Json.null)]
-  | some m => Json.mkObj [("result", Json.num m.code)]
+/-- Compute one `whichPieceIsNext` result via the SAME proved
+`Formal.GearObjectiveWalk.whichPieceIsNext` (ruling C4-R m4).
+args: [hasObjective(0/1), monster, held(0/1), atCap(0/1), n,
+       code0, served0(0/1), code1, served1, ...]
+Output: { kind: "none" | "level" | "piece", code: int (piece only) }. -/
+def runWhichPieceIsNext (args : Array Json) : Json :=
+  let n := (intArg args 4).toNat
+  let pieces : List (Int × Bool) :=
+    (List.range n).map (fun k => (intArg args (5 + 2 * k), intArg args (6 + 2 * k) != 0))
+  let o : Option Formal.GearObjectiveWalk.ObjectiveView :=
+    if intArg args 0 != 0 then
+      some { monster := intArg args 1, held := intArg args 2 != 0, missing := pieces.map Prod.fst }
+    else none
+  let serves : Int → Bool := fun c =>
+    ((pieces.find? (fun p => p.1 == c)).map Prod.snd).getD false
+  match Formal.GearObjectiveWalk.whichPieceIsNext o serves (intArg args 3 != 0) with
+  | none => Json.mkObj [("kind", Json.str "none")]
+  | some .levelUp => Json.mkObj [("kind", Json.str "level")]
+  | some (.piece c) => Json.mkObj [("kind", Json.str "piece"), ("code", Json.num c)]
 
-/-- Run the cheapest-path greedy model.
-args layout:
-  [current, target, maxXp, xpInLevel, nMonsters,
-   m0.code, m0.level, m0.xpPerCycle, m0.winnable,
-   m1.code, m1.level, m1.xpPerCycle, m1.winnable, ...]
-Output: { blocked: bool, n_segments: int, monster_codes: [int] } -/
-def runCheapestPath (args : Array Json) : Json :=
-  let current := (intArg args 0).toNat
-  let target := (intArg args 1).toNat
-  let maxXp := (intArg args 2).toNat
-  let xpInLevel := (intArg args 3).toNat
-  let nMonsters := (intArg args 4).toNat
-  let monsters : List Formal.CheapestPath.Monster :=
-    (List.range nMonsters).map (fun k =>
-      { code := (intArg args (5 + 4 * k)).toNat
-        level := (intArg args (5 + 4 * k + 1)).toNat
-        xpPerCycle := (intArg args (5 + 4 * k + 2)).toNat
-        winnable := intArg args (5 + 4 * k + 3) != 0 })
-  let plan := Formal.CheapestPath.cheapestPath current target maxXp xpInLevel monsters
-  Json.mkObj
-    [ ("blocked", Json.bool plan.blocked)
-    , ("n_segments", Json.num (Int.ofNat plan.segments.length))
-    , ("monster_codes",
-        Json.arr ((plan.segments.map (fun s => Json.num (Int.ofNat s.monster.code))).toArray))
-    , ("total_cycles", Json.num (Int.ofNat plan.totalCycles))
-    ]
+/-- Compute one `grindTarget` result via the SAME proved
+`Formal.GearObjectiveWalk.grindTarget`. args: [monster, held(0/1)].
+Output: { target: int | null }. -/
+def runGrindTarget (args : Array Json) : Json :=
+  let o : Formal.GearObjectiveWalk.ObjectiveView :=
+    { monster := intArg args 0, held := intArg args 1 != 0, missing := [] }
+  match Formal.GearObjectiveWalk.grindTarget o with
+  | none => Json.mkObj [("target", Json.null)]
+  | some t => Json.mkObj [("target", Json.num t)]
 
 /-- Compute one items_task_run result using the SAME proved
 `Formal.Liveness.ItemsTaskRun.trade` / `applyRun`.
@@ -3140,8 +3077,6 @@ def runOne (item : Json) : Json :=
   else if kind == "equip_cap_value" then
     -- args: [equippable(0/1), dominated(0/1)]
     runEquipCapValue (intArg args 0) (intArg args 1)
-  else if kind == "strategic_value" then
-    runStrategicValue args
   else if kind == "rank_components" then
     -- args: [isWeapon(0/1), isTool(0/1), 18-int item block, flatCombat,
     --        wisdom, prospecting, inventorySpace, haste]
@@ -3181,8 +3116,6 @@ def runOne (item : Json) : Json :=
     runCombatCapable args
   else if kind == "objective_attainable" then
     runObjectiveAttainable args
-  else if kind == "objective_best_gear" then
-    runObjectiveBestGear args
   else if kind == "strategy_is_reachable" then
     runStrategyTraversal "is_reachable" args
   else if kind == "strategy_closure_size" then
@@ -3261,8 +3194,6 @@ def runOne (item : Json) : Json :=
     runPotionProvisionQty args
   else if kind == "optimal_buy_mix" then
     runOptimalBuyMix args
-  else if kind == "potion_baseline" then
-    runPotionBaseline args
   else if kind == "bank_expansion_timing" then
     runBankExpansionTiming args
   else if kind == "event_window" then
@@ -3315,6 +3246,8 @@ def runOne (item : Json) : Json :=
     runLoopTrips args
   else if kind == "loop_plan_cost" then
     runLoopPlanCost args
+  else if kind == "loop_shares" then
+    runLoopShares args
   else if kind == "loop_consumed" then
     runLoopConsumed args
   else if kind == "best_loadout_pick" then
@@ -3331,10 +3264,10 @@ def runOne (item : Json) : Json :=
     runStoreWarmup args
   else if kind == "winnable_cascade" then
     runWinnableCascade args
-  else if kind == "combat_picker" then
-    runCombatPicker args
-  else if kind == "cheapest_path" then
-    runCheapestPath args
+  else if kind == "which_piece_is_next" then
+    runWhichPieceIsNext args
+  else if kind == "grind_target" then
+    runGrindTarget args
   else if kind == "items_task_run" then
     runItemsTaskRun args
   else if kind == "task_reservation" then

@@ -1,9 +1,9 @@
 """Keep-economy consumer migration (Task 5, spec 2026-06-28-gear-loadout-profiles).
 
 The GEAR portion of every keep/recycle/deposit/sell protection is rerouted from
-the `target_gear`/`target_tools` recipe-closure to the ACTIVE-PROFILE gear-demand
-set (`gear_keep` = deduped per-code loadout demand ∪ the in-flight upgrade, +1
-spare). NON-gear protection (tasks_coin, task_code, HP consumables, crafting/task
+the old gear sheets' recipe-closure to the ACTIVE-PROFILE gear-demand set
+(`gear_keep` = deduped per-code loadout demand, with every `L*` code kept at the
+copies `L*` wears). NON-gear protection (tasks_coin, task_code, HP consumables, crafting/task
 recipe materials) is UNCHANGED — `test_nongear_protection_unchanged` is the
 regression lock.
 
@@ -23,15 +23,17 @@ from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_objective_context import with_objective_keep
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import active_profile_gear
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from tests.test_ai.fixtures import served_game_data, with_missing
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -63,7 +65,7 @@ def make_state(**overrides: object) -> WorldState:
 
 
 def _gd() -> GameData:
-    gd = GameData()
+    gd = served_game_data()
     gd._item_stats = {
         # Equippable, craftable gear (recyclable when surplus).
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
@@ -288,17 +290,16 @@ def test_profile_gear_demand_is_honoured_by_the_destructive_paths():
     assert bank_drain_excess(banked, gd, ctx) == {"copper_dagger": 4}
 
 
-def test_objective_target_gear_is_ACQUISITION_only_not_protection():
-    """`target_gear` / `target_tools` name what to PURSUE. The old `_gear_protected`
-    fallback turned them into "keep EVERY copy of every BiS code" — the blanket that
-    hid all 18 copper_axe. Naming a code there now protects exactly NOTHING extra:
-    the authority's profile-less EQUIPPABLE_KEEP=1 is the whole floor."""
+def test_a_missing_objective_piece_is_kept_at_its_worn_copies_not_every_copy():
+    """The gear objective keeps a missing `L*` piece at the copies `L*` wears
+    (`with_objective_keep`), never "keep EVERY copy" — the blanket the old
+    `target_gear` / `target_tools` fallback was, which hid all 18 copper_axe.
+    Six daggers in the bag, `L*` wearing one: keep 1, shed the other 5."""
     gd = _gd()
-    ctx = _ctx(target_gear=frozenset({"copper_dagger"}),
-               target_tools=frozenset({"iron_pick"}))
+    objective = with_missing(_ctx(), ("weapon_slot", "copper_dagger")).gear_objective
+    ctx = _ctx(gear_objective=objective, gear_keep=with_objective_keep({}, objective))
     bagged = make_state(skills={"weaponcrafting": 1},
                         inventory={"copper_dagger": 6}, inventory_max=6)
-    # keep 1 (the swap candidate / last combat weapon), shed the other 5 — NOT 0.
     assert keep_owned("copper_dagger", bagged, gd, ctx) == 1
     assert discardable_surplus(bagged, gd, ctx) == {"copper_dagger": 5}
     banked = make_state(skills={"weaponcrafting": 1},

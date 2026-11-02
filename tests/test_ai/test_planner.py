@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 @pytest.fixture
@@ -184,7 +184,7 @@ class TestGOAPPlanner:
             npc_code="cultist_wizard",
             item_code="corrupted_fruit",
             quantity=1,
-            npc_location=(4, 13),
+            npc_location=(4, 13), now=cycle_now(),
         )
         gd_with_npc = make_game_data()
         gd_with_npc._npc_stock = {"cultist_wizard": {"corrupted_fruit": 10}}

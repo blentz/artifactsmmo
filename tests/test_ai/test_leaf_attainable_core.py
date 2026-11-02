@@ -1,5 +1,5 @@
 """Pure core: an acquisition leaf is attainable iff at least one source applies."""
-from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
+from artifactsmmo_cli.ai.progression.leaf_attainable_core import leaf_attainable_pure
 
 
 def test_none_of_the_sources_not_attainable():

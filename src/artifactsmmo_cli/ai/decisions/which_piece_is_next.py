@@ -13,6 +13,7 @@ objective is held only when both are served, so the trunk is never offered
 while fleet demand its role serves exists.
 """
 
+from datetime import datetime
 from fractions import Fraction
 
 # MODULE import, the idiom `root.py` uses on its own cycles: `root` imports
@@ -31,8 +32,7 @@ from artifactsmmo_cli.ai.gear_objective_core import PieceKey, piece_order_key
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import PIECE_POLICY
-from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import (
+from artifactsmmo_cli.ai.progression.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
@@ -40,7 +40,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
     StepDecline,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.tool_objective import drop_tool_target, tool_first
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -55,7 +56,8 @@ def next_level(state: WorldState, game_data: GameData) -> ReachCharLevel | None:
     return ReachCharLevel(level=state.level + 1)
 
 
-def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldState) -> GearTarget:
+def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldState,
+                 now: datetime) -> GearTarget:
     """The piece's target as the route that priced it serves it (plan B Task
     3), for the walk's entry and the alternatives `resolve_root` offers alike.
     A crafted piece (`GearPiece.crafted`) is classified (`classify_target`:
@@ -65,7 +67,7 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
     sells is bought, never climbed to (cell 5's amulet, 213 gold on the book,
     once rooted the jewelrycrafting climb its craft needs)."""
     if piece.crafted:
-        return objective.classify_target(piece.code, state)
+        return objective.classify_target(piece.code, state, now)
     return GearTarget(code=piece.code, attainable=False, blocker=piece.code)
 
 
@@ -159,7 +161,7 @@ def fleet_piece_root(piece: FleetPiece, state: WorldState, game_data: GameData,
     current = state.skills[piece.skill]
     if current < piece.level:
         return tool_first(ReachSkillLevel(skill=piece.skill, level=current + 1),
-                          state, game_data, ctx, walk.now, walk.step_decline)
+                          ctx, walk.step_decline)
     target = ctx.supply_target
     if target is not None and target[0] == piece.code and supply_due(ctx):
         return ReachFleetOutcome(FLEET_SUPPLY, piece.code)
@@ -269,7 +271,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
                 self.walk.declined[repr(ObtainItem(piece.code, 1, slot=piece.slot))] = (
                     "awaits the fleet crafter")
                 continue
-            gear = piece_target(piece, self.objective, state)
+            gear = piece_target(piece, self.objective, state, ctx.now)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
                 # Resolved here, not handed on, so an obtain step can yield to
                 # the prospecting item its drop work pays for (§2.8).

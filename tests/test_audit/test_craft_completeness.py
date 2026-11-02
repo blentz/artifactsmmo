@@ -17,13 +17,13 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, ChosenLoadout
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.region_edges import reachable_regions_now
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_tiles
+from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_census import run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
@@ -47,6 +47,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     first_work_leg,
     plan_craft,
 )
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -299,7 +300,7 @@ def test_craft_cell_verdict_passes_npc_buy_of_closure_material() -> None:
     """An NpcBuyAction buying a closure material (copper_ore, the copper_bar
     recipe ingredient) advances the closure via .item_code."""
     gd = _gd()
-    plan = [NpcBuyAction(npc_code="some_merchant", item_code="copper_ore")]
+    plan = [NpcBuyAction(npc_code="some_merchant", item_code="copper_ore", now=cycle_now())]
     verdict = craft_cell_verdict("copper_bar", plan, gd)
     assert verdict == CraftVerdict(True, "")
 
@@ -439,7 +440,9 @@ def test_classify_gap_grey_farm_suppressed_when_only_dropper_is_grey_and_obsolet
     `grey_farm_allowed(raw_meat)` is False: production grinds cooking toward the
     better food instead of farming the obsolete drop. The FAIL is the intended
     grey-farm policy, not a planner hole — GREY_FARM_SUPPRESSED. (Live census
-    2026-07-11: cooked_chicken at char 12 / cooking 1.)"""
+    2026-07-11: cooked_chicken at char 12 / cooking 1.) The census character
+    wears `L*` for `wolf`, the XP-paying monster at its level (plan C Task 6:
+    the census loadout is the gear objective), so the hen is beatable."""
     gd = GameData()
     gd._item_stats = {
         "low_food": ItemStats(code="low_food", level=1, type_="consumable",
@@ -458,11 +461,13 @@ def test_classify_gap_grey_farm_suppressed_when_only_dropper_is_grey_and_obsolet
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_skill = {"blade_vein": ("mining", 1)}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
-    gd._monster_locations = {"hen": [(0, 1)]}
-    gd._monster_level = {"hen": 1}
-    gd._monster_hp = {"hen": 10}
+    gd._monster_locations = {"hen": [(0, 1)], "wolf": [(0, 2)]}
+    gd._monster_level = {"hen": 1, "wolf": 12}
+    gd._monster_hp = {"hen": 10, "wolf": 10}
+    gd._monster_type = {"hen": "normal", "wolf": "normal"}
     gd._monster_drops = {"hen": [("raw_meat", 50, 1, 1)]}
     _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     cell = _cell(char_level=12, skill="cooking", skill_level=1)
     assert classify_gap("low_food", cell, gd) is GapClass.GREY_FARM_SUPPRESSED
 
@@ -820,12 +825,11 @@ def test_classify_gap_unknown_recipe_is_its_own_unreachable_leaf() -> None:
 # verdict — not merely that the plumbing compiles.
 
 
-def test_census_state_equips_near_term_gear_and_derives_combat_stats() -> None:
-    """census_state picks the best attainable-now item per slot at the
-    cell's level (near_term_gear, seeded from a bare same-level state) and
-    equips it with derive_combat_stats=True, so the resulting state carries
-    non-zero attack/max_hp from the gear rather than the zero-stat empty
-    loadout."""
+def test_census_state_equips_the_gear_objective_and_derives_combat_stats() -> None:
+    """census_state equips the cell level's `L*` (`census_gear`: the gear
+    objective for the XP-paying critter) with derive_combat_stats=True, so the
+    resulting state carries non-zero attack/max_hp from the gear rather than
+    the zero-stat empty loadout."""
     gd = GameData()
     gd._item_stats = {
         "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
@@ -834,6 +838,12 @@ def test_census_state_equips_near_term_gear_and_derives_combat_stats() -> None:
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_skill = {"blade_vein": ("mining", 1)}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
+    gd._monster_locations = {"critter": [(1, 0)]}
+    gd._monster_level = {"critter": 5}
+    gd._monster_hp = {"critter": 5}
+    gd._monster_type = {"critter": "normal"}
+    _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     cell = _cell(char_level=5, skill_level=1)
     state = census_state("iron_blade", cell, gd)
     assert state.equipment.get("weapon_slot") == "iron_blade"
@@ -848,7 +858,7 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     """critter (a permanent, zero-attack, 5-HP monster) is UNWINNABLE at the
     OLD empty-loadout state (raw_player == 0 never kills anything) but
     winnable once census_state equips iron_blade (a level-1, gatherable
-    weapon near_term_gear picks up). At-skill (gearcrafting 5) with the leaf
+    weapon: `L*` for the XP-paying critter). At-skill (gearcrafting 5) with the leaf
     reachable, the recipe now classifies PLANNER_BUG (the actionable residual)
     instead of the false COMBAT_BLOCKED the empty loadout produced."""
     gd = GameData()
@@ -869,8 +879,10 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     gd._monster_locations = {"critter": [(1, 0)]}
     gd._monster_level = {"critter": 1}
     gd._monster_hp = {"critter": 5}
+    gd._monster_type = {"critter": "normal"}
     gd._monster_drops = {"critter": [("critter_meat", 10, 1, 1)]}
     _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     cell = _cell(char_level=5, skill_level=5)
 
     # The pre-fix empty-loadout state cannot win: zero attack never kills
@@ -889,8 +901,8 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
 
 
 def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled_monster() -> None:
-    """A real near_term_gear loadout (iron_blade, attack 50 at the cell's
-    level) is still nowhere near enough to beat cow (level 30, 2000 HP, 200
+    """A real census loadout (`L*` for the XP-paying critter: iron_blade,
+    attack 50 at the cell's level) is still nowhere near enough to beat cow (level 30, 2000 HP, 200
     attack) — COMBAT_BLOCKED must survive the gear fix for a genuinely
     over-leveled dropper, pinning that census_state does not silently flip
     every combat leaf to reachable regardless of the opponent."""
@@ -905,12 +917,14 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     gd._resource_drops = {"blade_vein": "iron_blade"}
     gd._resource_skill = {"blade_vein": ("mining", 1)}
     gd._resource_locations = {"blade_vein": [(2, 2)]}  # a gatherable weapon spawns
-    gd._monster_locations = {"cow": [(1, 0)]}
-    gd._monster_level = {"cow": 30}
-    gd._monster_hp = {"cow": 2000}
+    gd._monster_locations = {"cow": [(1, 0)], "critter": [(0, 1)]}
+    gd._monster_level = {"cow": 30, "critter": 5}
+    gd._monster_hp = {"cow": 2000, "critter": 5}
+    gd._monster_type = {"cow": "normal", "critter": "normal"}
     gd._monster_attack = {"cow": {"earth": 200}}
     gd._monster_drops = {"cow": [("beast_hide", 10, 1, 1)]}
     _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     cell = _cell()
 
     geared = census_state("beast_armor", cell, gd)
@@ -918,26 +932,6 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     assert not is_winnable(geared, gd, "cow")
 
     assert classify_gap("beast_armor", cell, gd) is GapClass.COMBAT_BLOCKED
-
-
-def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
-    """Regression pin for the ring2 starvation class: near_term_gear must assign
-    the best ring to BOTH ring1_slot and ring2_slot (the aspirational target the
-    runtime aging path then realizes sequentially). If this ever drops ring2,
-    the runtime can never even form the ring2 root."""
-    gd = GameData()
-    gd._item_stats = {
-        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
-                               subtype="", hp_bonus=20),
-    }
-    gd._resource_drops = {"iron_vein": "iron_ring"}
-    gd._resource_skill = {"iron_vein": ("mining", 1)}
-    gd._resource_locations = {"iron_vein": [(2, 2)]}
-    bare = scenario_state(
-        ScenarioCharacter(name="census_bare", level=5, skills={}), gd)
-    gear = CharacterObjective.from_game_data(gd).near_term_gear(bare)
-    assert gear.get("ring1_slot") == "iron_ring"
-    assert gear.get("ring2_slot") == "iron_ring"
 
 
 def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
@@ -960,7 +954,7 @@ def test_a_heal_prep_leg_before_a_grind_fight_is_directional() -> None:
             patch.object(craft_completeness, "loadout_for", side_effect=eats_gudgeon):
         state = census_state("iron_boots", CraftCell(8, "gearcrafting", 5), gd)
         plan = plan_craft("iron_boots", state, gd)
-        assert repr(plan[0]) == f"Gather(gudgeon_spot×{food_carry(1)})"
+        assert repr(plan[0]) == f"Gather(gudgeon_spot×{CARRY_HORIZON_FIGHTS})"
         fight = next(a for a in plan if isinstance(a, FightAction))
         asked.clear()
         assert advances_a_heal_prep(plan[0], plan, state, gd)
@@ -1056,6 +1050,14 @@ def test_each_leaf_is_behind_a_crossing_only_when_no_source_is_reached(monkeypat
     monkeypatch.setattr(GameData, "npc_purchases",
                         lambda self, item: [("no_such_npc", 10, "gold")] if item == "dryad_hair" else [])
     assert gd.npc_region("no_such_npc") in reach
+    assert behind("dryad_hair", state, gd, reach) is True
+    # An event vendor whose event is not live is absent, though its catalogue
+    # spawn stands where the walk reaches: no source at all.
+    monkeypatch.setattr(GameData, "npc_purchases",
+                        lambda self, item: [("gemstone_merchant", 10, "gold")]
+                        if item == "dryad_hair" else [])
+    assert not _present_vendor("gemstone_merchant", gd)
+    assert content_reached("gemstone_merchant", vendor_tiles("gemstone_merchant", gd), gd, reach)
     assert behind("dryad_hair", state, gd, reach) is True
     # A vendor whose currency the planner cannot acquire is no source at all.
     monkeypatch.setattr(GameData, "npc_purchases",
@@ -1175,19 +1177,15 @@ def test_an_underground_rock_is_a_gather_source() -> None:
     assert _leaf_status("gold_ore", state, gd) is None
 
 
-def test_the_census_loadout_is_a_fixed_point() -> None:
-    """One `near_term_gear` pick from a bare character is copper (a bare
-    character beats nothing that drops better materials); wearing it and
-    picking again reaches iron and a body armour. The planning state keeps
+def test_the_census_loadout_is_the_gear_objective() -> None:
+    """The census character wears `L*` grown from nothing (plan C Task 6, was
+    the near-term sheet's fixed point): at level 12 the iron set and a body
+    armour, not the copper a bare character holds. The planning state keeps
     the cell's skills."""
     gd = _gd()
-    bare = scenario_state(ScenarioCharacter(name="b", level=12), gd)
-    single = CharacterObjective.from_game_data(gd).near_term_gear(bare)
-    assert single["weapon_slot"] == "copper_dagger"
-    assert "body_armor_slot" not in single
-    gear = census_gear(12, frozenset(), gd)
-    assert gear["weapon_slot"] != "copper_dagger"
-    assert gear["body_armor_slot"] == "adventurer_vest"
+    gear = census_gear(12, frozenset(), False, gd)
+    assert gear["weapon_slot"] == "iron_sword"
+    assert gear["body_armor_slot"] == "iron_armor"
     state = census_state("cheese", CraftCell(12, "cooking", 10), gd)
     assert state.equipment["weapon_slot"] == gear["weapon_slot"]
     assert state.skills["cooking"] == 10
@@ -1195,15 +1193,46 @@ def test_the_census_loadout_is_a_fixed_point() -> None:
     assert is_winnable(state, gd, "cow")
 
 
+def test_the_geared_census_loadout_is_chosen_over_the_armory() -> None:
+    """The geared cell owns every suppliable equippable at its level, so its
+    `L*` is chosen over all of them: at level 20 it wears dreadful rings and a
+    lost_world_map the census character grown from nothing does not reach."""
+    gd = _gd()
+    grown = census_gear(20, frozenset(), False, gd)
+    geared = census_gear(20, frozenset(), True, gd)
+    assert (geared["ring1_slot"], geared["artifact1_slot"]) == ("dreadful_ring", "lost_world_map")
+    assert grown["ring1_slot"] != "dreadful_ring"
+    assert all(gd.item_stats(code).level <= 20 for code in geared.values())
+
+
+def test_the_census_loadout_is_chosen_with_its_events_live() -> None:
+    """A loadout is a function of its key: the key's events are live while it
+    is chosen, whoever asks. With full_moon and portal_demon live, the level-30
+    `L*` is the perfect_bow set even asked from a world with no event overlay
+    (the census parent's), where it used to be the death_knight_sword set."""
+    gd = _gd()
+    assert gd.active_event_codes == set()
+    gear = census_gear(30, frozenset({"full_moon", "portal_demon"}), False, gd)
+    assert gear["weapon_slot"] == "perfect_bow"
+    assert gd.active_event_codes == set()
+
+
+def test_the_census_character_crafts_at_its_level() -> None:
+    """The census character's skills grow with its level (crafting kept pace):
+    at level 20 its `L*` is the steel set a gearcrafter at 20 makes, where a
+    character still at skill 1 would wear the mushmush jacket."""
+    assert census_gear(20, frozenset(), False, _gd())["body_armor_slot"] == "steel_armor"
+
+
 def test_the_census_loadout_memo_is_per_catalogue_and_copied() -> None:
     gd = _gd()
-    first = census_gear(12, frozenset(), gd)
+    first = census_gear(12, frozenset(), False, gd)
     weapon = first["weapon_slot"]
     first["weapon_slot"] = "spoiled"
-    assert census_gear(12, frozenset(), gd)["weapon_slot"] == weapon
+    assert census_gear(12, frozenset(), False, gd)["weapon_slot"] == weapon
     other = GameData()
-    assert census_gear(12, frozenset(), other) == {}
-    assert census_gear(12, frozenset(), gd)["weapon_slot"] == weapon
+    assert census_gear(12, frozenset(), False, other) == {}
+    assert census_gear(12, frozenset(), False, gd)["weapon_slot"] == weapon
 
 
 def test_a_leaf_waits_on_its_events_only_without_a_permanent_source() -> None:
@@ -1252,7 +1281,9 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     """wool (from a grey sheep) buys the leaf `cloth`; every recipe cloth feeds
     has a near next tier, so the grey-farm policy refuses the sheep: the
     cloth is a purchase whose currency cannot be had — not a PLANNER_BUG,
-    which a grey-blind currency check called it (steel_armor, 2026-10-10)."""
+    which a grey-blind currency check called it (steel_armor, 2026-10-10). The
+    census character wears `L*` for `wolf`, the XP-paying monster at its level,
+    so the sheep is beatable and the grey policy is what refuses it."""
     gd = GameData()
     gd._item_stats = {
         "cloak": _craftable("cloak", "gearcrafting", 1),
@@ -1269,11 +1300,13 @@ def test_a_purchase_currency_the_grey_policy_refuses_is_not_attainable() -> None
     gd.world.npc_stock = {"tailor": {"cloth": 3}}
     gd.world.npc_tiles = {"tailor": (4, 4)}
     gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
-    gd._monster_locations = {"sheep": [(1, 0)]}
-    gd._monster_level = {"sheep": 1}
-    gd._monster_hp = {"sheep": 5}
+    gd._monster_locations = {"sheep": [(1, 0)], "wolf": [(0, 1)]}
+    gd._monster_level = {"sheep": 1, "wolf": 30}
+    gd._monster_hp = {"sheep": 5, "wolf": 5}
+    gd._monster_type = {"sheep": "normal", "wolf": "normal"}
     gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}
     _fill_monster_defaults(gd)
+    gd._bank_location = (4, 0)  # the gear objective's loop counts bank trips
     assert classify_gap("cloak", _cell(char_level=30), gd) is GapClass.PURCHASE_RECURSION
 
 

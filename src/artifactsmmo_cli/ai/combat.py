@@ -517,11 +517,9 @@ def unpotioned(state: WorldState) -> WorldState:
     """`state` fighting on BARE gear: the worn potions stay worn but none is
     drunk (`worn_restore` reads stock 0, and a worn boost with no stock is no
     boost, `equipment.projection`; they are the fight's readers of a utility
-    slot's quantity). Every GEAR question asks it — a rung cleared
-    (`tier_progress.tier_cleared`), the band's bare fight
-    (`band_target.BandTarget.bare_fight`), a fight secure enough to need no
-    gear (`SelectionContext.combat_risky`, `combat_deficit`'s routing walk) —
-    so a potion-propped win never hides a gear upgrade. Live probe 2026-10-16:
+    slot's quantity). Every GEAR question asks it — the gear objective's bare
+    fighter, a fight secure enough to need no gear (`combat_deficit`'s routing
+    walk) — so a potion-propped win never hides a gear upgrade. Live probe 2026-10-16:
     40 worn greater health potions take `l25_currency_leaf_unfunded` from P 0
     to P 1 against every rung-20 to rung-30 monster."""
     return replace(state, utility1_slot_quantity=0, utility2_slot_quantity=0)
@@ -565,7 +563,7 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
 def secure_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
     """A fight won often enough that gear is not the better use of time (spec
     §3): P(win) at least max(θ, SECURE_WIN). The gear arm reads it
-    (`combat_deficit`, `SelectionContext.combat_risky`)."""
+    (`combat_deficit`)."""
     return odds_clear(win_probability(state, game_data, monster_code),
                       max(win_threshold(state, monster_code), SECURE_WIN))
 
@@ -635,8 +633,7 @@ def loss_vetoed(state: WorldState, game_data: GameData, monster_code: str,
     """The LEARNED-LOSS veto (`is_winnable`'s first gate): at least
     MIN_WIN_SAMPLES recorded fights against `monster_code` at this level in the
     loadout the fight is fought in (`fight_record`), won below
-    WIN_RATE_THRESHOLD. Also the band target's: a fight carried by consumables
-    (`band_target.band_combat_target`) is refused on the same record."""
+    WIN_RATE_THRESHOLD."""
     return _vetoes(*fight_record(state, game_data, monster_code, history))
 
 

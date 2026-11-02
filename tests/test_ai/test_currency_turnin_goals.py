@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.goals.currency_turnin import TURN_IN_PRIORITY, Currency
 from artifactsmmo_cli.ai.goals.surrender_currency import SURRENDER_PRIORITY, SurrenderCurrencyGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 
@@ -32,7 +32,7 @@ def _turn_in_actions(gd: GameData, state: WorldState) -> list[Action]:
     for npc_code, stock in gd.world.npc_stock.items():
         for item_code in stock:
             actions.append(NpcBuyAction(npc_code=npc_code, item_code=item_code,
-                                        quantity=1, npc_location=(0, 0)))
+                                        quantity=1, npc_location=(0, 0), now=cycle_now()))
     for slot in state.equipment:
         actions.append(UnequipAction(slot=slot))
     return actions

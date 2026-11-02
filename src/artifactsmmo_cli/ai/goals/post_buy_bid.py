@@ -11,6 +11,10 @@ codes), so the firing signal falls false and the means cannot spin. Suppression
 also keeps bid and self-craft mutually exclusive (`bid_vs_craft`).
 """
 
+import copy
+from dataclasses import replace
+from datetime import datetime
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
@@ -40,6 +44,13 @@ class PostBuyBidGoal(Goal):
     def __init__(self, game_data: GameData, ctx: SelectionContext) -> None:
         self._gd = game_data
         self._ctx = ctx
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

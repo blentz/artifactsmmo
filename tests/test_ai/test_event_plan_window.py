@@ -15,6 +15,7 @@ Two judgements this makes, both of which have a concrete witness in the bundle:
   not a scheduler.
 """
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -28,6 +29,7 @@ from artifactsmmo_cli.ai.event_plan_window import (
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -35,6 +37,10 @@ _EVENT = "fairy_ring"
 _EVENT_ONLY = "pixie_swarm"      # event tiles, NO static tile
 _BOTH = "desert_scorpion"        # event tiles AND a static tile
 _NOW = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
+_AT_NOW = replace(NO_PROFILE_CONTEXT, now=_NOW)
+"""The cycle clock at `_NOW` (ruling T8b): the arbiter judges a plan's event
+window at the context's instant, never at the wall clock, so these windows are
+stated against `_NOW` and are long shut by any wall clock the suite runs at."""
 
 
 def _gd() -> GameData:
@@ -179,12 +185,11 @@ def _driver_with_plan(plan, gd, state):
 def test_wiring_calls_the_gate_and_drops_an_unfinishable_event_plan():
     """The seam must DROP a plan whose event window cannot fit it."""
     gd = _gd()
-    now = datetime.now(timezone.utc)
     state = make_state(x=0, y=0, level=10, attack={"fire": 50},
-                       active_events={_EVENT: now + timedelta(seconds=30)})
+                       active_events={_EVENT: _NOW + timedelta(seconds=30)})
     plan = [_fight(_EVENT_ONLY)] * 12
     driver = _driver_with_plan(plan, gd, state)
-    out = driver._plans(_DummyGoal(), state, gd, [], None, budget_seconds=1.0)
+    out = driver._plans(_DummyGoal(), state, gd, [], _AT_NOW, budget_seconds=1.0)
     assert out == [], [repr(a) for a in out]
     assert driver.goals_tried[-1]["plan_len"] == 0
 
@@ -193,12 +198,11 @@ def test_wiring_passes_the_same_plan_through_an_ample_window():
     """Non-vacuity: identical plan, longer window -> NOT dropped. Without this
     the test above would pass even if the seam dropped every plan."""
     gd = _gd()
-    now = datetime.now(timezone.utc)
     state = make_state(x=0, y=0, level=10, attack={"fire": 50},
-                       active_events={_EVENT: now + timedelta(days=1)})
+                       active_events={_EVENT: _NOW + timedelta(days=1)})
     plan = [_fight(_EVENT_ONLY)] * 12
     driver = _driver_with_plan(plan, gd, state)
-    out = driver._plans(_DummyGoal(), state, gd, [], None, budget_seconds=1.0)
+    out = driver._plans(_DummyGoal(), state, gd, [], _AT_NOW, budget_seconds=1.0)
     assert len(out) == 12
     assert driver.goals_tried[-1]["plan_len"] == 12
 

@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
@@ -43,11 +44,14 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.progression.skill_grind_target import (
+    build_selectable_grind_candidates,
+    skill_grind_target,
+)
+from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
-from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
@@ -64,11 +68,21 @@ RUNG = "feather_coat"
 """The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
 (`{feather: 5, ash_plank: 2}`; feather off the chicken, ash_plank from
 ash_wood) — the shape that is 70.7 % of the catalogue and 87.2 % of live
-`UpgradeEquipment` cycles. It was `copper_legs_armor` from spec 2026-10-18
-§2.9 until plan B Task 12a, which prices a drop farm exactly and ranks a
-rung as its descent serves it (rulings T12j, T12k: produced, its closure
-with no GE fill), so the book cannot move the rung."""
+`UpgradeEquipment` cycles — and it carries a standing sell order in the busy
+book (248 gold). It was `copper_legs_armor` from spec 2026-10-18 §2.9 until
+plan B Task 12a, which prices a drop farm exactly and ranks a rung as its
+descent serves it (rulings T12j, T12k: produced, its closure with no GE fill),
+so the book cannot move the rung; then `feather_coat` (79 actions against the
+legs' 81). Plan C Task 7 (a derived character starts at the base sheet's
+initiative 100) made it the legs again (both chains priced 83, the legs listed
+first): the character moves first against `chicken`, a turn shorter a fight,
+so the Rest a win forces cost more of it in actions (`cycles_per_kill`).
 
+PRICING-UNIT DEPENDENCY (review I2), DISCHARGED by the merge of the
+ticket-farm fix: every route is priced in measured seconds, so a feather's
+fight and a gather's ore compare by the time they take, and the coat (36)
+beats the legs (58) again. The legs are worn in the cells' leg slot; the coat
+is not, so the plain descent below is asked of the rung itself."""
 LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
 item Robby stalled on live."""
@@ -169,6 +183,27 @@ def test_cell4_grind_crafts_the_rung_past_the_standing_order(busy: GameData) -> 
     assert SourceKind.GE_FILL in _kinds(RUNG, state, busy)
     plan = _grind(CELL4_BUSY_GRIND, busy)
     assert not [leg for leg in plan if "Ge" in leg], plan
+
+
+def test_the_book_prices_no_grind_rung(busy: GameData, quiet: GameData) -> None:
+    """The grind prices a rung as its descent serves it (rulings T12j, T12k),
+    and the descent fills no GE order, so the book moves no rung's price, a
+    walled one included. The combat-blocked l10 character's `fire_staff` takes
+    two red slimeballs off a fight it cannot win: priced through that fight in
+    either book, not through the busy book's slimeball order, which the
+    character's empty purse could not pay and which would hide the fight."""
+    name = "l10_gearcrafting_gap_combat_blocked"
+    assert busy.ge_best_sell_order("red_slimeball") is not None
+
+    def prices(game_data: GameData) -> dict[str, tuple[int, bool]]:
+        state = scenario_state(SCENARIOS[name], game_data)
+        return {c.code: (c.acquire_steps, c.obtainable) for c in build_selectable_grind_candidates(
+            "weaponcrafting", state, game_data, TIMED_NO_PROFILE_CONTEXT)}
+
+    in_busy = prices(busy)
+    assert in_busy == prices(quiet)
+    steps, obtainable = in_busy["fire_staff"]
+    assert not obtainable and steps < UNOBTAINABLE_PER_UNIT
 
 
 def test_the_busy_book_leafs_the_plain_descent_at_the_rung(

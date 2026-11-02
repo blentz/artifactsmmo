@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 # --- DiscardOverstockGoal -------------------------------------------------
 
@@ -189,7 +189,7 @@ class TestGatherMaterialsGaps:
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = GameData()
         gd._crafting_recipes = {}
-        goal = GatherMaterialsGoal("wooden_shield", {"ash_wood": 10})
+        goal = GatherMaterialsGoal("wooden_shield", {"ash_wood": 10}, now=cycle_now())
         state = make_state(inventory={})  # nothing gathered -> not satisfied
         base = goal._compute_base_value(state, gd)
         assert base > 0.0

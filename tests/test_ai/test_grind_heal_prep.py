@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.best_loadout import loadout_for
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -34,10 +34,11 @@ from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now
 
-CARRY = food_carry(1)
-"""The carry of a food the loadout eats one unit of per fight."""
+CARRY = 1 * CARRY_HORIZON_FIGHTS
+"""The carry of a food the loadout eats one unit of per fight, in a bag with
+room for it."""
 
 
 def _heal(state: WorldState, gd: GameData, ctx: SelectionContext,
@@ -107,7 +108,7 @@ class TestHealPrepGoal:
     def test_the_carry_scales_with_the_units_eaten_per_fight(self):
         gd = _gd()
         goal = _heal(_state(gd, {"milk": 3 * CARRY}), gd, _eats(("cheese", 3)), "wolf")
-        assert _needed(goal) == {"cheese": food_carry(3)}
+        assert _needed(goal) == {"cheese": 3 * CARRY_HORIZON_FIGHTS}
 
     def test_the_bag_counts_toward_the_carry(self):
         """Five in the bag: the goal still names the full carry (the bag's five
@@ -253,7 +254,7 @@ class TestHealPrepGoal:
 
 
 _FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
-_GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True)
+_GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True, now=cycle_now())
 _CHEESE = CraftAction(code="cheese", workshop_location=(4, 4))
 
 

@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd() -> GameData:
@@ -33,7 +33,8 @@ def _gd() -> GameData:
 
 def _build(gd: GameData) -> list:
     return build_actions(game_data=gd, state=make_state(), objective=None,
-                         bank_accessible=True, task_exchange_min_coins=6, learned_drops=LearnedDrops.empty())
+                         bank_accessible=True, task_exchange_min_coins=6, learned_drops=LearnedDrops.empty(),
+                         now=cycle_now())
 
 
 def test_layered_monster_gets_region_tagged_fight_and_loadout() -> None:

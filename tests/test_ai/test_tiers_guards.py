@@ -12,13 +12,7 @@ from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
-from artifactsmmo_cli.ai.strategy_driver import map_guard
-from artifactsmmo_cli.ai.thresholds import (
-    DEPOSIT_FULL_FRACTION,
-    POTION_GATHER_BATCH,
-    PRESSURE_HIGH_FRACTION,
-)
-from artifactsmmo_cli.ai.tiers.guards import (
+from artifactsmmo_cli.ai.progression.guards import (
     GUARD_ORDER,
     GuardKind,
     SelectionContext,
@@ -26,6 +20,12 @@ from artifactsmmo_cli.ai.tiers.guards import (
     _quantity_fraction,
     active_guards,
     used_fraction,
+)
+from artifactsmmo_cli.ai.strategy_driver import map_guard
+from artifactsmmo_cli.ai.thresholds import (
+    DEPOSIT_FULL_FRACTION,
+    POTION_GATHER_BATCH,
+    PRESSURE_HIGH_FRACTION,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -223,7 +223,7 @@ def test_fires_returns_false_for_unknown_guard_kind():
     state = make_state(hp=100, max_hp=100)
     ctx = _ctx()
     unknown = object()  # not a GuardKind member
-    with patch("artifactsmmo_cli.ai.tiers.guards.GUARD_ORDER", (unknown,)):  # type: ignore[arg-type]
+    with patch("artifactsmmo_cli.ai.progression.guards.GUARD_ORDER", (unknown,)):  # type: ignore[arg-type]
         result = _fires(unknown, state, GameData(), None, ctx)  # type: ignore[arg-type]
     assert result is False
 
@@ -383,9 +383,9 @@ def test_recycle_relief_quiet_when_the_keep_authority_licenses_nothing():
     """Bank full, 9 helmets held — but the active gear profile DEMANDS all 9
     (KeepReason.GEAR_DEMAND), so nothing is destroyable → quiet.
 
-    The protection is a QUANTITY, not a code-set: a `target_gear` membership no
-    longer shields the code (that blanket hid 18 copper_axe from every recycle
-    path). Raise the held count above the demand and the guard fires."""
+    The protection is a QUANTITY, not a code-set (the old `target_gear` blanket
+    hid 18 copper_axe from every recycle path). Without the demand the guard
+    fires."""
     gd = _recycle_gd()
     state = make_state(
         level=5, skills={"gearcrafting": 1},
@@ -395,10 +395,10 @@ def test_recycle_relief_quiet_when_the_keep_authority_licenses_nothing():
     )
     ctx = _ctx(bank_accessible=True, gear_keep={"copper_helmet": 9})
     assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
-    # A BiS pursuit target is not a hoard licence: the same 9 helmets with only
-    # the legacy code-set "protection" ARE recyclable surplus (keep 1).
-    bis = _ctx(bank_accessible=True, target_gear=frozenset({"copper_helmet"}))
-    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, bis) is True
+    # Without the profile's demand the same 9 helmets ARE recyclable surplus
+    # (keep 1).
+    bare = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, bare) is True
 
 
 def _sell_gd() -> GameData:
@@ -844,7 +844,7 @@ def test_deposit_full_never_fires_on_a_goal_that_reports_zero_value():
     proves `fires(DEPOSIT_FULL) => depositInventoryValue > 0`, and the ordering
     that makes it true (DEPOSIT_FULL_FRACTION 0.90 strictly above the goal's
     ramp start 0.85) is spelled out at `DISCARD_HIGH_FRACTION`'s comment in
-    tiers/guards.py. The model has ONE `usedFractionRat`; production had TWO —
+    progression/guards.py. The model has ONE `usedFractionRat`; production had TWO —
     the guard's `used_fraction` is max(QUANTITY, SLOT) while the goal read the
     quantity fraction alone with a binary `slots_free == 0 -> 1.0` override.
 

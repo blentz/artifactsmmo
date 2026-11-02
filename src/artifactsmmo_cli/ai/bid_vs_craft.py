@@ -22,15 +22,15 @@ closure walk this replaced could see.
 THE UNIT MATTERS MORE THAN THE NUMBER HERE. Mixing seconds into an action count
 is the confusion that has produced four separate bugs in this project
 (`mats_missing` as cost, `DEFAULT_FIGHT_CYCLES` as cycles, `cycles_to_fifty` as
-whole-loop cycles, `cheapest_path_to_level` in seconds), and it is why
+whole-loop cycles, the since-deleted `cheapest_path_to_level` in seconds), and it is why
 `stat_projection_completeness` records `haste` as a PERMANENT exclusion.
 """
 
 from artifactsmmo_cli.ai.decisions.route import route_price
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.selection_context import SelectionContext
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
