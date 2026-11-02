@@ -8720,8 +8720,8 @@ VENDOR_REACH_GATE_MUTATIONS = [
      "    doors = () if known else doors_to(npc, tiles, crossing, game_data)\n",
      "    doors = ()\n"),
     ("vendor reach: an event vendor stands on its catalogue spawn, not its read",
-     "    if read is not None:\n        return [(x, y) for x, y, _layer in read]\n",
-     "    if read is not None and False:\n        return [(x, y) for x, y, _layer in read]\n"),
+     "    if live:\n        return live\n",
+     "    if False:\n        return live\n"),
     ("vendor reach: a permanent vendor's own tile is not read",
      "        return [tile]\n",
      "        return []\n"),
@@ -8732,8 +8732,88 @@ VENDOR_REACH_GATE_MUTATIONS = [
      "        if (tile is None or npc in game_data.world.npc_layers\n",
      "        if (tile is None\n"),
     ("vendor reach: an event vendor with no read stands nowhere",
-     "    return [] if spawn is None else [spawn]\n",
+     "    return [] if tile is None else [tile]\n",
      "    return []\n"),
+    ("vendor reach: every vendor is reached for a selection site",
+     "    return vendor_gate(npc, game_data, reachable_regions_now(state, game_data), state).satisfied\n",
+     "    return True\n"),
+]
+# Task 8a I-3, M-3: an event NPC's actions read the tile its live event reads.
+# Killed by tests/test_ai/test_vendor_reach.py.
+VENDOR_REACH_LOCATION_MUTATIONS = [
+    ("location: a read of an ended event moves its NPC",
+     "        if event is None or event not in self.active_event_codes:\n",
+     "        if event is None:\n"),
+    ("location: an event NPC's actions walk to its catalogue spawn, not its read",
+     "        live = self.event_npc_tiles(npc_code)\n        if live:\n            return live[0]\n",
+     "        live = self.event_npc_tiles(npc_code)\n        if False:\n            return live[0]\n"),
+    ("location: an event NPC read on the island travels in the main overworld",
+     "            return self.region_of(live[0][0], live[0][1], \"overworld\")\n",
+     "            return \"overworld\"\n"),
+]
+# Task 8a I-1: a sale is priced at the route's own buyer.
+VENDOR_REACH_SOURCE_MUTATIONS = [
+    ("obtain_sources: a SELL source forgets its buyer",
+     "    return [Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)\n",
+     "    return [Source(route.kind, route.via, route.yield_per, route.capacity)\n"),
+]
+# Task 8a I-4: the selection and emission sites ask `vendor_reached`.
+VENDOR_REACH_CURRENCY_MUTATIONS = [
+    ("currency demand: an unreached vendor grants affordability",
+     "            and vendor_reached(npc, state, game_data)\n",
+     "            and True\n"),
+]
+VENDOR_REACH_GATHERING_MUTATIONS = [
+    ("gathering: an unreached vendor raises currency demand",
+     "                    and vendor_reached(npc, state, game_data)]\n",
+     "                    and True]\n"),
+    ("gathering: an unreached intermediate vendor is emitted",
+     "                        continue\n"
+     "                    if not vendor_reached(npc_code, state, game_data):\n"
+     "                        continue\n"
+     "                    batch",
+     "                        continue\n"
+     "                    if False:\n"
+     "                        continue\n"
+     "                    batch"),
+    ("gathering: an unreached buy-only vendor is emitted",
+     "                for npc_code, price, currency in game_data.npc_purchases(item):\n"
+     "                    if not vendor_reached(npc_code, state, game_data):\n",
+     "                for npc_code, price, currency in game_data.npc_purchases(item):\n"
+     "                    if False:\n"),
+    ("gathering: an unreached craft-vs-buy seller is offered",
+     "                       if vendor_reached(npc, state, game_data)]\n",
+     "                       if True]\n"),
+]
+VENDOR_REACH_SELL_GOAL_MUTATIONS = [
+    ("sell goal: the bank arm sells at an unreached buyer",
+     "            if loc is None or not vendor_reached(npc_code, landed, game_data):\n",
+     "            if loc is None:\n"),
+    ("sell goal: the bag arm sells at an unreached buyer",
+     "                if loc is None or not vendor_reached(npc_code, state, game_data):\n",
+     "                if loc is None:\n"),
+    ("sell goal: an unreached merchant's window earns the bonus",
+     "                if not vendor_reached(npc_code, state, game_data):\n"
+     "                    continue\n"
+     "                if event_npc_tradeable(",
+     "                if False:\n                    continue\n                if event_npc_tradeable("),
+]
+VENDOR_REACH_ACCUMULATION_MUTATIONS = [
+    ("sell rungs: an unreached buyer makes a held item tradeable now",
+     "                    or not vendor_reached(npc_code, state, game_data)):\n",
+     "                    or False):\n"),
+]
+VENDOR_REACH_SHED_MUTATIONS = [
+    ("shed: an unreached buyer is the sale venue",
+     "    buyers = [(npc, pay) for npc, pay in game_data.npcs_buying_item(code)\n"
+     "              if vendor_reached(npc, state, game_data)]\n",
+     "    buyers = [(npc, pay) for npc, pay in game_data.npcs_buying_item(code)\n              if True]\n"),
+]
+VENDOR_REACH_LIQUIDATION_MUTATIONS = [
+    ("liquidation: an unreached buyer's price is the NPC floor",
+     "    buyers = [(npc, price) for npc, price in game_data.npcs_buying_item(item)\n"
+     "              if vendor_reached(npc, state, game_data)]\n",
+     "    buyers = [(npc, price) for npc, price in game_data.npcs_buying_item(item)\n              if True]\n"),
 ]
 VENDOR_REACH_MODEL_MUTATIONS = [
     ("obtain_model: a buy asks no reach",
@@ -8746,12 +8826,12 @@ VENDOR_REACH_MODEL_MUTATIONS = [
      "                    Gate(GateKind.VENDOR_TRADEABLE, npc, self._tradeable(npc)),\n"),
 ]
 VENDOR_REACH_PRICE_MUTATIONS = [
-    ("sale_of: a buyer no door opens is a venue",
-     "        if not (gate.satisfied or gate.doors):\n            continue\n",
-     "        if False:\n            continue\n"),
-    ("sale_of: a buyer past a door is no venue",
-     "        if not (gate.satisfied or gate.doors):\n            continue\n",
-     "        if not gate.satisfied:\n            continue\n"),
+    ("sale: priced at the best buyer, not the route's own",
+     "        npc_code = source.agent\n",
+     "        npc_code = game_data.npcs_buying_item(source.code)[0][0]\n"),
+    ("sale: a door route forgets its buyer",
+     "        source = Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)\n",
+     "        source = Source(route.kind, route.via, route.yield_per, route.capacity)\n"),
     ("reentry: a buy adds nothing to the bag",
      "        units = route.yield_per if route.kind is SourceKind.BUY else 0\n",
      "        units = 0\n"),
@@ -14505,6 +14585,22 @@ def _collect_all_groups() -> None:
     run_group(ACQUISITION_COST_SRC, VENDOR_REACH_PRICE_MUTATIONS,
               "tests/test_ai/test_vendor_reach.py", survivors)
     run_group(CRAFT_COMPLETENESS_SRC, VENDOR_REACH_CENSUS_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(LOCATION_CATALOG_SRC, VENDOR_REACH_LOCATION_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(OBTAIN_SOURCES_SRC, VENDOR_REACH_SOURCE_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(CURRENCY_DEMAND_SRC, VENDOR_REACH_CURRENCY_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(GATHERING_GOAL_SRC, VENDOR_REACH_GATHERING_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, VENDOR_REACH_SELL_GOAL_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(ACCUMULATION_SELL_SRC, VENDOR_REACH_ACCUMULATION_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(SHED_ACTIONS_SRC, VENDOR_REACH_SHED_MUTATIONS,
+              "tests/test_ai/test_vendor_reach.py", survivors)
+    run_group(LIQUIDATION_VENUE_SRC, VENDOR_REACH_LIQUIDATION_MUTATIONS,
               "tests/test_ai/test_vendor_reach.py", survivors)
     run_group(TRANSITION_SRC, KEY_DOOR_SHORTFALL_MUTATIONS,
               "tests/test_ai/test_key_door_route.py", survivors)

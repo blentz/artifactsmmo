@@ -15,6 +15,7 @@ differential target proved in formal/Formal/LiquidationVenue.lean over `Int` wit
 from enum import Enum
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -72,9 +73,11 @@ def liquidation_venue(item: str, qty: int, state: WorldState, game_data: GameDat
     is the price of the highest standing GE buy order IF it can absorb the whole
     `qty` in one fill (quantity >= qty), else None — the anti-surrogate guard, so a
     partially-fillable order never masquerades as a single-fill venue for `qty`.
-    State is accepted for signature symmetry with the other adapters; the decision
-    needs only API-sourced prices."""
-    buyers = game_data.npcs_buying_item(item)
+    An NPC counts only when the walk reaches it from `state` now
+    (`vendor_reached`, Task 8a I-4); the rest of the decision needs only
+    API-sourced prices."""
+    buyers = [(npc, price) for npc, price in game_data.npcs_buying_item(item)
+              if vendor_reached(npc, state, game_data)]
     npc_pay = max((price for _npc, price in buyers), default=0)
     order = game_data.ge_best_buy_order(item)
     ge_proceeds: int | None = None

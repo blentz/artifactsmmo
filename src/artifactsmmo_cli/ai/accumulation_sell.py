@@ -58,6 +58,7 @@ from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -212,7 +213,8 @@ def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
         if quantity <= 0 or not _is_sellable(code, game_data):
             continue
         for npc_code, _price in game_data.npcs_buying_item(code):
-            if game_data.npc_location(npc_code) is None:
+            if (game_data.npc_location(npc_code) is None
+                    or not vendor_reached(npc_code, state, game_data)):
                 continue
             if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
                                    active_events=state.active_events, now=now):

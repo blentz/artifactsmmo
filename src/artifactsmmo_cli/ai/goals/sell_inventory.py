@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -162,7 +163,7 @@ class SellInventoryGoal(Goal):
         this cycle, and the arm declines to withdraw them at all."""
         for npc_code, _price in game_data.npcs_buying_item(code):
             loc = game_data.npc_location(npc_code)
-            if loc is None:
+            if loc is None or not vendor_reached(npc_code, landed, game_data):
                 continue
             sale = NpcSellAction(npc_code=npc_code, item_code=code,
                                  quantity=quantity, npc_location=loc,
@@ -187,7 +188,7 @@ class SellInventoryGoal(Goal):
                                            relief=self._relief).items():
             for npc_code, _price in game_data.npcs_buying_item(code):
                 loc = game_data.npc_location(npc_code)
-                if loc is None:
+                if loc is None or not vendor_reached(npc_code, state, game_data):
                     continue
                 act = NpcSellAction(npc_code=npc_code, item_code=code,
                                     quantity=quantity, npc_location=loc,
@@ -205,6 +206,8 @@ class SellInventoryGoal(Goal):
                 continue
             for npc_code, _price in game_data.npcs_buying_item(item_code):
                 if not game_data.is_event_npc(npc_code):
+                    continue
+                if not vendor_reached(npc_code, state, game_data):
                     continue
                 if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
                                        active_events=state.active_events, now=now):

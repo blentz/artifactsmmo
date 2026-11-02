@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed, serves_a_demand
 from artifactsmmo_cli.ai.intermediate_batch import size_closure_gather, size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.open_order import OrderSide
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
@@ -218,8 +219,11 @@ class GatherMaterialsGoal(Goal):
         for code, qty in list(self._needed.items()):
             if game_data.crafting_recipe(code) is not None:
                 continue
+            # A vendor the walk reaches now only (`vendor_reached`, Task 8a I-4):
+            # an island vendor past an unpaid boat raises no coin demand.
             perm = [(price, cur) for npc, price, cur in game_data.npc_purchases(code)
-                    if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]
+                    if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+                    and vendor_reached(npc, state, game_data)]
             if not perm or any(cur == "gold" for _price, cur in perm):
                 continue
             unit_price, currency = min(perm, key=lambda pc: pc[0])
@@ -535,6 +539,8 @@ class GatherMaterialsGoal(Goal):
                 for npc_code, price, currency in game_data.npc_purchases(item):
                     if game_data.is_event_npc(npc_code) or game_data.npc_location(npc_code) is None:
                         continue
+                    if not vendor_reached(npc_code, state, game_data):
+                        continue
                     batch = _buy_batch(qty, price, currency, state)
                     if batch <= 0:
                         continue
@@ -566,6 +572,8 @@ class GatherMaterialsGoal(Goal):
                 # vs sandwhisper_coin etc.). NOT npcs_selling_item: that is gold-only
                 # (#15) and would drop the special-currency vendors this path needs.
                 for npc_code, price, currency in game_data.npc_purchases(item):
+                    if not vendor_reached(npc_code, state, game_data):
+                        continue
                     batch = _buy_batch(qty, price, currency, state)
                     if batch <= 0:
                         continue
@@ -579,7 +587,8 @@ class GatherMaterialsGoal(Goal):
             # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
             # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
             # gold-reserve comparison in acquisition_method is sound (#15).
-            sellers = game_data.npcs_selling_item(item)
+            sellers = [(npc, price) for npc, price in game_data.npcs_selling_item(item)
+                       if vendor_reached(npc, state, game_data)]
             if not sellers:
                 continue
             if acquisition_method(item, qty, state, game_data,

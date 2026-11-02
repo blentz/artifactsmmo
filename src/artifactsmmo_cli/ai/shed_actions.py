@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.ge_order_config import GE_FILL_MAX_QUANTITY
 from artifactsmmo_cli.ai.ge_post_pricing import sell_post_price
 from artifactsmmo_cli.ai.liquidation_venue import Venue, choose_venue3, liquidation_venue
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -27,7 +28,9 @@ def shed_actions(code: str, excess_qty: int, state: WorldState, game_data: GameD
     fill or post when the book beats it, and with no executable sale the
     proved `disposal_route`: recycle > deposit > delete."""
     result: list[Action] = []
-    buyers = game_data.npcs_buying_item(code)
+    # Only a buyer the walk reaches now (`vendor_reached`, Task 8a I-4).
+    buyers = [(npc, pay) for npc, pay in game_data.npcs_buying_item(code)
+              if vendor_reached(npc, state, game_data)]
     npc_loc: tuple[int, int] | None = None
     npc_code: str | None = None
     npc_pay = 0

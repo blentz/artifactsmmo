@@ -1096,8 +1096,13 @@ class GameData:
         return self.recipes_catalog.active_gathering_skills(task_code, crafting_target)
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
-        """Location of a named NPC: static map scan first, then event spawn tile."""
+        """Location of a named NPC: its live event's read tile, then the static
+        map scan, then the event spawn tile (`LocationCatalog.npc_location`)."""
         return self.world.npc_location(npc_code)
+
+    def event_npc_tiles(self, npc_code: str) -> list[tuple[int, int]]:
+        """The tiles an event NPC's live event reads (`LocationCatalog.event_npc_tiles`)."""
+        return self.world.event_npc_tiles(npc_code)
 
     def is_event_npc(self, npc_code: str) -> bool:
         """True if this NPC only exists during a timed event window."""

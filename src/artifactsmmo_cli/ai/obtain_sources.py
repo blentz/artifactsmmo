@@ -60,16 +60,19 @@ class Source:
             count). GATHER/BUY/DROP/CRAFT are never stock-limited by this
             model (you can always gather/buy/craft/fight again), so they
             carry the `UNBOUNDED_CAPACITY` sentinel.
+        agent: The buyer NPC of a SELL source (`Route.agent`), the sale the
+            route serves and is priced at (Task 8a I-1); empty otherwise.
     """
 
     kind: SourceKind
     code: str
     yield_per: int
     capacity: int
+    agent: str = ""
 
 
 def _sources(model: ObtainModel, item: str, policy: Policy = LEGACY) -> list[Source]:
-    return [Source(route.kind, route.via, route.yield_per, route.capacity)
+    return [Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)
             for route in model.ready(item, policy)]
 
 

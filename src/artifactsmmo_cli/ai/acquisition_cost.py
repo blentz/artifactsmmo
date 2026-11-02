@@ -24,7 +24,6 @@ the divergence the epic exists to remove.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
 from fractions import Fraction
 from math import ceil
 
@@ -40,7 +39,6 @@ from artifactsmmo_cli.ai.attempt_prospecting import fight_prospecting, gather_pr
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.combat_deficit import combat_deficit
 from artifactsmmo_cli.ai.drop_leg import DropLeg
-from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
@@ -56,20 +54,13 @@ from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import Route
-from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_gate
 from artifactsmmo_cli.ai.obtain_sources import (
     UNBOUNDED_CAPACITY,
     Source,
     SourceKind,
     obtain_sources,
 )
-from artifactsmmo_cli.ai.region_edges import (
-    door_legs,
-    door_toll,
-    leg_states,
-    leg_tolls,
-    reachable_regions_now,
-)
+from artifactsmmo_cli.ai.region_edges import door_legs, door_toll, leg_states, leg_tolls
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_credit import credit_demanded_skills
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
@@ -224,7 +215,10 @@ def _priced(item: str, source: Source, state: WorldState,
                                item, source.code, state, game_data, ctx.drops()),
                            yield_per=1, capacity=source.capacity)
     if source.kind is SourceKind.SELL:
-        npc_code, price = _sale_of(source.code, state, game_data, ctx.now)
+        # The route's own buyer (`Source.agent`, Task 8a I-1): the sale the
+        # walk serves, reached or past the door its unlock pays.
+        npc_code = source.agent
+        price = sale_price_of(source.code, npc_code, game_data)
         # One sale: one action, at the buyer's tile, yielding `price` gold and
         # consuming one copy of the item sold. `inputs` is what makes the walk
         # charge that copy — a sale is not free gold, it is gold at the cost of
@@ -314,32 +308,19 @@ def npc_price_of(item: str, npc_code: str, game_data: GameData) -> tuple[int, st
     raise KeyError(f"no {npc_code} purchase row for {item}")
 
 
-def _sale_of(item: str, state: WorldState,
-             game_data: GameData, now: datetime) -> tuple[str, int]:
-    """`(npc, price)` for the best tradeable buyer of `item`.
+def sale_price_of(item: str, npc_code: str, game_data: GameData) -> int:
+    """The gold this NPC pays for one `item`: the `npcs_buying_item` row the
+    SELL route (`ObtainModel._sell`) was built from for that buyer (its
+    `agent`).
 
-    Same contract as `npc_price_of`, and the gates must be the SAME ones
-    `ObtainModel._sell` applied — price, known location, the buyer's reach
-    (`vendor_reach.vendor_gate`: reached now, or past a door the route's
-    unlock pays, Task 8a) and `event_npc_tradeable` — or the two would pick
-    different buyers for one
-    source and the venue would name an NPC the model never admitted. That is why
-    `state` is threaded here rather than the item alone.
-
-    A missing row would mean the two calls disagreed about game data inside a
-    single decision, which cannot happen, so this raises rather than defaulting,
-    per the API-data rule. `now` is the cycle clock (`SelectionContext.now`)."""
-    reach = reachable_regions_now(state, game_data)
-    for npc_code, price in game_data.npcs_buying_item(item):
-        if price <= 0 or game_data.npc_location(npc_code) is None:
-            continue
-        gate = vendor_gate(npc_code, game_data, reach, state)
-        if not (gate.satisfied or gate.doors):
-            continue
-        if event_npc_tradeable(npc_code, game_data, x=state.x, y=state.y,
-                               active_events=state.active_events, now=now):
-            return npc_code, price
-    raise KeyError(f"no tradeable buyer for {item}")
+    Same contract as `npc_price_of`. The route names its own buyer, so the
+    price is that buyer's, never a re-pick: the best buyer could stand past a
+    door the route does not cross, or be the one a door route is priced for
+    (Task 8a I-1). A missing row raises, per the API-data rule."""
+    for code, price in game_data.npcs_buying_item(item):
+        if code == npc_code:
+            return price
+    raise KeyError(f"no {npc_code} buyer row for {item}")
 
 
 def _drop_table(item: str, monster_code: str,
@@ -901,7 +882,7 @@ def _door_options(item: str, state: WorldState, game_data: GameData,
                 default=None)
     out: list[RouteOption] = []
     for route, unmet in model.past_a_door(item, _climbing(policy), _DOOR_COMPANIONS):
-        source = Source(route.kind, route.via, route.yield_per, route.capacity)
+        source = Source(route.kind, route.via, route.yield_per, route.capacity, route.agent)
         option = None if floor is None else _priced(item, source, state, game_data, ctx)
         if option is not None and floor is not None and floor <= _per_unit(option):
             continue

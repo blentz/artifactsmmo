@@ -13,7 +13,7 @@ priced and walked through that door (`acquisition_cost._door_options`,
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.obtain_model.gate import Gate, GateKind
-from artifactsmmo_cli.ai.region_edges import content_reached, doors_to
+from artifactsmmo_cli.ai.region_edges import content_reached, doors_to, reachable_regions_now
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -22,25 +22,32 @@ def vendor_tiles(npc: str, game_data: GameData) -> list[tuple[int, int]]:
     them (`GameData.all_monster_locations`); `content_reached` adds its map
     content on every layer (`GameData.layered_locations`) itself.
 
-    A permanent NPC: its static tile (`GameData.npc_location`) when that is an overworld
-    tile no live event takes (the event-tile takeover: the event replaces the
-    tile's content while it lasts); an off-overworld NPC's tile is its layered
-    content alone. An event NPC: its event's read maps while the event is live
-    (the event stands on ONE of its maps), else its catalogue spawn
-    (`GameData.npc_location`, the tile its actions walk to). The read's layer
-    is dropped, as `LocationCatalog._live_tiles` drops it for event monsters."""
-    event = game_data.npc_event_code(npc)
-    if event is None:
-        tile = game_data.npc_location(npc)
+    A permanent NPC: its static tile (`GameData.npc_location`) when that is an
+    overworld tile no live event takes (the event-tile takeover: the event
+    replaces the tile's content while it lasts); an off-overworld NPC's tile is
+    its layered content alone. An event NPC: the tiles its live event reads
+    (`GameData.event_npc_tiles`, guarded on the event being live), else its
+    location (`GameData.npc_location`, its catalogue spawn). Its buy and sell
+    actions walk to `npc_location`, which is the first of these tiles: the
+    pricer and the executor read one tile (Task 8a I-3)."""
+    tile = game_data.npc_location(npc)
+    if game_data.npc_event_code(npc) is None:
         if (tile is None or npc in game_data.world.npc_layers
                 or (*tile, "overworld") in game_data.world.taken_tiles()):
             return []
         return [tile]
-    read = game_data.active_event_maps.get(event)
-    if read is not None:
-        return [(x, y) for x, y, _layer in read]
-    spawn = game_data.npc_location(npc)
-    return [] if spawn is None else [spawn]
+    live = game_data.event_npc_tiles(npc)
+    if live:
+        return live
+    return [] if tile is None else [tile]
+
+
+def vendor_reached(npc: str, state: WorldState, game_data: GameData) -> bool:
+    """`vendor_gate`'s verdict asked of `state`: the walk reaches `npc` from
+    here now. The selection and emission sites (a goal's NpcBuy or NpcSell,
+    a sale venue, a currency vendor) ask it, so no vendor is offered that the
+    gate refuses (Task 8a I-4)."""
+    return vendor_gate(npc, game_data, reachable_regions_now(state, game_data), state).satisfied
 
 
 def vendor_gate(npc: str, game_data: GameData, reach: frozenset[str],

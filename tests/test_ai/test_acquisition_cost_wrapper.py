@@ -30,7 +30,6 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     _drop_table,
     _kill_actions,
     _priced,
-    _sale_of,
     _workshop_venue,
     acquisition_actions,
     acquisition_options,
@@ -41,6 +40,7 @@ from artifactsmmo_cli.ai.acquisition_cost import (
     leg_prospecting,
     npc_price_of,
     route_options,
+    sale_price_of,
 )
 from artifactsmmo_cli.ai.acquisition_cost_core import (
     UNOBTAINABLE_PER_UNIT,
@@ -589,26 +589,24 @@ def test_price_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
         npc_price_of("backpack", "a_vendor_that_does_not_exist", game_data)
 
 
-def test_sale_of_refuses_to_invent_a_missing_row(state, game_data) -> None:
-    """Same contract as `npc_price_of`, for the sell side: `_sell_sources` built the
-    SELL source from this table under these gates, so no row means the two reads
-    disagreed inside one decision."""
+def test_sale_price_refuses_to_invent_a_missing_row(state, game_data) -> None:
+    """Same contract as `npc_price_of`, for the sell side: `ObtainModel._sell`
+    built the SELL source from this table for its buyer, so no row means the two
+    reads disagreed inside one decision."""
     with pytest.raises(KeyError):
-        _sale_of("an_item_nobody_buys", state, game_data, datetime.now(timezone.utc))
+        sale_price_of("an_item_nobody_buys", "gemstone_merchant", game_data)
+    assert sale_price_of("diamond", "gemstone_merchant", game_data) == 5_000
 
 
 def test_a_buyer_with_no_known_location_is_skipped(state, game_data,
                                                    monkeypatch) -> None:
     """A price row is not a buyer. A dormant merchant with no location is
-    skipped by BOTH reads, so the source arm and the venue lookup stay in step
-    on which buyer they mean."""
+    no SELL source, so no venue is ever priced for it."""
     real = game_data.npc_location
     monkeypatch.setattr(game_data, "npc_location",
                         lambda npc: None if npc == "gemstone_merchant" else real(npc))
     held = _selling(state, game_data, diamond=2)
     assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
-    with pytest.raises(KeyError):
-        _sale_of("diamond", held, game_data, datetime.now(timezone.utc))
 
 
 def test_a_buyer_offering_nothing_is_skipped(state, game_data,
@@ -620,8 +618,6 @@ def test_a_buyer_offering_nothing_is_skipped(state, game_data,
                         if code == "diamond" else [])
     held = _selling(state, game_data, diamond=2)
     assert obtain_sources("gold", held, game_data, TIMED_NO_PROFILE_CONTEXT) == []
-    with pytest.raises(KeyError):
-        _sale_of("diamond", held, game_data, datetime.now(timezone.utc))
 
 
 def test_drop_table_refuses_to_invent_a_missing_row(state, game_data) -> None:

@@ -143,6 +143,7 @@ from typing import NamedTuple
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_reached
 from artifactsmmo_cli.ai.progression.objective import GOLD
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor_multi
 from artifactsmmo_cli.ai.requirement_projections import demand_set
@@ -240,12 +241,14 @@ def _classify_leaves(
         purchases = game_data.npc_purchases(leaf)
         if not purchases:
             continue
-        # PERMANENT, located vendors only — matching relevant_actions' guard, so
-        # the affordability view and the emitted action set use the same vendors.
+        # PERMANENT, located vendors the walk reaches now (`vendor_reached`,
+        # Task 8a I-4) only — matching relevant_actions' guard, so the
+        # affordability view and the emitted action set use the same vendors.
         permanent = [
             (npc, price, currency)
             for npc, price, currency in purchases
             if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+            and vendor_reached(npc, state, game_data)
         ]
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
         # Item-currency affordability is independent per leaf (unchanged from

@@ -94,6 +94,9 @@ def _gd(*, sell_prices=None, ge_orders=None) -> GameData:
     gd = GameData()
     if sell_prices:
         gd._npc_sell_prices = sell_prices
+        # A buyer counts only where the walk reaches it (`vendor_reached`,
+        # Task 8a I-4): each stands on the overworld tile the state does.
+        gd._npc_locations = dict.fromkeys(sell_prices, (0, 0))
     if ge_orders:
         gd._ge_buy_orders = ge_orders
     return gd
