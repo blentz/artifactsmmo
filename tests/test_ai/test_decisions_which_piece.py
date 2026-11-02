@@ -10,6 +10,7 @@ piece is held the root is one more character level. No objective is the wall.
 
 from collections import Counter
 from dataclasses import replace
+from datetime import UTC, datetime
 from fractions import Fraction
 
 import pytest
@@ -40,14 +41,14 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
     ReachFleetOutcome,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTarget
 from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state, season_8_status
+from tests.test_ai.fixtures import cycle_now, make_state, season_8_status
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_decisions_root import _gd
 from tests.test_ai.test_gear_objective import BUNDLE, COPPER, CTX, _novice, _robby
@@ -86,6 +87,24 @@ def test_the_first_missing_piece_is_the_root() -> None:
     assert resolution.blocked_target == "iron_shield"
     assert resolution.alternatives[:2] == (
         ObtainItem("ash_club", 1, slot="weapon_slot"), ObtainItem("leather", 2))
+
+
+def test_the_pieces_are_classified_on_the_contexts_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruling T8b: the walk's entry and the alternatives `resolve_root` offers
+    classify each crafted piece at the cycle's instant (`ctx.now`), never at the
+    wall clock."""
+    instant = datetime(2026, 1, 1, 12, tzinfo=UTC)
+    seen: list[datetime] = []
+    real = CharacterObjective.classify_target
+
+    def spy(self: CharacterObjective, code: str, state: WorldState, now: datetime) -> GearTarget:
+        seen.append(now)
+        return real(self, code, state, now)
+
+    monkeypatch.setattr(CharacterObjective, "classify_target", spy)
+    _resolve(make_state(level=15), _gd(), _missing(SHIELD, CLUB, LEGS),
+             ctx=replace(_ctx(), now=instant))
+    assert len(seen) >= 4 and set(seen) == {instant}
 
 
 def test_a_zero_gain_piece_keeps_its_place() -> None:
@@ -247,7 +266,7 @@ def test_a_level_up_retargets_without_an_xp_fight(bundle: GameData) -> None:
     first = after.missing[0]
     assert (stats := bundle.item_stats(first.code)) is not None and stats.level == 15
     resolution = _resolve(levelled, bundle, after, ctx=CTX)
-    gear = CharacterObjective.from_game_data(bundle).classify_target(first.code, levelled)
+    gear = CharacterObjective.from_game_data(bundle).classify_target(first.code, levelled, now=cycle_now())
     assert resolution.root == IsThisTargetBlocked(first.slot, gear, RootWalk()).resolve(
         levelled, bundle, CTX, None)
     assert not any(isinstance(alt, ReachCharLevel) for alt in resolution.alternatives)

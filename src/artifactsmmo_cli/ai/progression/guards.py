@@ -257,7 +257,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
     if kind is GuardKind.SELL_RELIEF:
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
-                and sellable_tradeable_now(state, game_data))
+                and sellable_tradeable_now(state, game_data, ctx.now))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible
                 and bank_has_room(ctx.bank_accessible, state.bank_items,
@@ -277,7 +277,8 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
     if kind is GuardKind.CRAFT_POTIONS:
         # Only the chosen loadout's potions, for the fight ahead
         # (docs/PLAN_consumable_utility.md increment 5).
-        return craft_potions_fires(state, game_data, guard_loadout(ctx.loadout, ctx.fight_monster))
+        return craft_potions_fires(state, game_data, guard_loadout(ctx.loadout, ctx.fight_monster),
+                                   ctx.now)
     if kind is GuardKind.PARTY_JOIN:
         # A live lease names this character as a member (`ctx.party_hold`,
         # read once per cycle from the coordination store).

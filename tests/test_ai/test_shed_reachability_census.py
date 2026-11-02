@@ -46,6 +46,7 @@ from artifactsmmo_cli.audit.shed_reachability_completeness import (
     summary_line,
     within_bag_bound,
 )
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -292,7 +293,7 @@ def _stub_withdraw(quantity: int = 1) -> WithdrawItemAction:
 
 def _stub_sale(quantity: int = 1) -> NpcSellAction:
     return NpcSellAction(npc_code="timber_merchant", item_code=SELL_CODE,
-                         quantity=quantity, npc_location=(2, 4))
+                         quantity=quantity, npc_location=(2, 4), now=cycle_now())
 
 
 class _FakeGoal:

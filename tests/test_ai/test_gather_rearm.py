@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, decompose
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 from tests.test_ai.test_craft_plan_gen import _ctx
 
 
@@ -56,7 +56,7 @@ def _actions() -> list:
 
 def test_relevant_actions_include_needed_skill_optimizer() -> None:
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 6})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 6}, now=cycle_now())
     state = make_state(inventory={"copper_pickaxe": 1},
                        equipment={"weapon_slot": "copper_dagger"})
     result = goal.relevant_actions(_actions(), state, gd)
@@ -69,7 +69,7 @@ def test_planner_equips_tool_before_gathering() -> None:
     re-arms once (removing GATHER_LOADOUT_PENALTY from every gather) and then
     gathers — the exact sequence the live bot never produced pre-fix."""
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 3})
+    goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 3}, now=cycle_now())
     state = make_state(x=2, y=0, inventory={"copper_pickaxe": 1},
                        equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12})
@@ -91,7 +91,7 @@ def test_generator_plan_prepends_rearm_when_tool_in_bag() -> None:
         crafting_skill="mining", crafting_level=1)
     gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
     gd._workshop_locations = {"mining": (5, 0)}
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
     state = make_state(x=2, y=0, inventory={"copper_pickaxe": 1},
                        equipment={"weapon_slot": "copper_dagger"},
                        skills={"mining": 12})
@@ -120,7 +120,7 @@ def test_generator_rearms_AFTER_a_recycle_leg() -> None:
                             "copper_helmet": {"copper_bar": 6}}
     gd._workshop_locations = {"mining": (5, 0), "gearcrafting": (6, 0)}
     gd.recycle_totals = {"copper_helmet": 2}  # learned live, 14 recycles
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 4})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 4}, now=cycle_now())
     state = make_state(x=2, y=0,
                        inventory={"copper_pickaxe": 1, "copper_helmet": 2},
                        equipment={"weapon_slot": "copper_dagger"},
@@ -153,7 +153,7 @@ def test_generator_plan_unchanged_when_loadout_already_optimal() -> None:
         crafting_skill="mining", crafting_level=1)
     gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
     gd._workshop_locations = {"mining": (5, 0)}
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
     state = make_state(x=2, y=0, equipment={"weapon_slot": "copper_pickaxe"},
                        skills={"mining": 12})
     plan = decompose(goal, state, gd, _actions(), _ctx())

@@ -32,7 +32,7 @@ from artifactsmmo_cli.ai.progression.objective import CharacterObjective, GearTa
 from artifactsmmo_cli.ai.scenario import SCENARIOS, derived_scenario_state, scenario_state
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data
 from tests.test_ai.test_strategy_driver import _ctx
 
 # The five gear candidates below are chosen so that ONE slot lands in each of
@@ -374,7 +374,7 @@ def test_an_orphan_skill_with_no_open_rung_gets_no_root():
     walled = make_state(level=30, skills={"woodcutting": 50, "mining": 16})
     gold = [ObtainItem(code="gold_ore", quantity=1)]
     assert _gather_demand.gather_demand(gold, walled, gd, TIMED_NO_PROFILE_CONTEXT) == {"mining": 20}
-    assert not skill_is_grindable("mining", 17, walled, gd)
+    assert not skill_is_grindable("mining", 17, walled, gd, now=cycle_now())
     assert _orphan_skill_roots(walled, gd, gold, TIMED_NO_PROFILE_CONTEXT) == ()
 
 

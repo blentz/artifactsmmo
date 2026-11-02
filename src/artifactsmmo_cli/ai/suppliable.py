@@ -8,7 +8,7 @@ was an import cycle.
 """
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
+def is_suppliable(code: str, state: WorldState, game_data: GameData, now: datetime) -> bool:
     """Can this character EVER come to hold `code`? Two kinds of item, and the
     difference between them is the whole point.
 
@@ -68,10 +68,10 @@ def is_suppliable(code: str, state: WorldState, game_data: GameData) -> bool:
     state-free `RequirementGraph` plus `is_task_earnable` until step 4 of
     docs/PLAN_decision_architecture_redesign.md.)"""
     # A store-less feasibility walk: every drop at its API prior, passed
-    # explicitly (ruling T16b).
+    # explicitly (ruling T16b), on the caller's cycle clock (ruling T8b).
     model = ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
     if model.mints(code):
         return True
     bank = state.bank_items or {}

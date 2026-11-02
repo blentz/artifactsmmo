@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 SKILL = "alchemy"
@@ -110,7 +110,7 @@ def test_the_alchemy_rung_is_open_and_is_a_potion(
     assert stats is not None
     assert (stats.crafting_skill, stats.type_) == (SKILL, "utility")
     assert stats.crafting_level <= state.skills[SKILL]
-    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data)
+    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data, now=cycle_now())
 
 
 def test_the_alchemy_root_plans_a_grind_cycle(

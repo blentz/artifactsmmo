@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def test_satisfied_when_currency_at_target():
@@ -261,7 +261,8 @@ def test_a_funding_step_rests_a_worn_character() -> None:
     state = dataclasses.replace(_census_state(gd), hp=1)
     goal = funding_step_goal(TASKS_COIN_CODE, 24, state, gd)
     actions = build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                            bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                            now=cycle_now())
     plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(actions, state, gd), gd,
                               budget_seconds=30)
     assert plan and "Rest" in [repr(a) for a in plan]

@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.goals.sell_inventory import (
 )
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 CTX = NO_PROFILE_CONTEXT
 
@@ -113,9 +113,9 @@ class TestSellInventoryGoal:
             RestAction(),
             FightAction(monster_code="goblin", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty()),
             NpcSellAction(npc_code="vendor", item_code="wooden_shield", quantity=1,
-                          npc_location=(1, 1)),
+                          npc_location=(1, 1), now=cycle_now()),
             NpcSellAction(npc_code="vendor", item_code="not_in_inventory", quantity=1,
-                          npc_location=(1, 1)),
+                          npc_location=(1, 1), now=cycle_now()),
         ]
         relevant = goal.relevant_actions(actions, state, gd)
         assert [repr(a) for a in relevant] == ["NpcSell(wooden_shield×13@vendor)"]

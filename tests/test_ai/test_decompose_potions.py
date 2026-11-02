@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now
 from tests.test_ai.test_craft_potions_plannability import (
     _HEAL,
     _INGREDIENT,
@@ -54,7 +54,7 @@ def _drive(goal, state, gd, actions, cycles: int = 20):
 def test_held_ingredients_craft_then_equip_and_satisfy_the_goal():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert not goal.is_satisfied(state), "fixture must start with a real deficit"
 
     _final, ran = _drive(goal, state, gd, _actions(gd))
@@ -68,7 +68,7 @@ def test_held_ingredients_craft_the_whole_batch_in_one_action():
     (one request), and the equip then lands the batch."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     equip = goal.batch_equip(state)
     assert equip is not None
     plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
@@ -83,7 +83,7 @@ def test_a_prefix_plan_ends_before_the_equip():
     of naming an equip it cannot reach."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     actions = [a for a in _actions(gd) if not isinstance(a, CraftAction)]
     plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
     assert plan is not None
@@ -93,7 +93,7 @@ def test_a_prefix_plan_ends_before_the_equip():
 def test_potions_already_in_the_bag_are_just_equipped():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     equip = goal.batch_equip(state)
     assert equip is not None
     stocked = replace(state, inventory={**state.inventory, _HEAL: equip.quantity})
@@ -107,7 +107,7 @@ def test_potions_already_in_the_bag_are_just_equipped():
 def test_missing_ingredients_are_gathered_first():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
 
     plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
 
@@ -120,7 +120,7 @@ def test_missing_ingredients_are_gathered_first():
 def test_a_landed_batch_is_not_decomposed():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     done, _ran = _drive(goal, state, gd, _actions(gd))
 
     assert goal.batch_equip(done) is None
@@ -130,7 +130,7 @@ def test_a_landed_batch_is_not_decomposed():
 
 def test_an_unseeded_goal_is_left_to_the_search():
     gd = _gd(with_boost=False, monster_level=18)
-    assert decompose(CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd), _state(), gd, _actions(gd),
+    assert decompose(CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, now=cycle_now()), _state(), gd, _actions(gd),
                      NO_DROPS_CONTEXT) is None
 
 
@@ -146,7 +146,7 @@ def test_a_batch_that_would_fight_is_left_to_the_search(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
                         lambda *_a: (_HEAL, 2, 2))
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     actions = [a for a in _actions(gd) if not isinstance(a, GatherAction)]
     actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty()))
@@ -161,7 +161,7 @@ def test_a_batch_that_would_fight_is_left_to_the_search(monkeypatch):
 def test_the_gather_the_plan_opens_with_is_the_ingredients():
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     plan = decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT)
     assert plan is not None
     assert plan[0].resource_code == _RESOURCE
@@ -171,7 +171,7 @@ def test_decline_reasons_are_named(monkeypatch):
     """Phase 2c-2.0: each potion decline names why."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
 
     done, _ran = _drive(goal, state, gd, _actions(gd))
     declined: list[str] = []
@@ -197,7 +197,7 @@ def test_a_drop_only_ingredient_is_off_the_ladder(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
                         lambda *_a: (_HEAL, 2, 2))
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     actions = [a for a in _actions(gd) if not isinstance(a, GatherAction)]
     actions.append(FightAction(monster_code="biting_slime", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty()))
@@ -214,7 +214,7 @@ def test_an_undecomposable_batch_reports_the_inner_reason(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
                         lambda *_a: (_HEAL, 2, 2))
     state = _state(inventory={})
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     declined: list[str] = []
     assert decompose(goal, state, gd, _actions(gd), NO_DROPS_CONTEXT, declined) is None
     assert declined == [f"infeasible:{_HEAL}:no_route:{_INGREDIENT}"]
@@ -228,7 +228,7 @@ def test_a_potion_batch_that_overflows_the_bag_never_clears_for_itself(monkeypat
     ingredient and a junk stack), so the crafted heal has nowhere to land."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={_INGREDIENT: 300, "junk": 1}, inventory_slots_max=2)
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     cleared: list[object] = []
 
     def clear_first(walked, *_a):

@@ -310,7 +310,7 @@ class IsThisAnIntermediateOnAChain(Decision[Goal]):
                     return CanICraftThisAtAll(
                         self.step, self.root, root_stats, root_slots)
         return GatherMaterialsGoal(target_item=self.step.code,
-                                   needed={self.step.code: self.step.quantity})
+                                   needed={self.step.code: self.step.quantity}, now=ctx.now)
 
 
 class CanICraftThisAtAll(Decision[Goal]):
@@ -393,7 +393,7 @@ class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
         # hunt — and once every input is in hand the final craft is shallow.
         if _recipe_has_combat_drop_input(self.root.code, game_data):
             return GatherMaterialsGoal(target_item=self.step.code,
-                                       needed={self.step.code: self.step.quantity})
+                                       needed={self.step.code: self.step.quantity}, now=ctx.now)
         dest_slot = self.root.slot if self.root.slot is not None else self.root_slots[0]
         owned: dict[str, int] = dict(state.inventory)
         for code, qty in (state.bank_items or {}).items():
@@ -465,7 +465,7 @@ class DoesTheChainFitTheDepthBudget(Decision[Goal]):
         if _gather_step_target_is_root(self.tgt_code, self.root.code):
             return self.upgrade
         return GatherMaterialsGoal(target_item=self.tgt_code,
-                                   needed={self.tgt_code: self.tgt_qty})
+                                   needed={self.tgt_code: self.tgt_qty}, now=ctx.now)
 
 
 def obtain_item_decision(step: ObtainItem, root: MetaGoal | None) -> Decision[Goal]:

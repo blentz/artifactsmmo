@@ -119,7 +119,7 @@ def _gather_goal_for_unreachable_equippable(
             game_data.max_gather_yield)
         if _gather_step_target_is_root(tgt_code, code):
             return None
-        return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
+        return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty}, now=ctx.now)
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. `_equippable_goal`
     # never reaches here recipe-less — its `if recipe:` guard filters that before
@@ -127,7 +127,7 @@ def _gather_goal_for_unreachable_equippable(
     # could reach here with a bank-only recipe-less item, was deleted in Phase
     # 4-3b).
     recipe = game_data.crafting_recipe(code) or {}
-    return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
+    return GatherMaterialsGoal(target_item=code, needed=dict(recipe), now=ctx.now)
 
 
 def is_missing_piece(code: str, ctx: SelectionContext) -> bool:
@@ -270,7 +270,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
                 # and fight for its gold, as `PIECE_POLICY` priced it.
                 return GatherMaterialsGoal(target_item=currency,
                                            needed={currency: held + want},
-                                           fight_gold=piece)
+                                           fight_gold=piece, now=ctx.now)
         if _passively_funded(code, state, game_data) == 0 and not piece:
             # The ITEM itself is bought with a passive currency (a medal worn
             # as an artifact): the "plain buy attempt" above is not
@@ -283,7 +283,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # that fight (plan B Task 15): its walk may earn the gold the pocket
         # lacks. Any other gold-priced buy still waits for the pocket.
         return GatherMaterialsGoal(target_item=code, needed={code: 1},
-                                   fight_gold=piece)
+                                   fight_gold=piece, now=ctx.now)
     # Route on the STEP, not on a depth-bound proxy for it (see the docstring:
     # the deleted `is_plannable` depth gate never rejected on real data).
     #

@@ -180,7 +180,7 @@ def test_a_declined_tool_step_falls_back_to_the_plain_climb() -> None:
 def test_a_declined_tool_step_leaves_a_fleet_climb_plain() -> None:
     gd = _world()
     piece = FleetPiece(code="iron_shield", skill="gearcrafting", level=10, gain=Fraction(1))
-    walk = RootWalk(step_decline=_refuse_tool, now=NOW)
+    walk = RootWalk(step_decline=_refuse_tool)
     state = make_state(level=15)
     ctx = _demanded(state, gd, _missing(), (piece,))
     assert ctx.objective_tools == {"gearcrafting": HAMMER}
@@ -439,9 +439,9 @@ def test_a_fleet_pieces_craft_fetches_the_prospecting_item_first() -> None:
     gd = _pearl_world()
     piece = FleetPiece(code="pearl_ring", skill="gearcrafting", level=1, gain=Fraction(1))
     state = make_state(level=15)
-    assert fleet_piece_root(piece, state, gd, _learned(), RootWalk(now=NOW), None) == \
+    assert fleet_piece_root(piece, state, gd, _learned(), RootWalk(), None) == \
         ObtainItem(CHARM, 1)
-    walk = RootWalk(step_decline={ObtainItem(CHARM, 1): "no plan"}.get, now=NOW)
+    walk = RootWalk(step_decline={ObtainItem(CHARM, 1): "no plan"}.get)
     assert fleet_piece_root(piece, state, gd, _learned(), walk, None) == ObtainItem("pearl_ring", 1)
 
 

@@ -52,6 +52,7 @@ from artifactsmmo_cli.audit.obtain_parity_completeness import (
     scenario_for,
     summary_line,
 )
+from tests.test_ai.fixtures import cycle_now
 
 
 def _cells(game_data: GameData) -> dict[ParitySourceKind, ParityCell]:
@@ -232,7 +233,7 @@ def test_action_source_kind_maps_every_obtain_action() -> None:
     assert action_source_kind(
         GatherAction(resource_code="copper_rocks", learned_drops=LearnedDrops.empty())) is SourceKind.GATHER
     assert action_source_kind(
-        NpcBuyAction(npc_code="tailor", item_code="cloth")) is SourceKind.BUY
+        NpcBuyAction(npc_code="tailor", item_code="cloth", now=cycle_now())) is SourceKind.BUY
     # GE_FILL: the census must SEE the Grand Exchange route. Before it did, the
     # census was green about GE by being blind to it — `obtain_sources` named no
     # GE_FILL source and `action_source_kind` mapped GeFillSellOrderAction to
@@ -257,7 +258,7 @@ def test_action_yields_uses_the_per_kind_target_relation(
     # Recycling water_bow yields its recipe ingredient ash_plank.
     assert action_yields(RecycleAction(code="water_bow", quantity=1,
                                        workshop_location=(1, 1)), "ash_plank", gd)
-    assert action_yields(NpcBuyAction(npc_code="tailor", item_code="cloth"),
+    assert action_yields(NpcBuyAction(npc_code="tailor", item_code="cloth", now=cycle_now()),
                          "cloth", gd)
     assert action_yields(FightAction(monster_code="chicken", learned_drops=LearnedDrops.empty()), "feather", gd)
     # A GE fill yields the item the standing order is FOR.
@@ -340,7 +341,7 @@ def test_check_goal_rejects_a_none_or_mismatched_goal(
 def test_check_goal_accepts_the_expected_step(bundle_game_data: GameData) -> None:
     cell = _cells(bundle_game_data)[ParitySourceKind.GATHER]
     goal = GatherMaterialsGoal(target_item=cell.material,
-                               needed={cell.material: cell.needed})
+                               needed={cell.material: cell.needed}, now=cycle_now())
     assert repr(goal) == expected_goal_repr(cell)
     _check_goal(cell, goal)  # does not raise
 

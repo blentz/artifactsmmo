@@ -34,7 +34,7 @@ from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now
 
 CARRY = food_carry(1)
 """The carry of a food the loadout eats one unit of per fight."""
@@ -253,7 +253,7 @@ class TestHealPrepGoal:
 
 
 _FIGHT = FightAction(monster_code="wolf", locations=frozenset({(1, 1)}), learned_drops=LearnedDrops.empty())
-_GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True)
+_GRIND_GOAL = GatherMaterialsGoal(target_item="pelt", needed={"pelt": 1}, skill_grind=True, now=cycle_now())
 _CHEESE = CraftAction(code="cheese", workshop_location=(4, 4))
 
 

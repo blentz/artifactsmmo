@@ -164,11 +164,11 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
+from artifactsmmo_cli.ai.progression.guards import SelectionContext
+from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.progression_reserve import account_gold
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.task_worth_core import TaskWorth
-from artifactsmmo_cli.ai.progression.guards import SelectionContext
-from artifactsmmo_cli.ai.progression.meta_goal import ReachTaskOutcome
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -180,7 +180,7 @@ from formal.sim.production_ladder import (
     fires as production_fires,
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import served_game_data
+from tests.test_ai.fixtures import cycle_now, served_game_data
 
 PAYING = TaskWorth(xp=True, gold=False, drops=False)
 
@@ -443,7 +443,7 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # by production's REAL `craft_potions_fires` on the same (w, gd) the
         # ladder reads, for the loadout the sweep's context chooses — none
         # (`ctx.loadout` None, no fight ahead) ⇒ False.
-        1 if craft_potions_fires(w, _make_game_data(scn), None) else 0,  # 32 craftPotionsFires
+        1 if craft_potions_fires(w, _make_game_data(scn), None, now=cycle_now()) else 0,  # 32 craftPotionsFires
         # 33 goldReserve: the SAME drawn reserve the production guard reads
         # via ctx.gold_reserve (should_expand_bank's safety gate, 2026-07-06)
         # — one value, two sides, exact lockstep.
@@ -979,7 +979,7 @@ def _rich_oracle_args(
         1 if discardable_surplus(w, gd, ctx) else 0,  # 19 hasOverstockItems
         1 if select_bank_deposits(w, gd) else 0,     # 20 selectBankDepositsNonempty
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
-        1 if sellable_tradeable_now(w, gd) else 0,   # 22 sellableInventoryNonempty
+        1 if sellable_tradeable_now(w, gd, now=cycle_now()) else 0,   # 22 sellableInventoryNonempty
         1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
         1,                                           # 24 taskFeasibleProjected (no rung reads it)
         1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady

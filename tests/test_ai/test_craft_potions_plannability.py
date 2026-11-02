@@ -23,7 +23,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 _HEAL = "small_health_potion"
 _BOOST = "fire_boost_potion"
@@ -112,7 +112,7 @@ def test_goal_is_plannable_without_a_craftable_boost():
     craft+equip plan."""
     gd = _gd(with_boost=False, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = (decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or [])
@@ -128,7 +128,7 @@ def test_goal_stays_plannable_with_a_second_chosen_potion():
     freezes ONE potion at ONE batch."""
     gd = _gd(with_boost=True, monster_level=18)
     state = _state()
-    goal = CraftPotionsGoal(loadout=BOTH_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=BOTH_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []
@@ -148,7 +148,7 @@ def test_goal_is_plannable_when_the_deficit_exceeds_one_gather_batch():
     """
     gd = _gd(with_boost=False, monster_level=18)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []
@@ -173,7 +173,7 @@ def test_goal_provisions_depth_for_the_batch_its_own_ladder_sized():
     """
     gd = _gd(with_boost=False, monster_level=18, ingredient_qty=3)
     state = _state(inventory={})          # nothing held: forces the gather rung
-    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=HEAL_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert goal.is_satisfied(state) is False, "fixture must start with a real deficit"
 
     plan = decompose(goal, state, gd, list(_actions(gd)), NO_DROPS_CONTEXT) or []

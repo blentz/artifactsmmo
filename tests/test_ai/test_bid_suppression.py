@@ -26,7 +26,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.open_order import OpenOrder, OrderSide
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd_iron_ore() -> GameData:
@@ -132,7 +132,7 @@ class TestGatherSuppressedByOpenBuyOrder:
         order = OpenOrder("b1", "iron_ore", 5, 9, OrderSide.BUY, 0)
         state = make_state(inventory={}, open_orders=(order,))
         # copper_ore is a DIFFERENT, non-bid needed item (CONTROL).
-        goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5, "copper_ore": 3})
+        goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5, "copper_ore": 3}, now=cycle_now())
         actions = [
             GatherAction(resource_code="iron_rocks", locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty()),
             GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 2)]),
@@ -160,7 +160,7 @@ class TestGatherSuppressedByOpenBuyOrder:
         # iron_rocks asks mining 10 (API-true), which the gather needs.
         state = make_state(inventory={}, open_orders=(order,),
                            skills={**make_state().skills, "mining": 10})
-        goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5})
+        goal = GatherMaterialsGoal("iron_ore", {"iron_ore": 5}, now=cycle_now())
         actions = [GatherAction(resource_code="iron_rocks",
                                 locations=frozenset([(0, 1)]), learned_drops=LearnedDrops.empty())]
 
@@ -184,7 +184,7 @@ class TestCraftSuppressedByOpenBuyOrder:
             skills={"mining": 5}, open_orders=(order,),
         )
         # iron_bar is a DIFFERENT, non-bid needed item (CONTROL).
-        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6, "iron_bar": 4})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6, "iron_bar": 4}, now=cycle_now())
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
                          learned_drops=LearnedDrops.empty()),
@@ -212,7 +212,7 @@ class TestCraftSuppressedByOpenBuyOrder:
             inventory={"copper_ore": 60}, inventory_max=100,
             skills={"mining": 5}, open_orders=(order,),
         )
-        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6}, now=cycle_now())
         actions = [
             GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)]),
                          learned_drops=LearnedDrops.empty()),
@@ -237,7 +237,7 @@ class TestNpcBuySuppressedByOpenBuyOrder:
         order = OpenOrder("b3", "widget", 5, 100, OrderSide.BUY, 0)
         state = make_state(gold=100000, x=0, y=0, open_orders=(order,))
         # gadget is a DIFFERENT, non-bid needed item (CONTROL).
-        goal = GatherMaterialsGoal("widget", {"widget": 1, "gadget": 1})
+        goal = GatherMaterialsGoal("widget", {"widget": 1, "gadget": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions([], state, gd)
 
@@ -258,7 +258,7 @@ class TestNpcBuySuppressedByOpenBuyOrder:
         gd = _gd_npc_buy_items()
         order = OpenOrder("s3", "widget", 5, 100, OrderSide.SELL, 0)
         state = make_state(gold=100000, x=0, y=0, open_orders=(order,))
-        goal = GatherMaterialsGoal("widget", {"widget": 1})
+        goal = GatherMaterialsGoal("widget", {"widget": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions([], state, gd)
 
@@ -278,7 +278,7 @@ class TestGeFillSuppressedByOpenBuyOrder:
         order = OpenOrder("b4", "copper_bar", 6, 20, OrderSide.BUY, 0)
         state = make_state(gold=100000, inventory={}, x=0, y=0,
                            skills={"mining": 5}, open_orders=(order,))
-        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 1})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions([], state, gd)
 
@@ -298,7 +298,7 @@ class TestGeFillSuppressedByOpenBuyOrder:
         order = OpenOrder("s4", "copper_bar", 6, 20, OrderSide.SELL, 0)
         state = make_state(gold=100000, inventory={}, x=0, y=0,
                            skills={"mining": 5}, open_orders=(order,))
-        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 1})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions([], state, gd)
 
@@ -326,7 +326,7 @@ class TestFightDropFarmSuppressedByOpenBuyOrder:
         ]
         # leather_coat/leather/cow is a DIFFERENT, non-bid drop chain (CONTROL).
         goal = GatherMaterialsGoal(
-            "feather_coat", {"feather_coat": 1, "leather_coat": 1})
+            "feather_coat", {"feather_coat": 1, "leather_coat": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions(actions, state, gd)
 
@@ -353,7 +353,7 @@ class TestFightDropFarmSuppressedByOpenBuyOrder:
         )
         actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
                                learned_drops=LearnedDrops.empty())]
-        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1}, now=cycle_now())
 
         relevant = goal.relevant_actions(actions, state, gd)
 

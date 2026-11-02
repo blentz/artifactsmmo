@@ -29,7 +29,6 @@ against gear is a ranking.
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 
 # MODULE import, same idiom as `_skill_grindable` and `_route` below, and for the
 # same reason but the OTHER direction: `gather_demand` imports
@@ -175,9 +174,6 @@ class RootWalk:
     blocked_target: str | None = None
     step_decline: StepDecline = no_decline
     declined: dict[str, str] = field(default_factory=dict)
-    # The walk's one clock (the obtain model's event gates read it): the
-    # caller's, else read once when the walk is made.
-    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def serves(self, slot: str, target: GearTarget, state: WorldState,
                game_data: GameData, ctx: SelectionContext,
@@ -186,7 +182,7 @@ class RootWalk:
         it cannot. The root is converted on a throwaway walk, as everywhere a
         target is converted outside the main visit."""
         root = IsThisTargetBlocked(
-            slot, target, RootWalk(step_decline=self.step_decline, now=self.now)).resolve(
+            slot, target, RootWalk(step_decline=self.step_decline)).resolve(
             state, game_data, ctx, history)
         reason = self.step_decline(root)
         if reason is None:
@@ -275,7 +271,7 @@ def _orphan_skill_roots(state: WorldState, game_data: GameData,
         skill for skill in SKILL_NAMES
         if skill in demand and skill not in climbing
         and _skill_grindable.skill_is_grindable(
-            skill, state.skills.get(skill, 1) + 1, state, game_data)]
+            skill, state.skills.get(skill, 1) + 1, state, game_data, ctx.now)]
     orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,
                                     SKILL_NAMES.index(skill)))
     return tuple(ReachSkillLevel(skill=skill, level=demand[skill]) for skill in orphans)
@@ -438,8 +434,7 @@ def _fleet_roots(ctx: SelectionContext) -> list[ReachFleetOutcome]:
 def resolve_root(state: WorldState, game_data: GameData,
                  objective: CharacterObjective, ctx: SelectionContext,
                  history: LearningStore | None,
-                 step_decline: StepDecline = no_decline,
-                 now: datetime | None = None) -> RootResolution:
+                 step_decline: StepDecline = no_decline) -> RootResolution:
     """Walk the root graph from `WhichPieceIsNext` to a root MetaGoal (spec
     2026-10-18 §2.4): the next missing `L*` piece, or one more character level
     once `L*` is held, or None when the cycle has no gear objective (the wall).
@@ -454,8 +449,7 @@ def resolve_root(state: WorldState, game_data: GameData,
     no fleet piece waits (no fight is chosen for XP while a piece is missing,
     §6.2, nor while fleet demand the crafter's role serves exists), then the
     task, fleet and orphan-skill roots."""
-    walk = RootWalk(step_decline=step_decline) if now is None else RootWalk(
-        step_decline=step_decline, now=now)
+    walk = RootWalk(step_decline=step_decline)
     # Locally annotated, not inlined into the call: mypy 1.18.1 infers
     # `Leaf = Never` for a bare `Decision[X]` argument to `resolve_node` and
     # reports arg-type. Same fix as the `strategy_driver.py` call site.
@@ -467,8 +461,9 @@ def resolve_root(state: WorldState, game_data: GameData,
     ordered: list[MetaGoal] = [
         # A throwaway RootWalk: this is a conversion, not a visit, so it must
         # not append to the trail.
-        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),
-                                RootWalk(step_decline=step_decline, now=walk.now),
+        _which_piece.piece_step(piece.slot,
+                                _which_piece.piece_target(piece, objective, state, ctx.now),
+                                RootWalk(step_decline=step_decline),
                                 state, game_data, ctx, history)
         for piece in (target.missing if target is not None else ())
         # A piece a sibling crafts for this character has no step until it is

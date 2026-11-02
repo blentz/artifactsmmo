@@ -52,7 +52,7 @@ from artifactsmmo_cli.ai.shed_actions import shed_actions
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from artifactsmmo_cli.audit import craft_completeness
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -218,7 +218,7 @@ def test_every_priced_vendor_route_is_walkable(name: str, gold: int, policy: Pol
     reach = reachable_regions_now(state, world)
     beyond = {door: regions for door, _toll, regions in door_reaches(state, world)}
     pool = {(a.npc_code, a.item_code): a
-            for a in build_actions(world, state, None, True, 0, LearnedDrops.empty())
+            for a in build_actions(world, state, None, True, 0, LearnedDrops.empty(), now=cycle_now())
             if isinstance(a, NpcBuyAction)}
     priced = 0
     for item in sorted({item for stock in world.npc_stock.values() for item in stock}):
@@ -332,7 +332,7 @@ def test_the_pricer_and_the_executor_read_one_event_tile(
     tiles = vendor_tiles("gemstone_merchant", world)
     assert tiles == [tile[:2]]
     region = world.region_of(tile[0], tile[1], "overworld")
-    pool = [a for a in build_actions(world, held, None, True, 0, LearnedDrops.empty())
+    pool = [a for a in build_actions(world, held, None, True, 0, LearnedDrops.empty(), now=cycle_now())
             if isinstance(a, NpcBuyAction | NpcSellAction) and a.npc_code == "gemstone_merchant"]
     assert {type(a) for a in pool} == {NpcBuyAction, NpcSellAction}
     for action in pool:
@@ -393,8 +393,8 @@ def _event_read(world: GameData, monkeypatch: pytest.MonkeyPatch, npc: str,
 
 
 def _gather_buys(item: str, qty: int, state: WorldState, world: GameData) -> list[str]:
-    actions = build_actions(world, state, None, True, 0, LearnedDrops.empty())
-    return [repr(a) for a in GatherMaterialsGoal(item, {item: qty}).relevant_actions(
+    actions = build_actions(world, state, None, True, 0, LearnedDrops.empty(), now=cycle_now())
+    return [repr(a) for a in GatherMaterialsGoal(item, {item: qty}, now=cycle_now()).relevant_actions(
         actions, state, world) if isinstance(a, NpcBuyAction | WithdrawItemAction)]
 
 
@@ -461,7 +461,7 @@ def test_a_sale_venue_is_a_buyer_the_walk_reaches(
         ["gemstone_merchant"] if reached else [])
     assert (goal._sale_after("diamond", 2, held, world) is not None) is reached
     assert goal._active_window_for_inventory(held, world) is reached
-    assert accumulation_sell.sellable_tradeable_now(held, world) is reached
+    assert accumulation_sell.sellable_tradeable_now(held, world, now=cycle_now()) is reached
     shed = shed_actions("diamond", 2, held, world, TIMED_NO_PROFILE_CONTEXT, True)
     assert any(isinstance(a, NpcSellAction) for a in shed) is reached
     assert liquidation_venue("diamond", 2, held, world) is (Venue.NPC if reached else Venue.GE)

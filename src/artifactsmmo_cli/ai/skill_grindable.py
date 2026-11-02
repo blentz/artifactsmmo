@@ -2,6 +2,8 @@
 skill-gate sub-task, the orphan-skill roots and the skill-climb census ask
 (Phase 2d; it used to be the `LevelSkill` macro's applicability)."""
 
+from datetime import datetime
+
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.progression.skill_grind_target import has_grind_target
@@ -9,7 +11,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def skill_is_grindable(skill: str, target_level: int, state: WorldState,
-                       game_data: GameData) -> bool:
+                       game_data: GameData, now: datetime) -> bool:
     """Can `skill` be ground toward `target_level` from here? False once the
     skill is there. A skill is grindable via EITHER a gatherable resource
     usable now (`best_gather_resource_drop`: gathering grants skill xp, the
@@ -17,9 +19,10 @@ def skill_is_grindable(skill: str, target_level: int, state: WorldState,
     craftable in-skill rung (`has_grind_target`). The cheap arm runs first:
     `has_grind_target` walks recipes and recursive obtainability.
 
-    The "an open rung exists" predicate every grind question asks."""
+    The "an open rung exists" predicate every grind question asks. `now` is
+    the caller's cycle clock (ruling T8b), which the rung walk reads."""
     current = state.skills.get(skill, 1)
     if current >= target_level:
         return False
     return (best_gather_resource_drop(skill, current, game_data) is not None
-            or has_grind_target(skill, state, game_data))
+            or has_grind_target(skill, state, game_data, now))

@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.party_win import (
     wins_as_a_party,
 )
 from artifactsmmo_cli.audit.craft_completeness import CraftCell, census_state, seed_census_gear
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -199,7 +200,8 @@ def test_the_factory_takes_the_party_to_the_boss() -> None:
     hero = _hero(gd)
     party = replace(hero, party=(replace(hero, character="R2D2"), replace(hero, character="Lor")))
     fights = {a.monster_code: a for a in build_actions(gd, party, None, bank_accessible=True,
-                                                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                                         task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                                         now=cycle_now())
               if isinstance(a, FightAction)}
     assert fights["duskworm"].participants == ("R2D2", "Lor")
     assert fights["duskworm"].party_loadout == ("enhanced_health_potion",)

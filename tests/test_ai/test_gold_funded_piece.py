@@ -43,7 +43,7 @@ from artifactsmmo_cli.ai.scenario import (
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -171,10 +171,10 @@ def test_gold_fight_is_only_for_the_piece() -> None:
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
     actions = player._build_actions()
     declined: list[str] = []
-    plain = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1})
+    plain = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, now=cycle_now())
     assert decompose(plain, state, world, actions, ctx, declined) is None
     assert declined == ["infeasible:lifesteal_rune:no_route:"]
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, actions, ctx)
     assert plan is not None and [repr(a) for a in plan] == [f"Fight({GOLD_MONSTER})"]
 
@@ -200,7 +200,7 @@ def test_the_gold_leg_counts_the_pocket() -> None:
     fight = FightAction(monster_code=GOLD_MONSTER, gold_target=4,
                         locations=frozenset(world.all_monster_locations[GOLD_MONSTER]),
                             learned_drops=LearnedDrops.empty())
-    cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}),
+    cache = PlanCache(selected_goal=GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, now=cycle_now()),
                       plan=[fight], crafting_target=None, plan_level=state.level,
                       goal_repr="g")
     cache.arm_step(cache_holdings(state), world)
@@ -249,7 +249,7 @@ def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
     assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == CAPPED
     assert world.xp_per_kill(CAPPED, state.level) == 0
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, player._build_actions(), ctx)
     assert plan is not None
     fights = [a for a in plan if isinstance(a, FightAction)]
@@ -270,7 +270,7 @@ def test_no_fight_for_the_gold_monster_is_a_named_decline() -> None:
     actions = [a for a in player._build_actions()
                if not (isinstance(a, FightAction) and a.monster_code == GOLD_MONSTER)]
     declined: list[str] = []
-    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True)
+    piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     assert decompose(piece, state, world, actions, ctx, declined) is None
     assert len(declined) == 1 and declined[0].startswith("unmapped_step:Act(item='gold'"), declined
 
@@ -356,7 +356,7 @@ def test_a_piece_s_ge_material_is_filled_with_the_pocket_s_gold() -> None:
     world, state, actions = _busy()
     order = world.ge_best_sell_order(SHARD)
     assert order is not None
-    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True)
+    goal = GatherMaterialsGoal(SHARD, {SHARD: 3}, fight_gold=True, now=cycle_now())
     rich = replace(state, gold=order[1] * 3 + 1000)
     plan = decompose(goal, rich, world, actions, _crystal_ctx())
     assert plan is not None
@@ -371,7 +371,7 @@ def test_a_piece_s_ge_material_is_filled_with_the_pocket_s_gold() -> None:
     assert isinstance(first[0], FightAction) and first[0].gold_target is not None
     # Not a piece's step: D-E stands, the walk has no GE fill.
     declined: list[str] = []
-    assert decompose(GatherMaterialsGoal(SHARD, {SHARD: 3}), rich, world, actions,
+    assert decompose(GatherMaterialsGoal(SHARD, {SHARD: 3}, now=cycle_now()), rich, world, actions,
                      TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == [f"infeasible:{SHARD}:no_route:{SHARD}"]
 

@@ -17,6 +17,7 @@ than by tuning.
 """
 
 import dataclasses
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -44,8 +45,11 @@ SUPPLY_DEMAND_GAIN = 1.0
 class SupplyBankGoal(Goal):
     """Bank `quantity` of `item_code` for the siblings that asked for it."""
 
-    def __init__(self, item_code: str, quantity: int, demand: int) -> None:
+    def __init__(self, item_code: str, quantity: int, demand: int, *, now: datetime) -> None:
         self._item_code = item_code
+        # The cycle clock (ruling T8b), handed to the production goal whose
+        # NPC buys judge their event windows at it. Not part of identity.
+        self._now = now
         self._quantity = quantity
         self._demand = demand
 
@@ -153,7 +157,8 @@ class SupplyBankGoal(Goal):
         it pops the root): a `needed` of 0 is a degenerate demand for the
         closure walk, and the action set it would return is never used."""
         return GatherMaterialsGoal(target_item=self._item_code,
-                                   needed={self._item_code: max(1, self._deficit(state))})
+                                   needed={self._item_code: max(1, self._deficit(state))},
+                                   now=self._now)
 
     @property
     def item_code(self) -> str:

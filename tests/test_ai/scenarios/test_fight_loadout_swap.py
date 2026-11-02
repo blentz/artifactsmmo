@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -283,7 +283,7 @@ def _gather_materials_plan(sc, needed: dict[str, int]):
     player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, gd)
     actions = list(player._build_actions())
-    goal = GatherMaterialsGoal(target_item="feather", needed=needed)
+    goal = GatherMaterialsGoal(target_item="feather", needed=needed, now=cycle_now())
     plan = (decompose(goal, state, gd, list(actions), TIMED_NO_PROFILE_CONTEXT) or [])
     return state, gd, actions, goal, plan
 
@@ -312,7 +312,7 @@ class TestDropDemandCompanionSwap:
         player._learned_drops = LearnedDrops.empty()
         player.seed_offline(state, gd)
         actions = list(player._build_actions())
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 5})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 5}, now=cycle_now())
         result = goal.relevant_actions(actions, state, gd)
         reprs = [repr(a) for a in result]
         assert "Fight(chicken)" in reprs, reprs

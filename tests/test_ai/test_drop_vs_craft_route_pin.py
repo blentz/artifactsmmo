@@ -72,7 +72,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
 
@@ -154,7 +154,7 @@ def _armed_state() -> WorldState:
     )
 
 
-_GOAL = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1})
+_GOAL = GatherMaterialsGoal(target_item="enchanted_potion", needed={"enchanted_potion": 1}, now=cycle_now())
 _CRAFT_ROUTE = ["Withdraw(enchanted_mushroom×1)", "Withdraw(salmon×1)", "Craft(enchanted_potion×1)"]
 
 

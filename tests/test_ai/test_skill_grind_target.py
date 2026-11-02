@@ -30,7 +30,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scena
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state, with_missing
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, with_missing
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -608,7 +608,7 @@ def test_has_grind_target_agrees_with_the_full_selection(skills, inventory, bank
     the whole search completes in 8.3s and the goal plans in 2,755."""
     gd = _gd()
     state = make_state(skills=skills, inventory=inventory, bank_items=bank)
-    assert has_grind_target("weaponcrafting", state, gd) is (
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is (
         skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is not None)
 
 
@@ -620,7 +620,7 @@ def test_has_grind_target_is_false_when_the_chain_is_ungettable():
     gd._resource_drops = {}          # no gatherable leaves at all
     gd._resource_drops_full = {}
     state = make_state(skills={"weaponcrafting": 3})
-    assert has_grind_target("weaponcrafting", state, gd) is False
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is False
     assert skill_grind_target("weaponcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 
@@ -635,9 +635,9 @@ def test_has_grind_target_skips_an_in_skill_item_with_no_recipe():
     state = make_state(skills={"weaponcrafting": 1})
     # copper_dagger (level 1, real recipe) still answers, so the phantom is
     # skipped rather than crashing or counting.
-    assert has_grind_target("weaponcrafting", state, gd) is True
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is True
     gd._crafting_recipes = {}          # now NOTHING has a recipe
-    assert has_grind_target("weaponcrafting", state, gd) is False
+    assert has_grind_target("weaponcrafting", state, gd, now=cycle_now()) is False
 
 
 def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
@@ -648,7 +648,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     grey = make_state(skills={"weaponcrafting": 20})
     # copper_dagger (1) and wooden_staff (3) are grey at 20; iron_dagger (10)
     # is not, so existence still holds and the grey ones were skipped.
-    assert has_grind_target("weaponcrafting", grey, gd) is True
+    assert has_grind_target("weaponcrafting", grey, gd, now=cycle_now()) is True
     assert skill_grind_target("weaponcrafting", grey, gd, ctx=TIMED_NO_PROFILE_CONTEXT) == "iron_dagger"
 
     # Drop the only paying rung: every survivor is grey, so nothing qualifies.
@@ -658,7 +658,7 @@ def test_has_grind_target_skips_a_grey_rung_but_finds_a_paying_one():
     # pass for the wrong reason. (Production never mutates loaded game data.)
     lean = _gd()
     del lean._item_stats["iron_dagger"]
-    assert has_grind_target("weaponcrafting", grey, lean) is False
+    assert has_grind_target("weaponcrafting", grey, lean, now=cycle_now()) is False
     assert skill_grind_target("weaponcrafting", grey, lean, ctx=TIMED_NO_PROFILE_CONTEXT) is None
 
 

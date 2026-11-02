@@ -5,6 +5,8 @@ focused on the sense→plan→act→learn loop. ``GamePlayer._build_actions``
 delegates here, passing its state explicitly.
 """
 
+from datetime import datetime
+
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.base import Action
@@ -51,6 +53,7 @@ def build_actions(
     bank_accessible: bool,
     task_exchange_min_coins: int,
     learned_drops: LearnedDrops,
+    now: datetime,
 ) -> list[Action]:
     """Build the action list. Each action handles its own movement in execute() and cost().
 
@@ -58,6 +61,10 @@ def build_actions(
     value the cycle's `SelectionContext` carries: every gather and fight this
     builds carries it, so the planner's gather price and the goal pools'
     source picks read what the acquisition walk reads.
+
+    `now` is the cycle clock (ruling FR-8, T8b), the instant the cycle's
+    `SelectionContext` carries: every NPC buy and sale this builds gates its
+    event window on it, never on the wall clock.
 
     The DESTRUCTIVE emissions (Recycle / NpcSell / Delete) are the raw MENU, not a
     decision: the keep authority licenses them per-cycle in `StrategyArbiter.select`
@@ -326,6 +333,7 @@ def build_actions(
                 quantity=1,
                 npc_location=npc_loc,
                 travel_region=game_data.npc_region(npc_code),
+                now=now,
             ))
 
     # NPC sell actions: one per (npc, item) pair where the NPC buys the item. Sales
@@ -341,6 +349,7 @@ def build_actions(
                 quantity=1,
                 npc_location=npc_loc,
                 travel_region=game_data.npc_region(npc_code),
+                now=now,
             ))
 
     # P5b: region-crossing transition edges + off-region content. Fights and

@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
@@ -158,7 +158,7 @@ class TestUseGoldBagInFactory:
             objective=None,
             bank_accessible=True,
             task_exchange_min_coins=3,
-         learned_drops=LearnedDrops.empty())
+         learned_drops=LearnedDrops.empty(), now=cycle_now())
         types = [type(a) for a in actions]
         assert UseGoldBagAction in types
 

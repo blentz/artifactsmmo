@@ -57,7 +57,7 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import (
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -140,7 +140,7 @@ def test_real_planner_finds_a_plan_for_wool(player: GamePlayer,
     the fix this was `[]` at nodes=4 — no acquisition edge in the action set."""
     goal = GatherMaterialsGoal(target_item="wool", needed={"wool": 2},
                                skill_grind=True,
-                               exclude_recycle=frozenset({"iron_ring"}))
+                               exclude_recycle=frozenset({"iron_ring"}), now=cycle_now())
     plan = decompose(goal, state, game_data, player._build_actions(), player._last_ctx)
     assert plan, "no plan for the grind's wool demand — the livelock is back"
     assert [repr(a) for a in plan] == ["Fight(sheep)"]
@@ -176,7 +176,7 @@ def test_ordinary_gather_still_obeys_the_suppression(player: GamePlayer,
     slime_shield — a recipe whose next tier is far — so the policy now farms
     the sheep for an ordinary wool demand too."""
     assert grey_farm_allowed("raw_beef", state, game_data) is False
-    goal = GatherMaterialsGoal(target_item="raw_beef", needed={"raw_beef": 2})
+    goal = GatherMaterialsGoal(target_item="raw_beef", needed={"raw_beef": 2}, now=cycle_now())
     relevant = goal.relevant_actions(player._build_actions(), state, game_data)
     assert not [a for a in relevant
                 if isinstance(a, FightAction) and a.monster_code == "cow"]

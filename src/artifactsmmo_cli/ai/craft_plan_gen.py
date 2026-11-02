@@ -337,7 +337,7 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
         # question the walk does not answer (no GE routes, D-E); the search,
         # which prices both, keeps that choice.
         return _decline(declined, f"upgrade:ge_venue:{item}")
-    legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}), state, game_data, actions, ctx,
+    legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}, now=ctx.now), state, game_data, actions, ctx,
                       declined, subtasks, frozenset(), grey_exempt=frozenset({item}), store=store)
     if legs is None:
         return None
@@ -462,7 +462,7 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
             return False
         key = (gate.subject, gate.level)
         if key not in verdicts:
-            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)
+            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data, ctx.now)
         return verdicts[key]
 
     grey_verdicts: dict[str, bool] = {}
@@ -589,7 +589,8 @@ def _open_door(door: Door, state: WorldState, game_data: GameData, actions: list
     code, units = door_legs(door, state, game_data)[0][0]
     bag = (_walk_pocket(state, game_data, frozenset({code}), policy) if code == GOLD_CODE
            else state.inventory.get(code, 0))
-    return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold),
+    return _walk_plan(GatherMaterialsGoal(code, {code: bag + units}, fight_gold=policy.fight_gold,
+                                          now=ctx.now),
                       state, game_data, actions, ctx, declined, subtasks, grinding, policy,
                       store=store)
 

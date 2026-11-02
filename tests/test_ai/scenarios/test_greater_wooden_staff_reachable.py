@@ -58,7 +58,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 """The REAL 321-recipe catalog, same loader every other scenario uses. A
@@ -121,7 +121,8 @@ def _build_actions(state: WorldState, gd: GameData) -> list[Action]:
     """The REAL production action pool (~1900 actions), not a hand-picked list:
     the goal's own `relevant_actions` narrowing is part of what is under test."""
     return build_actions(gd, state, CharacterObjective.from_game_data(gd),
-                         bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                         bank_accessible=True, task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                         now=cycle_now())
 
 
 _CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,

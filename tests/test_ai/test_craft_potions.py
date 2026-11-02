@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 _HEAL = "small_health_potion"
 _BOOST = "fire_boost_potion"
@@ -66,11 +66,11 @@ def test_preemptive_flag():
 
 
 def test_desired_state_empty():
-    assert CraftPotionsGoal().desired_state(make_state(), _gd()) == {}
+    assert CraftPotionsGoal(now=cycle_now()).desired_state(make_state(), _gd()) == {}
 
 
 def test_repr():
-    assert repr(CraftPotionsGoal()) == "CraftPotionsGoal"
+    assert repr(CraftPotionsGoal(now=cycle_now())) == "CraftPotionsGoal"
 
 
 # ── value ────────────────────────────────────────────────────────────────────
@@ -79,18 +79,18 @@ def test_value_is_the_batch_equip_quantity():
     """Nothing worn, 3 heals held, sunflowers for the rest: the batch equips
     the heal's whole carry of 20."""
     state = _state(inventory={_HEAL: 3, _INGREDIENT: 50})
-    assert CraftPotionsGoal(loadout=_LOADOUT).value(state, _gd()) == 20.0
+    assert CraftPotionsGoal(loadout=_LOADOUT, now=cycle_now()).value(state, _gd()) == 20.0
 
 
 def test_value_reads_the_next_chosen_potion_once_the_first_is_carried():
     state = _state(_HEAL, 20, inventory={_INGREDIENT: 7})
-    assert CraftPotionsGoal(loadout=_LOADOUT).value(state, _gd()) == 7.0
+    assert CraftPotionsGoal(loadout=_LOADOUT, now=cycle_now()).value(state, _gd()) == 7.0
 
 
 def test_value_zero_without_a_batch():
     full = _state(_HEAL, 20, _BOOST, 20)
-    assert CraftPotionsGoal(loadout=_LOADOUT).value(full, _gd()) == 0.0
-    assert CraftPotionsGoal().value(_state(inventory={_INGREDIENT: 50}), _gd()) == 0.0
+    assert CraftPotionsGoal(loadout=_LOADOUT, now=cycle_now()).value(full, _gd()) == 0.0
+    assert CraftPotionsGoal(now=cycle_now()).value(_state(inventory={_INGREDIENT: 50}), _gd()) == 0.0
 
 
 # ── is_satisfied ─────────────────────────────────────────────────────────────
@@ -100,18 +100,18 @@ def test_seeded_goal_is_satisfied_once_its_batch_is_worn():
     not before, whatever the boost's stock."""
     gd = _gd()
     seed = _state(_HEAL, 12, inventory={_INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=seed)
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=seed, now=cycle_now())
     assert goal.is_satisfied(seed) is False
     assert goal.is_satisfied(_worn(seed, "utility1_slot", _HEAL, 19)) is False
     assert goal.is_satisfied(_worn(seed, "utility1_slot", _HEAL, 20)) is True
 
 
 def test_unseeded_goal_without_game_data_owes_nothing():
-    assert CraftPotionsGoal(loadout=_LOADOUT).is_satisfied(_state()) is True
+    assert CraftPotionsGoal(loadout=_LOADOUT, now=cycle_now()).is_satisfied(_state()) is True
 
 
 def test_unseeded_goal_with_game_data_asks_whether_there_is_a_batch():
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=_gd())
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=_gd(), now=cycle_now())
     assert goal.is_satisfied(_state(inventory={_INGREDIENT: 50})) is False
     assert goal.is_satisfied(_state(_HEAL, 20, _BOOST, 20)) is True
 
@@ -119,7 +119,7 @@ def test_unseeded_goal_with_game_data_asks_whether_there_is_a_batch():
 def test_a_goal_with_no_loadout_is_satisfied_on_construction():
     """No chosen loadout (no fight ahead): no batch is seeded and none exists."""
     state = _state(inventory={_INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=None, game_data=_gd(), state=state)
+    goal = CraftPotionsGoal(loadout=None, game_data=_gd(), state=state, now=cycle_now())
     assert goal.is_satisfied(state) is True
     assert goal.batch_equip(state) is None
 
@@ -129,14 +129,14 @@ def test_a_goal_with_no_loadout_is_satisfied_on_construction():
 def test_batch_equip_names_the_seeded_batch_into_a_free_slot():
     gd = _gd()
     state = _state(inventory={_INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now())
     assert goal.batch_equip(state) == EquipAction(code=_HEAL, slot="utility1_slot", quantity=20)
 
 
 def test_batch_equip_shrinks_to_what_is_still_unworn_and_ends_when_worn():
     gd = _gd()
     state = _state(inventory={_INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now())
     part = _worn(state, "utility1_slot", _HEAL, 6)
     assert goal.batch_equip(part) == EquipAction(code=_HEAL, slot="utility1_slot", quantity=14)
     assert goal.batch_equip(_worn(state, "utility1_slot", _HEAL, 20)) is None
@@ -151,7 +151,7 @@ def test_batch_equip_never_evicts_the_loadouts_other_potion():
     state = _worn(state, "utility1_slot", _HEAL, 5)
     goal = CraftPotionsGoal(
         loadout=ChosenLoadout(monster=_MONSTER, potions=((_BOOST, 1), (_HEAL, 1)), food=(), made_food=()),
-        game_data=gd, state=state)
+        game_data=gd, state=state, now=cycle_now())
     equip = goal.batch_equip(state)
     assert equip is not None and equip.code == _BOOST
     assert equip.slot == "utility2_slot"
@@ -163,14 +163,14 @@ def test_batch_equip_with_no_loadout_keeps_nothing(monkeypatch):
     monkeypatch.setattr("artifactsmmo_cli.ai.goals.craft_potions.potion_batch",
                         lambda *_a: (_BOOST, 0, 3))
     state = _state(_HEAL, 5, _OTHER, 40, inventory={_BOOST: 3})
-    goal = CraftPotionsGoal(loadout=None, game_data=_gd(), state=state)
+    goal = CraftPotionsGoal(loadout=None, game_data=_gd(), state=state, now=cycle_now())
     assert goal.batch_equip(state) == EquipAction(code=_BOOST, slot="utility1_slot", quantity=3)
 
 
 def test_batch_obtain_asks_for_the_potions_the_bag_lacks():
     gd = _gd()
     state = _state(inventory={_HEAL: 4, _INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now())
     obtain = goal.batch_obtain(state)
     assert isinstance(obtain, GatherMaterialsGoal)
     assert obtain.needed == {_HEAL: 20}
@@ -179,7 +179,7 @@ def test_batch_obtain_asks_for_the_potions_the_bag_lacks():
 def test_batch_obtain_none_once_the_bag_holds_the_batch():
     gd = _gd()
     state = _state(inventory={_INGREDIENT: 50})
-    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state)
+    goal = CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now())
     stocked = dataclasses.replace(state, inventory={_HEAL: 20})
     assert goal.batch_obtain(stocked) is None
-    assert CraftPotionsGoal().batch_obtain(state) is None
+    assert CraftPotionsGoal(now=cycle_now()).batch_obtain(state) is None

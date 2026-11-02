@@ -90,7 +90,7 @@ def run_census(game_data: GameData) -> list[GrindCycleResult]:
         state = derived_scenario_state(scenario, game_data)
         actions = build_actions(game_data, state, objective, bank_accessible=True,
                                 task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                                learned_drops=LearnedDrops.empty(), now=_CTX.now)
         for skill in SKILL_NAMES:
             level = state.skills[skill]
             declined: list[str] = []

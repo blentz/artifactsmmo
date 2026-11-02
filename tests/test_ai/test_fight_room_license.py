@@ -31,7 +31,7 @@ from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 
 CTX = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster="ogre")
 
@@ -205,7 +205,7 @@ is priced by `loadout_for` alone (ruling T14d-2)."""
 
 
 def _grind_fighting_ogre(monkeypatch: pytest.MonkeyPatch, inventory_max: int) -> tuple[object, list[str]]:
-    rung = GatherMaterialsGoal("bone", {"bone": 1})
+    rung = GatherMaterialsGoal("bone", {"bone": 1}, now=cycle_now())
     monkeypatch.setattr(craft_plan_gen_mod, "grind_rung_goal", lambda *a, **k: rung)
     monkeypatch.setattr(craft_plan_gen_mod, "_walk_plan", lambda *a, **k: [_fight("ogre")])
     monkeypatch.setattr(craft_plan_gen_mod, "heal_prep_goal", lambda *a, **k: None)

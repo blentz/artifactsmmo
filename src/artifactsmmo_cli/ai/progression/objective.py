@@ -13,7 +13,7 @@ objective `L*` (`ai/gear_objective`) is the one gear sheet."""
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import datetime
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -153,7 +153,7 @@ fills counted, every character gained 8-10 near-term targets (`bandit_armor`,
 checks the target's own crafting skill FIRST for exactly that reason."""
 
 
-def near_term_model(state: WorldState, game_data: GameData) -> ObtainModel:
+def near_term_model(state: WorldState, game_data: GameData, now: datetime) -> ObtainModel:
     """The obtain model `classify_target` asks whether one item can be had from
     `state`: a store-less feasibility walk under `NEAR_TERM_POLICY`, every drop
     at its API prior, passed explicitly (ruling T16b). One model answers the
@@ -165,10 +165,11 @@ def near_term_model(state: WorldState, game_data: GameData) -> ObtainModel:
     Held and banked stock counts in quantity; banked copies through the model's
     WITHDRAW route, under `NO_PROFILE_CONTEXT`, whose bank is accessible (D-I).
     A craftable item is asked through its recipe and through any permanent
-    vendor for it."""
+    vendor for it. `now` is the caller's cycle clock (ruling T8b), which the
+    store-less context carries too."""
     return ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
 
 
 def feasible_now(model: ObtainModel, code: str) -> bool:
@@ -231,7 +232,7 @@ class CharacterObjective:
         return cls(_game_data=game_data)
 
 
-    def classify_target(self, code: str, state: WorldState) -> GearTarget:
+    def classify_target(self, code: str, state: WorldState, now: datetime) -> GearTarget:
         """Attainable now, or the first blocker standing in front of it.
 
         The crafting-skill gate is checked BEFORE the obtain model, not
@@ -258,7 +259,7 @@ class CharacterObjective:
                 blocking_skill_level=stats.crafting_level)
         # The target and each of its materials are asked of one state: one
         # model (`near_term_model`) answers them all.
-        model = near_term_model(state, self._game_data)
+        model = near_term_model(state, self._game_data, now)
         if feasible_now(model, code):
             return GearTarget(code=code, attainable=True, blocker=None)
         recipe = self._game_data.crafting_recipe(code) or {}

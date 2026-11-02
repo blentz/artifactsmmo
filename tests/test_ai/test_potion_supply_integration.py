@@ -38,7 +38,7 @@ from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state, served_game_data
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -134,7 +134,7 @@ def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
     assert _fires(state, gd, ctx) is False
     # And the goal itself has no batch, so the walk declines it.
     declined: list[str] = []
-    assert decompose(CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state), state, gd,
+    assert decompose(CraftPotionsGoal(loadout=_LOADOUT, game_data=gd, state=state, now=cycle_now()), state, gd,
                      [MoveAction(x=0, y=0)], TIMED_NO_PROFILE_CONTEXT, declined) is None
     assert declined == ["potion:no_batch"]
 

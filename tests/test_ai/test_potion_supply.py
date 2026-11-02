@@ -19,7 +19,7 @@ from artifactsmmo_cli.ai.potion_supply import (
 )
 from artifactsmmo_cli.ai.thresholds import POTION_GATHER_BATCH, UTILITY_SLOT_MAX_STACK
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state
 
 
 def _gd_brew(**recipe: int) -> GameData:
@@ -46,11 +46,11 @@ def _gd_brew(**recipe: int) -> GameData:
 
 def test_no_run_when_one_ingredient_has_no_source():
     gd = _gd_brew(sunflower=1, rare_crystal=1)
-    assert feasible_runs("brew", 5, make_state(level=10), gd) == 0
+    assert feasible_runs("brew", 5, make_state(level=10), gd, now=cycle_now()) == 0
 
 
 def test_a_gathered_ingredient_supplies_every_run():
-    assert feasible_runs("brew", 5, make_state(level=10), _gd_brew(sunflower=3)) == 5
+    assert feasible_runs("brew", 5, make_state(level=10), _gd_brew(sunflower=3), now=cycle_now()) == 5
 
 
 def test_held_stock_bounds_the_runs_and_a_drop_does_not_count():
@@ -59,13 +59,13 @@ def test_held_stock_bounds_the_runs_and_a_drop_does_not_count():
     supplied, not five."""
     gd = _gd_brew(sunflower=1, slimeball=1)
     state = make_state(level=10, attack={"fire": 50}, bank_items={"slimeball": 1})
-    assert feasible_runs("brew", 5, state, gd) == 1
-    assert feasible_runs("brew", 5, make_state(level=10, attack={"fire": 50}), gd) == 0
+    assert feasible_runs("brew", 5, state, gd, now=cycle_now()) == 1
+    assert feasible_runs("brew", 5, make_state(level=10, attack={"fire": 50}), gd, now=cycle_now()) == 0
 
 
 def test_an_item_with_no_recipe_has_no_run():
     gd = _gd_brew(sunflower=1)
-    assert feasible_runs("sunflower", 3, make_state(level=10), gd) == 0
+    assert feasible_runs("sunflower", 3, make_state(level=10), gd, now=cycle_now()) == 0
 
 
 def test_a_run_makes_the_recipe_yield():
@@ -74,14 +74,14 @@ def test_a_run_makes_the_recipe_yield():
     gd = _gd_brew(sunflower=1, slimeball=1)
     gd._craft_yields = {"brew": 2}
     state = make_state(level=10, attack={"fire": 50}, bank_items={"slimeball": 1})
-    assert feasible_runs("brew", 2, state, gd) == 1
+    assert feasible_runs("brew", 2, state, gd, now=cycle_now()) == 1
 
 
 def test_a_banked_potion_is_no_run():
     """A run is a craft: five banked brews do not supply one when the recipe
     cannot be had."""
     gd = _gd_brew(rare_crystal=1)
-    assert feasible_runs("brew", 3, make_state(level=10, bank_items={"brew": 5}), gd) == 0
+    assert feasible_runs("brew", 3, make_state(level=10, bank_items={"brew": 5}), gd, now=cycle_now()) == 0
 
 
 
@@ -123,67 +123,67 @@ def test_carry_is_one_fights_use_times_the_horizon_capped_at_a_slot():
 def test_no_loadout_stocks_nothing():
     """No fight ahead: nothing to stock for, however short the slots are."""
     state = make_state(level=10, inventory={"sunflower": 50})
-    assert potion_batch(state, _gd_batch(), None) is None
-    assert craft_potions_fires(state, _gd_batch(), None) is False
+    assert potion_batch(state, _gd_batch(), None, now=cycle_now()) is None
+    assert craft_potions_fires(state, _gd_batch(), None, now=cycle_now()) is False
 
 
 def test_a_potion_at_its_carry_passes_to_the_next_chosen_potion():
     """`brew` (1 a fight) is worn at its carry of 20, so the batch is the
     second chosen potion, `boost`: the bag's sunflowers craft its whole carry."""
     state = _worn("brew", 20, inventory={"sunflower": 50})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1), ("boost", 1))) == ("boost", 20, 20)
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1), ("boost", 1)), now=cycle_now()) == ("boost", 20, 20)
 
 
 def test_the_first_chosen_potion_short_of_its_carry_is_the_batch():
     """Both chosen potions are short; the chooser's order decides."""
     state = _worn("brew", 15, inventory={"sunflower": 50})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1), ("boost", 1))) == ("brew", 5, 5)
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1), ("boost", 1)), now=cycle_now()) == ("brew", 5, 5)
 
 
 def test_a_potion_nothing_can_supply_is_skipped_for_the_next():
     """`walled` is chosen first, short, not held and not craftable: the batch
     is `brew`."""
     state = make_state(level=10, inventory={"sunflower": 50})
-    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1), ("brew", 1))) == ("brew", 20, 20)
+    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1), ("brew", 1)), now=cycle_now()) == ("brew", 20, 20)
 
 
 def test_nothing_to_stock_when_no_chosen_potion_can_be_supplied():
     state = make_state(level=10)
-    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1))) is None
-    assert craft_potions_fires(state, _gd_batch(), _loadout(("walled", 1))) is False
+    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1)), now=cycle_now()) is None
+    assert craft_potions_fires(state, _gd_batch(), _loadout(("walled", 1)), now=cycle_now()) is False
 
 
 def test_held_potions_cover_the_deficit_with_no_craft():
     """Bag and bank copies are free stock: 5 in the bag and 15 in the bank
     equip the whole carry of 20 and nothing is brewed."""
     state = make_state(level=10, inventory={"brew": 5, "sunflower": 50}, bank_items={"brew": 15})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1))) == ("brew", 0, 20)
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) == ("brew", 0, 20)
 
 
 def test_held_potions_exactly_meeting_the_deficit_need_no_run():
     """The boundary: held == deficit. Nothing more is crafted, though the bag's
     sunflowers could brew more."""
     state = _worn("brew", 12, inventory={"brew": 8, "sunflower": 50})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1))) == ("brew", 0, 8)
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) == ("brew", 0, 8)
 
 
 def test_a_walled_potion_held_in_the_bag_is_still_equipped():
     """Nothing can brew `walled`, but the bag's copies are stock: they equip."""
     state = make_state(level=10, inventory={"walled": 3})
-    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1))) == ("walled", 0, 3)
+    assert potion_batch(state, _gd_batch(), _loadout(("walled", 1)), now=cycle_now()) == ("walled", 0, 3)
 
 
 def test_partial_holding_plus_crafted_runs():
     """5 held, 15 short: the bag's sunflowers cover all 15 runs."""
     state = make_state(level=10, inventory={"brew": 5, "sunflower": 50})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1))) == ("brew", 15, 20)
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) == ("brew", 15, 20)
 
 
 def test_a_gathered_batch_is_cut_to_the_gather_batch():
     """No ingredient held and none buyable: one gather batch of runs, and the
     equip is what those runs and the held copies reach."""
     state = make_state(level=10, inventory={"brew": 5})
-    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1))) == (
+    assert potion_batch(state, _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) == (
         "brew", POTION_GATHER_BATCH, 5 + POTION_GATHER_BATCH)
 
 
@@ -192,13 +192,13 @@ def test_runs_are_counted_in_the_recipes_yield():
     gd = _gd_batch()
     gd._craft_yields = {"brew": 2}
     state = make_state(level=10, inventory={"sunflower": 50})
-    assert potion_batch(state, gd, _loadout(("brew", 1))) == ("brew", 10, 20)
+    assert potion_batch(state, gd, _loadout(("brew", 1)), now=cycle_now()) == ("brew", 10, 20)
 
 
 def test_craft_potions_fires_exactly_when_there_is_a_batch():
     state = make_state(level=10, inventory={"sunflower": 50})
-    assert craft_potions_fires(state, _gd_batch(), _loadout(("brew", 1))) is True
-    assert craft_potions_fires(_worn("brew", 20), _gd_batch(), _loadout(("brew", 1))) is False
+    assert craft_potions_fires(state, _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) is True
+    assert craft_potions_fires(_worn("brew", 20), _gd_batch(), _loadout(("brew", 1)), now=cycle_now()) is False
 
 
 # ── guard_loadout: only the loadout chosen against the fight ahead ─────────
@@ -225,8 +225,8 @@ def test_ladder_supplies_is_the_batch_sizing() -> None:
     """The guard's own answer: a walled potion (no run, nothing held) is not
     the ladder's to stock — the fight step's prep carries it."""
     state = make_state(level=10, inventory={"sunflower": 50})
-    assert ladder_supplies("brew", 20, state, _gd_batch())
-    assert not ladder_supplies("walled", 20, state, _gd_batch())
+    assert ladder_supplies("brew", 20, state, _gd_batch(), now=cycle_now())
+    assert not ladder_supplies("walled", 20, state, _gd_batch(), now=cycle_now())
 
 
 def test_the_prep_supplies_what_the_decomposition_walks() -> None:

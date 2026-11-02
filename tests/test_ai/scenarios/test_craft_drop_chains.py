@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.fixtures import cycle_now
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
@@ -231,6 +232,6 @@ def test_drop_leaf_recipe_generates_plan(
     with the player's own per-cycle ctx, exactly as the live
     `StrategyArbiter._plans` seam asks it."""
     bare, gd, actions, ctx = bare_sweep_env
-    goal = GatherMaterialsGoal(code, {code: 1})
+    goal = GatherMaterialsGoal(code, {code: 1}, now=cycle_now())
     plan = decompose(goal, bare, gd, actions, ctx)
     assert plan, (code, plan)

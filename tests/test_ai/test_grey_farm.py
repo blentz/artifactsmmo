@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.grey_farm import (
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, served_game_data
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, served_game_data
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
@@ -300,7 +300,7 @@ class TestGatherEmitsDropFarmFights:
         state = dataclasses.replace(
             make_state(level=12, skills={"alchemy": 5}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
         plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
@@ -311,7 +311,7 @@ class TestGatherEmitsDropFarmFights:
         gd = _gd(alchemy_next_tier_level=20)
         state = make_state(level=12, skills={"alchemy": 19},
                            inventory={}, bank_items={})
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
         relevant = goal.relevant_actions(actions, state, gd)
@@ -338,11 +338,11 @@ class TestGatherEmitsDropFarmFights:
             inventory_max=100, inventory_slots_max=20)
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty())]
-        plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        plain = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         assert decompose(plain, state, gd, actions, NO_DROPS_CONTEXT) is None, \
             "vacuous: the directive does not suppress the plain gather"
         goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2},
-                                   skill_grind=True)
+                                   skill_grind=True, now=cycle_now())
         plan = decompose(goal, state, gd, actions, NO_DROPS_CONTEXT)
         assert plan is not None and [repr(a) for a in plan] == ["Fight(chicken)"]
         assert plan[0].drop_target == ("feather", 2)
@@ -362,7 +362,7 @@ class TestGatherEmitsDropFarmFights:
         state = dataclasses.replace(
             make_state(level=12, skills={"alchemy": 19}, inventory={}, bank_items={}),
             inventory_max=100, inventory_slots_max=20)
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}),
                                learned_drops=LearnedDrops.empty()),
                    FightAction(monster_code="hawk", locations=frozenset({(3, 0)}), learned_drops=LearnedDrops.empty())]
@@ -386,7 +386,7 @@ class TestGatherEmitsDropFarmFights:
         gd = _gd(alchemy_next_tier_level=20)
         state = make_state(level=3, skills={"alchemy": 5},
                            inventory={}, bank_items={})
-        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2}, now=cycle_now())
         fight = FightAction(monster_code="chicken", locations=frozenset({(1, 0)}), learned_drops=LearnedDrops.empty())
         relevant = goal.relevant_actions([fight], state, gd)
         kept = [a for a in relevant if isinstance(a, FightAction)]

@@ -13,6 +13,7 @@ objective is held only when both are served, so the trunk is never offered
 while fleet demand its role serves exists.
 """
 
+from datetime import datetime
 from fractions import Fraction
 
 # MODULE import, the idiom `root.py` uses on its own cycles: `root` imports
@@ -55,7 +56,8 @@ def next_level(state: WorldState, game_data: GameData) -> ReachCharLevel | None:
     return ReachCharLevel(level=state.level + 1)
 
 
-def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldState) -> GearTarget:
+def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldState,
+                 now: datetime) -> GearTarget:
     """The piece's target as the route that priced it serves it (plan B Task
     3), for the walk's entry and the alternatives `resolve_root` offers alike.
     A crafted piece (`GearPiece.crafted`) is classified (`classify_target`:
@@ -65,7 +67,7 @@ def piece_target(piece: GearPiece, objective: CharacterObjective, state: WorldSt
     sells is bought, never climbed to (cell 5's amulet, 213 gold on the book,
     once rooted the jewelrycrafting climb its craft needs)."""
     if piece.crafted:
-        return objective.classify_target(piece.code, state)
+        return objective.classify_target(piece.code, state, now)
     return GearTarget(code=piece.code, attainable=False, blocker=piece.code)
 
 
@@ -269,7 +271,7 @@ class WhichPieceIsNext(Decision[MetaGoal]):
                 self.walk.declined[repr(ObtainItem(piece.code, 1, slot=piece.slot))] = (
                     "awaits the fleet crafter")
                 continue
-            gear = piece_target(piece, self.objective, state)
+            gear = piece_target(piece, self.objective, state, ctx.now)
             if self.walk.serves(piece.slot, gear, state, game_data, ctx, history):
                 # Resolved here, not handed on, so an obtain step can yield to
                 # the prospecting item its drop work pays for (§2.8).

@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 # Local gold-sizing baseline (the removed flat reserve value was 500); these
 # liveness tests just need gold comfortably above any reserve floor.
@@ -47,7 +47,7 @@ def test_cheaper_ge_sell_order_emits_ge_fill_action() -> None:
     # NPC sells at 5; standing GE sell order costs 2 and can supply all 1 → GE wins.
     gd = _gd(npc_price=5, ge_order=("ord-3", 2, 4))
     state = _state()
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -71,7 +71,7 @@ def test_no_ge_sell_order_emits_only_npc_buy() -> None:
     """No standing GE sell order → buy_source_venue → NPC; no GeFillSell emitted."""
     gd = _gd(npc_price=5, ge_order=None)
     state = _state()
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -83,7 +83,7 @@ def test_ge_sell_order_priced_above_npc_emits_only_npc_buy() -> None:
     """Standing order costs MORE than NPC buy price → choose_buy_venue → NPC."""
     gd = _gd(npc_price=5, ge_order=("ord-3", 9, 4))
     state = _state()
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -95,7 +95,7 @@ def test_ge_sell_order_tie_emits_only_npc_buy() -> None:
     """Order priced EXACTLY at the NPC buy price → NPC (the strict-< guard)."""
     gd = _gd(npc_price=5, ge_order=("ord-3", 5, 4))
     state = _state()
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -108,7 +108,7 @@ def test_ge_sell_order_too_small_emits_only_npc_buy() -> None:
     buy_source_venue → NPC (the anti-surrogate quantity guard)."""
     gd = _gd(npc_price=5, ge_order=("ord-3", 2, 1))
     state = _state()
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 3})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 3}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -127,7 +127,7 @@ def test_no_npc_seller_emits_no_ge_buy() -> None:
     gd._ge_sell_orders = {"iron_bar": ("ord-9", 1, 10)}
     gd._grand_exchange_location = (7, 7)
     state = _state()
-    goal = GatherMaterialsGoal(target_item="iron_bar", needed={"iron_bar": 1})
+    goal = GatherMaterialsGoal(target_item="iron_bar", needed={"iron_bar": 1}, now=cycle_now())
 
     emitted = goal.relevant_actions([], state, gd)
 

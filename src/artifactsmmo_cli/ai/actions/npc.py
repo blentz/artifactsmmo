@@ -2,7 +2,7 @@
 
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -40,6 +40,12 @@ class NpcBuyAction(Action):
     # The access region of the NPC's tile (`GameData.npc_region`): an
     # underground or island vendor is reached through a crossing.
     travel_region: str = field(default="overworld", repr=False)
+    # The cycle clock (ruling FR-8, T8b), `SelectionContext.now`: the event
+    # window gate reads it, so the vendor's tradeability cannot flip between
+    # two reads of one decision. Required, never defaulted (a missing clock is
+    # a TypeError, not a wall read). Not part of the action's identity (repr,
+    # learning key, equality): two cycles' copies of one edge are one edge.
+    now: datetime = field(kw_only=True, repr=False, compare=False)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.npc_location is None:
@@ -88,7 +94,7 @@ class NpcBuyAction(Action):
             self.npc_code, game_data,
             x=state.x, y=state.y,
             active_events=state.active_events,
-            now=datetime.now(timezone.utc),
+            now=self.now,
         )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:

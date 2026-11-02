@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.accumulation_sell import (
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 CTX = NO_PROFILE_CONTEXT
 
@@ -165,14 +165,14 @@ def _buys_ore(location, *, event=None) -> GameData:
 
 def test_sellable_tradeable_now_true_for_a_located_permanent_buyer():
     state = make_state(inventory={"copper_ore": 3})
-    assert sellable_tradeable_now(state, _buys_ore((1, 2))) is True
+    assert sellable_tradeable_now(state, _buys_ore((1, 2)), now=cycle_now()) is True
 
 
 def test_sellable_tradeable_now_skips_a_buyer_with_no_known_location():
     """A price row is not a buyer. A dormant merchant with no tile cannot take
     the sale, and NpcSellAction.is_applicable refuses on the same check."""
     state = make_state(inventory={"copper_ore": 3})
-    assert sellable_tradeable_now(state, _buys_ore(None)) is False
+    assert sellable_tradeable_now(state, _buys_ore(None), now=cycle_now()) is False
 
 
 def test_sellable_tradeable_now_passes_over_an_unlocated_buyer_to_a_located_one():
@@ -186,7 +186,7 @@ def test_sellable_tradeable_now_passes_over_an_unlocated_buyer_to_a_located_one(
     gd._npc_locations = {"merchant": (1, 2)}
     state = make_state(inventory={"copper_ore": 3})
     assert next(n for n, _p in gd.npcs_buying_item("copper_ore")) == "rich_but_absent"
-    assert sellable_tradeable_now(state, gd) is True
+    assert sellable_tradeable_now(state, gd, now=cycle_now()) is True
 
 
 def test_sellable_tradeable_now_skips_a_shut_event_window():
@@ -194,10 +194,10 @@ def test_sellable_tradeable_now_skips_a_shut_event_window():
     edge one: EVERY NPC in the game that buys items is an event NPC."""
     state = make_state(inventory={"copper_ore": 3}, active_events={})
     gd = _buys_ore((1, 2), event="merchant_visit")
-    assert sellable_tradeable_now(state, gd) is False
+    assert sellable_tradeable_now(state, gd, now=cycle_now()) is False
 
 
 def test_sellable_tradeable_now_skips_zero_quantity_and_unsellable_codes():
     gd = _buys_ore((1, 2))
-    assert sellable_tradeable_now(make_state(inventory={"copper_ore": 0}), gd) is False
-    assert sellable_tradeable_now(make_state(inventory={"obscure": 4}), gd) is False
+    assert sellable_tradeable_now(make_state(inventory={"copper_ore": 0}), gd, now=cycle_now()) is False
+    assert sellable_tradeable_now(make_state(inventory={"obscure": 4}), gd, now=cycle_now()) is False

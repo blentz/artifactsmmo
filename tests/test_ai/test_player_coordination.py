@@ -66,7 +66,7 @@ from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.supply_batch_target import supply_batch_target_pure
 from artifactsmmo_cli.ai.thresholds import SUPPLY_BATCH
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
-from tests.test_ai.fixtures import coordination_now, make_state
+from tests.test_ai.fixtures import coordination_now, cycle_now, make_state
 from tests.test_ai.shared_world import shared_world
 from tests.test_ai.test_actions_execute import (
     make_api_result,
@@ -847,7 +847,7 @@ def test_update_coordination_supply_target_none_without_a_matching_role(tmp_path
 
 def _tried(target, plan_len: int) -> list[dict[str, object]]:
     """The arbiter record for the supply goal built from `target`."""
-    goal = SupplyBankGoal(item_code=target[0], quantity=target[1], demand=target[2])
+    goal = SupplyBankGoal(item_code=target[0], quantity=target[1], demand=target[2], now=cycle_now())
     return [{"goal": "GrindCharacterXP", "plan_len": 3},
             {"goal": repr(goal), "plan_len": plan_len}]
 

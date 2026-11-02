@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.recipe_closure import gather_serves_closure
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd() -> GameData:
@@ -44,7 +44,7 @@ def test_bank_covered_gather_pruned():
     """Need 6 copper_bar; bank has 485 ore (covers the 60 ore) -> prune the
     copper_rocks gather, keep the withdraw."""
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6})
+    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6}, now=cycle_now())
     state = make_state(bank_items={"copper_ore": 485})
     kept = goal.relevant_actions(_actions(), state, gd)
     assert not any(isinstance(a, GatherAction) for a in kept)
@@ -53,7 +53,7 @@ def test_bank_covered_gather_pruned():
 
 def test_gather_kept_when_bank_short():
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6})
+    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6}, now=cycle_now())
     state = make_state(bank_items={"copper_ore": 5})
     kept = goal.relevant_actions(_actions(), state, gd)
     assert any(isinstance(a, GatherAction) for a in kept)
@@ -77,7 +77,7 @@ def test_gather_material_goal_emits_a_sized_gather():
     """6 copper_bar -> 60 copper_ore outstanding; the emitted gather must carry
     the batch, not quantity=1."""
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6})
+    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6}, now=cycle_now())
     state = make_state()
     kept = goal.relevant_actions(_actions(), state, gd)
     gathers = [a for a in kept if isinstance(a, GatherAction)]
@@ -90,7 +90,7 @@ def test_gather_material_goal_sizes_to_the_net_deficit():
     """Sizing is chain demand MINUS holdings: 55 ore banked leaves a 5 deficit,
     so the batch is 5 — not the full 60, and not the inventory cap."""
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6})
+    goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_bar": 6}, now=cycle_now())
     state = make_state(bank_items={"copper_ore": 55})
     kept = goal.relevant_actions(_actions(), state, gd)
     gathers = [a for a in kept if isinstance(a, GatherAction)]
@@ -196,7 +196,7 @@ def test_unknown_drop_gather_is_excluded_under_both_drop_rules():
     invisible to the assertion.
     """
     gd = _unknown_drop_gd()
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1}, now=cycle_now())
 
     early_skip_can_fire = goal.relevant_actions(
         _unknown_drop_actions(), make_state(bank_items={_GHOST: 2}), gd)

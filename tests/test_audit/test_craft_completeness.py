@@ -46,6 +46,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     first_work_leg,
     plan_craft,
 )
+from tests.test_ai.fixtures import cycle_now
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -298,7 +299,7 @@ def test_craft_cell_verdict_passes_npc_buy_of_closure_material() -> None:
     """An NpcBuyAction buying a closure material (copper_ore, the copper_bar
     recipe ingredient) advances the closure via .item_code."""
     gd = _gd()
-    plan = [NpcBuyAction(npc_code="some_merchant", item_code="copper_ore")]
+    plan = [NpcBuyAction(npc_code="some_merchant", item_code="copper_ore", now=cycle_now())]
     verdict = craft_cell_verdict("copper_bar", plan, gd)
     assert verdict == CraftVerdict(True, "")
 

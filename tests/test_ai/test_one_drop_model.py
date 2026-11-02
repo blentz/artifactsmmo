@@ -35,7 +35,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -97,9 +97,9 @@ def _producers(state, game_data, evidence):  # type: ignore[no-untyped-def]
     built with `evidence`, beside the context carrying the same value."""
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=evidence)
+                            learned_drops=evidence, now=cycle_now())
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=evidence)
-    goal = GatherMaterialsGoal(target_item="small_pearls", needed={"small_pearls": 1})
+    goal = GatherMaterialsGoal(target_item="small_pearls", needed={"small_pearls": 1}, now=cycle_now())
     fast = decompose(goal, state, game_data, actions, ctx)
     searched = GOAPPlanner().plan(state, goal, actions, game_data)
     assert fast is not None and searched
@@ -129,7 +129,7 @@ def test_no_store_prices_the_prior(state, game_data) -> None:
     assert walk["trout_spot"] == 300
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=cycle_now())
     assert _pearl_gather(actions, "trout_spot").gathers(state, game_data) == 300
 
 

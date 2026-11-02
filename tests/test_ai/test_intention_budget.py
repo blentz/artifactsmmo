@@ -34,7 +34,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 YIELDED = "ReachSkill(jewelrycrafting->21)"
 
@@ -344,8 +344,8 @@ def test_a_turn_is_kept_per_kind_of_work_not_per_quantity():
 
 
 def test_a_resized_goal_keeps_spending_the_same_budget(tmp_path):
-    big = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 60})
-    small = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 20})
+    big = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 60}, now=cycle_now())
+    small = GatherMaterialsGoal("cooked_trout", {"cooked_trout": 20}, now=cycle_now())
     player = _player()
     for goal, cycles in ((big, BUDGET_CYCLES - 1), (small, 1)):
         player._arbiter._committed_repr = repr(goal)

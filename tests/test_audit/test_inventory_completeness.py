@@ -67,7 +67,7 @@ from artifactsmmo_cli.audit.inventory_completeness import (
     plan_inventory,
     scenario_for,
 )
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 # ---------------------------------------------------------------------------
 # The brief's completeness tests: the grid is DERIVED from the registry.
@@ -541,7 +541,7 @@ def test_action_disposal_counts_each_route_against_the_right_cap() -> None:
     assert _action_disposal(DeleteItemAction(code="copper_axe", quantity=4),
                             "copper_axe", state, gd) == (4, 4)
     assert _action_disposal(NpcSellAction(npc_code="n", item_code="copper_axe",
-                                          quantity=5), "copper_axe", state, gd) == (5, 5)
+                                          quantity=5, now=cycle_now()), "copper_axe", state, gd) == (5, 5)
     assert _action_disposal(GeFillBuyOrderAction(order_id="o", item_code="copper_axe",
                                                  price=1, quantity=6),
                             "copper_axe", state, gd) == (6, 6)
@@ -553,7 +553,7 @@ def test_action_disposal_counts_each_route_against_the_right_cap() -> None:
     assert _action_disposal(DepositItemAction(code="copper_bar", quantity=1),
                             "copper_axe", state, gd) == (0, 0)
     assert _action_disposal(NpcSellAction(npc_code="n", item_code="copper_bar",
-                                          quantity=1), "copper_axe", state, gd) == (0, 0)
+                                          quantity=1, now=cycle_now()), "copper_axe", state, gd) == (0, 0)
     assert _action_disposal(RestAction(), "copper_axe", state, gd) == (0, 0)
 
 

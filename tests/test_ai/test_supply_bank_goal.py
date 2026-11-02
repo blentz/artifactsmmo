@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.goals.supply_bank import (
     SupplyBankGoal,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _state(bank: dict[str, int] | None) -> WorldState:
@@ -35,40 +35,40 @@ def game_data() -> GameData:
 
 
 def test_unsatisfied_when_bank_lacks_the_target(game_data: GameData) -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert goal.is_satisfied(_state({})) is False
 
 
 def test_satisfied_when_bank_holds_the_target(game_data: GameData) -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert goal.is_satisfied(_state({"copper_bar": 6})) is True
 
 
 def test_satisfied_when_bank_holds_more_than_the_target(game_data: GameData) -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert goal.is_satisfied(_state({"copper_bar": 9})) is True
 
 
 def test_unvisited_bank_is_not_satisfied(game_data: GameData) -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert goal.is_satisfied(_state(None)) is False
 
 
 def test_desired_state_targets_banked_quantity(game_data: GameData) -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert goal.desired_state(_state({}), game_data) == {"banked": {"copper_bar": 6}}
 
 
 def test_priority_stays_inside_the_band(game_data: GameData) -> None:
-    low = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=0)
-    high = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=100_000)
+    low = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=0, now=cycle_now())
+    high = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=100_000, now=cycle_now())
     assert low.value(_state({}), game_data) == SUPPLY_PRIORITY_FLOOR
     assert high.value(_state({}), game_data) == SUPPLY_PRIORITY_CEILING
 
 
 def test_priority_rises_with_demand(game_data: GameData) -> None:
-    small = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=2)
-    large = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=8)
+    small = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=2, now=cycle_now())
+    large = SupplyBankGoal(item_code="copper_bar", quantity=1, demand=8, now=cycle_now())
     assert large.value(_state({}), game_data) > small.value(_state({}), game_data)
 
 
@@ -81,5 +81,5 @@ def test_ceiling_stays_below_reach_skill_goal() -> None:
 
 
 def test_repr_shows_item_and_quantity() -> None:
-    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6)
+    goal = SupplyBankGoal(item_code="copper_bar", quantity=6, demand=6, now=cycle_now())
     assert repr(goal) == "SupplyBank(copper_barx6)"

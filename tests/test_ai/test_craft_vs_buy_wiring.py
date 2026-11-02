@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves, c
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 # A representative reserve value passed to acquisition_method's `reserve` param
 # (the proof is parametric in `reserve`).
@@ -60,7 +60,7 @@ def test_relevant_actions_injects_npcbuy_for_buy_item() -> None:
     gd = _gd_buyable()
     state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0,
                        skills={"mining": 5})
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     assert any(isinstance(a, NpcBuyAction) and a.item_code == "copper_bar" for a in relevant)
 
@@ -82,7 +82,7 @@ def test_relevant_actions_no_npcbuy_when_unaffordable() -> None:
     gd._npc_locations["armorer"] = (10, 10)
     # gold=494: reserve_floor("copper_bar")=490; 494-5=489 < 490 → blocked.
     state = make_state(gold=494, inventory={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     assert not any(isinstance(a, NpcBuyAction) for a in relevant)
 
@@ -104,7 +104,7 @@ def test_relevant_actions_must_buy_noncraftable_npc_only_item() -> None:
     # proving the must-buy path is NOT going through that gate.
     state = make_state(level=20, gold=100000, x=0, y=0)
     assert acquisition_method("lifesteal_rune", 1, state, gd, _RESERVE) == Method.CRAFT
-    goal = GatherMaterialsGoal(target_item="lifesteal_rune", needed={"lifesteal_rune": 1})
+    goal = GatherMaterialsGoal(target_item="lifesteal_rune", needed={"lifesteal_rune": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     buys = [a for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "lifesteal_rune"]
     assert buys, "non-craftable NPC-only item must offer NpcBuy"
@@ -124,7 +124,7 @@ def test_relevant_actions_must_buy_offers_every_vendor_for_affordable_currency()
     gd._npc_locations = {"gold_vendor": (1, 1), "coin_vendor": (2, 2)}
     state = make_state(level=20, gold=100000, inventory={}, x=0, y=0,
                        inventory_max=144)  # live bag; see _medal_state
-    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
+    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     buys = {a.npc_code for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "omni_rune"}
     assert buys == {"gold_vendor", "coin_vendor"}, "every vendor offered"
@@ -154,10 +154,10 @@ def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
     actions = [
         FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty()),
         NpcBuyAction(npc_code="sandwhisper_trader", item_code="greater_lifesteal_rune",
-                     npc_location=(-2, 18), quantity=1),
+                     npc_location=(-2, 18), quantity=1, now=cycle_now()),
     ]
     goal = GatherMaterialsGoal(target_item="greater_lifesteal_rune",
-                              needed={"greater_lifesteal_rune": 1})
+                              needed={"greater_lifesteal_rune": 1}, now=cycle_now())
     state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0,
                        inventory_max=144)  # live bag; see _medal_state
     relevant = goal.relevant_actions(actions, state, gd)
@@ -185,9 +185,9 @@ def test_relevant_actions_no_farm_for_passively_earned_currency() -> None:
     actions = [
         FightAction(monster_code="m0", locations=[(10, 10)], learned_drops=LearnedDrops.empty()),
         NpcBuyAction(npc_code="vendor", item_code="medal",
-                     npc_location=(0, 0), quantity=1),
+                     npc_location=(0, 0), quantity=1, now=cycle_now()),
     ]
-    goal = GatherMaterialsGoal(target_item="medal", needed={"medal": 1})
+    goal = GatherMaterialsGoal(target_item="medal", needed={"medal": 1}, now=cycle_now())
     # The droppers are WINNABLE (so a Fight WOULD be emitted if the currency were
     # injected) — that is what makes this pin the skip: with the gate the Fight is
     # absent, without it a winnable drop-farm Fight appears.
@@ -214,7 +214,7 @@ def test_relevant_actions_no_currency_farm_when_gold_vendor_exists() -> None:
     gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
     gd._monster_locations = {"sea_marauder": [(10, 10)]}
     actions = [FightAction(monster_code="sea_marauder", locations=[(10, 10)], learned_drops=LearnedDrops.empty())]
-    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
+    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1}, now=cycle_now())
     state = make_state(level=40, attack={"air": 50}, gold=100000, x=0, y=0)
     relevant = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, FightAction) for a in relevant), \
@@ -228,7 +228,7 @@ def test_relevant_actions_no_npcbuy_when_no_seller() -> None:
     gd._npc_sell_prices = {}
     gd._npc_locations = {}
     state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="iron_bar", needed={"iron_bar": 1})
+    goal = GatherMaterialsGoal(target_item="iron_bar", needed={"iron_bar": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     assert not any(isinstance(a, NpcBuyAction) for a in relevant)
 
@@ -302,7 +302,7 @@ def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> N
     gd._task_coin_rewards = {"chicken": 1}  # C2 floor (min_task_coin_reward) for funding-cycle calc
     gd._npc_locations = {"tasks_trader": (4, 1)}
     state = make_state(level=10, gold=0, inventory={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
+    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     buy_actions = [a for a in relevant
                    if isinstance(a, NpcBuyAction) and a.item_code == "jasper_crystal"]
@@ -479,7 +479,7 @@ def test_relevant_actions_ferries_gold_deficit_via_withdraw() -> None:
     state = make_state(skills={"weaponcrafting": 5}, gold=200,
                        bank_gold=300 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1}, now=cycle_now())
     template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
     relevant = goal.relevant_actions([template], state, gd)
     withdraws = [a for a in relevant if isinstance(a, WithdrawGoldAction)]
@@ -495,7 +495,7 @@ def test_relevant_actions_no_gold_withdraw_when_pocket_covers() -> None:
     gd = _gold_vendor_gd()
     state = make_state(skills={"weaponcrafting": 5}, gold=600, bank_gold=300,
                        inventory={}, bank_items={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1}, now=cycle_now())
     template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
     relevant = goal.relevant_actions([template], state, gd)
     assert not [a for a in relevant if isinstance(a, WithdrawGoldAction)]
@@ -573,7 +573,7 @@ def test_item_currency_batch_fits_the_bag() -> None:
     state = make_state(inventory={}, bank_items={"event_ticket": 581},
                        inventory_max=144, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 5})
+                               needed={"lich_race_medal": 5}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
     relevant = goal.relevant_actions([template], state, gd)
@@ -612,7 +612,7 @@ def test_item_currency_ferry_survives_the_deposit_that_makes_room() -> None:
                        bank_items={"event_ticket": 581},
                        inventory_max=144, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 5})
+                               needed={"lich_race_medal": 5}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
     relevant = goal.relevant_actions([template], state, gd)
@@ -636,7 +636,7 @@ def test_item_currency_ferry_keeps_a_shortfall_smaller_than_the_batch() -> None:
                        bank_items={"event_ticket": 88},
                        inventory_max=144, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 1})
+                               needed={"lich_race_medal": 1}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
     relevant = goal.relevant_actions([template], state, gd)
@@ -654,7 +654,7 @@ def test_no_buy_edge_when_the_price_cannot_fit_the_bag_at_all() -> None:
     state = make_state(inventory={}, bank_items={"event_ticket": 581},
                        inventory_max=100, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 5})
+                               needed={"lich_race_medal": 5}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
     relevant = goal.relevant_actions([template], state, gd)
@@ -682,7 +682,7 @@ def test_no_buy_edge_for_a_transitive_leaf_that_cannot_fit_the_bag() -> None:
     gd._npc_buy_currency = {"vendor": {"medal": "ticket"}}
     gd._npc_locations = {"vendor": (0, 0)}
     gd._task_coin_rewards = {"chicken": 1}
-    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
 
@@ -796,7 +796,7 @@ def test_relevant_actions_ferries_item_currency_via_withdraw() -> None:
     alongside the NpcBuy edge it enables."""
     gd = _ticket_vendor_gd()
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 1})
+                               needed={"lich_race_medal": 1}, now=cycle_now())
     template = WithdrawItemAction(code="copper_ore", quantity=7,
                                   bank_location=(4, 1), accessible=True)
     relevant = goal.relevant_actions([template], _medal_state(), gd)
@@ -814,7 +814,7 @@ def test_relevant_actions_no_item_currency_withdraw_when_pocket_covers() -> None
     from the bag)."""
     gd = _ticket_vendor_gd()
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 1})
+                               needed={"lich_race_medal": 1}, now=cycle_now())
     state = make_state(inventory={"event_ticket": 100},
                        bank_items={"event_ticket": 48}, x=0, y=0)
     template = WithdrawItemAction(code="copper_ore", quantity=7,
@@ -830,7 +830,7 @@ def test_relevant_actions_item_currency_ferry_needs_a_template() -> None:
     still offered rather than the whole goal crashing."""
     gd = _ticket_vendor_gd()
     goal = GatherMaterialsGoal(target_item="lich_race_medal",
-                               needed={"lich_race_medal": 1})
+                               needed={"lich_race_medal": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], _medal_state(), gd)
     assert not [a for a in relevant if isinstance(a, WithdrawItemAction)]
     assert any(isinstance(a, NpcBuyAction) and a.item_code == "lich_race_medal"
@@ -910,7 +910,7 @@ def test_relevant_actions_skips_event_vendor_for_closure_leaf() -> None:
     gd._npc_locations = {"festival_trader": (3, 3)}
     gd.world.npc_event_codes["festival_trader"] = "festival_event"
     state = make_state(skills={"weaponcrafting": 5}, inventory={}, x=0, y=0)
-    goal = GatherMaterialsGoal(target_item="gizmo", needed={"gizmo": 1})
+    goal = GatherMaterialsGoal(target_item="gizmo", needed={"gizmo": 1}, now=cycle_now())
     relevant = goal.relevant_actions([], state, gd)
     assert not any(isinstance(a, NpcBuyAction) and a.item_code == "flux" for a in relevant), (
         "event-vendor closure leaf must not get an NpcBuy emission"

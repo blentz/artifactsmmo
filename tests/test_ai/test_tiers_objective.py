@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.progression import objective as objective_mod
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective, feasible_now, is_attainable, near_term_model
 from artifactsmmo_cli.ai.suppliable import is_suppliable
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, obtainable_now
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, obtainable_now
 
 
 def _gd() -> GameData:
@@ -192,7 +192,7 @@ def test_is_suppliable_true_for_a_producible_target_that_is_blocked_today():
     gd = _gd_fixed_supply()
     state = make_state(level=5, attack={"air": 5})
     assert obtainable_now("dragon_helm", state, gd) is False
-    assert is_suppliable("dragon_helm", state, gd) is True
+    assert is_suppliable("dragon_helm", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_false_for_a_fixed_supply_item_with_no_free_copy():
@@ -203,13 +203,13 @@ def test_is_suppliable_false_for_a_fixed_supply_item_with_no_free_copy():
     exists on the account and a sibling wears it."""
     gd = _gd_fixed_supply()
     state = make_state(level=5)
-    assert is_suppliable("relic", state, gd) is False
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is False
 
 
 def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_inventory():
     gd = _gd_fixed_supply()
     state = make_state(level=5, inventory={"relic": 1})
-    assert is_suppliable("relic", state, gd) is True
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_the_bank():
@@ -217,7 +217,7 @@ def test_is_suppliable_true_when_the_fixed_supply_copy_is_in_the_bank():
     character withdraws it first."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, bank_items={"relic": 1})
-    assert is_suppliable("relic", state, gd) is True
+    assert is_suppliable("relic", state, gd, now=cycle_now()) is True
 
 
 def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
@@ -230,7 +230,7 @@ def test_is_suppliable_true_for_a_task_earnable_item_the_graph_cannot_see():
     gd._task_reward_item_codes = {"coin"}
     state = make_state(level=5)
     assert gd.is_task_earnable("coin") is True
-    assert is_suppliable("coin", state, gd) is True
+    assert is_suppliable("coin", state, gd, now=cycle_now()) is True
 
 
 def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
@@ -240,7 +240,7 @@ def test_classify_target_still_reports_a_sourceless_code_as_its_own_blocker():
     are all attainable-now, and `classify_target` is public."""
     gd = _gd_fixed_supply()
     state = make_state(level=5, attack={"air": 5})
-    target = CharacterObjective.from_game_data(gd).classify_target("relic", state)
+    target = CharacterObjective.from_game_data(gd).classify_target("relic", state, now=cycle_now())
     assert target.attainable is False
     assert target.blocking_skill is None
     assert target.blocker == "relic"
@@ -253,8 +253,8 @@ def test_classify_target_asks_the_near_term_question_it_publishes() -> None:
     state = make_state(level=5, attack={"air": 5})
     obj = CharacterObjective.from_game_data(gd)
     for code in ("feather_coat", "dragon_helm"):
-        assert obj.classify_target(code, state).attainable == feasible_now(
-            near_term_model(state, gd), code)
+        assert obj.classify_target(code, state, now=cycle_now()).attainable == feasible_now(
+            near_term_model(state, gd, now=cycle_now()), code)
 
 
 def test_classify_target_asks_one_obtain_model_per_call() -> None:
@@ -273,8 +273,8 @@ def test_classify_target_asks_one_obtain_model_per_call() -> None:
         return model
 
     with patch.object(objective_mod, "ObtainModel", counting):
-        helm = obj.classify_target("dragon_helm", state)
-        coat = obj.classify_target("feather_coat", state)
+        helm = obj.classify_target("dragon_helm", state, now=cycle_now())
+        coat = obj.classify_target("feather_coat", state, now=cycle_now())
     assert len(built) == 2
     assert (helm.attainable, helm.blocker) == (False, "dragon_scale")
     assert not obtainable_now("dragon_helm", state, gd)

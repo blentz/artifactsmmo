@@ -23,6 +23,8 @@ from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import fight_loadout
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
@@ -291,6 +293,24 @@ class TestBuildActions:
         fight_locs = {a.monster_code: a.locations for a in actions if isinstance(a, FightAction)}
         assert "chicken" in fight_locs
         assert (1, 0) in fight_locs["chicken"]
+
+    def test_vendor_edges_carry_the_cycle_clock(self):
+        """The pool is stamped with the cycle's own instant (`_cycle_now`,
+        ruling T8b), never a wall read of its own: every NPC buy and sale
+        judges its event window at the instant the cycle's context carries."""
+        player = GamePlayer(character="hero")
+        player._offline_timing = committed_timing()
+        player._learned_drops = LearnedDrops.empty()
+        player.game_data = make_game_data_mock()
+        player.game_data._npc_stock["cook"] = {"cooked_chicken": 5}
+        player.game_data._npc_sell_prices["cook"] = {"cooked_chicken": 1}
+        player.game_data._item_stats["cooked_chicken"] = ItemStats(
+            code="cooked_chicken", level=1, type_="consumable")
+        instant = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+        player._cycle_now = instant
+        vendors = [a for a in player._build_actions() if isinstance(a, NpcBuyAction | NpcSellAction)]
+        assert {type(a) for a in vendors} == {NpcBuyAction, NpcSellAction}
+        assert {a.now for a in vendors} == {instant}
 
 
 class TestArbiterSelection:

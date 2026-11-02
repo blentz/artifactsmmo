@@ -11,7 +11,7 @@ from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _raid(code: str, monster: str) -> RaidInfo:
@@ -95,7 +95,7 @@ def test_the_tiles_are_the_factorys_fight_tiles() -> None:
     gd = _gd()
     state = _state()
     actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=1,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=cycle_now())
     for monster in ("crab", "rat", "lich", "pixie", "chicken", "ghost"):
         built = {tile for a in actions if isinstance(a, FightAction) and a.monster_code == monster
                  for tile in a.locations}

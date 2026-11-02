@@ -286,7 +286,7 @@ def run_census(game_data: GameData) -> list[ClimbResult]:
         routed = routed_skills(state, game_data)
         for skill in SKILL_NAMES:
             level = state.skills[skill]
-            open_climb = skill_is_grindable(skill, level + 1, state, game_data)
+            open_climb = skill_is_grindable(skill, level + 1, state, game_data, _OFFLINE_CONTEXT.now)
             inventory = climb_inventory(skill, state, game_data)
             results.append(ClimbResult(
                 scenario=name, skill=skill, level=level, target=level + 1,

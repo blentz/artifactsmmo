@@ -3,7 +3,7 @@ actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
 from dataclasses import asdict, dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -88,7 +88,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
         unmet = [p for p in prerequisites(node, state, game_data, ctx)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
-            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):
+            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data, ctx.now):
                 return None
             return node
         sub_path = path | {node}
@@ -127,7 +127,7 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
     return unmet_closure_size(root, state, game_data, ctx)
 
 
-def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
+def _producible(code: str, state: WorldState, game_data: GameData, now: datetime) -> bool:
     """Can the step graph treat `code` as a leaf it can produce? A craftable
     item always can: `prerequisites` decomposes its recipe, so its inputs are
     the step graph's own business, not this test's. Anything else is
@@ -154,10 +154,10 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     if game_data.crafting_recipe(code) is not None:
         return True
     # A store-less feasibility walk: every drop at its API prior, passed
-    # explicitly (ruling T16b).
+    # explicitly (ruling T16b), on the caller's cycle clock (ruling T8b).
     model = ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
     return model.feasible(code, 1, PIECE_POLICY)
 
 
@@ -172,7 +172,7 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
         return False
     prereqs = prerequisites(root, state, game_data, ctx)
     if isinstance(root, ObtainItem) and not prereqs:
-        return _producible(root.code, state, game_data)
+        return _producible(root.code, state, game_data, ctx.now)
     sub_path = path | {root}
     return all(is_reachable(p, state, game_data, sub_path, ctx) for p in prereqs)
 

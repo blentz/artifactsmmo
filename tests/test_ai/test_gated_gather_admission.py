@@ -9,7 +9,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from tests.test_ai.fixtures import served_game_data
+from tests.test_ai.fixtures import cycle_now, served_game_data
 
 
 def _gd_gated_gather() -> GameData:
@@ -51,8 +51,8 @@ def test_open_source_displaces_locked_no_forced_grind() -> None:
         ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
+    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1}, now=cycle_now())
 
     admitted = goal.relevant_actions(actions, state, gd)
     assert any(isinstance(a, GatherAction) and a.resource_code == "shallow_rocks"
@@ -70,8 +70,8 @@ def test_gather_gate_above_ceiling_stays_excluded() -> None:
         ScenarioCharacter(name="t", level=12, skills={"mining": 1}), gd)
     objective = CharacterObjective.from_game_data(gd)
     actions = build_actions(gd, state, objective, bank_accessible=True,
-                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1})
+                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
+    goal = GatherMaterialsGoal(target_item="deep_ore", needed={"deep_ore": 1}, now=cycle_now())
 
     admitted = goal.relevant_actions(actions, state, gd)
     assert not any(isinstance(a, GatherAction) and a.resource_code == "deep_rocks"

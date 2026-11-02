@@ -1,7 +1,5 @@
 """SellInventoryGoal: sell the copies the keep authority licenses, for gold and space."""
 
-from datetime import datetime, timezone
-
 from artifactsmmo_cli.ai.accumulation_sell import (
     SEVERE_STEPS,
     bank_sellable_surplus,
@@ -167,7 +165,8 @@ class SellInventoryGoal(Goal):
                 continue
             sale = NpcSellAction(npc_code=npc_code, item_code=code,
                                  quantity=quantity, npc_location=loc,
-                                 travel_region=game_data.npc_region(npc_code))
+                                 travel_region=game_data.npc_region(npc_code),
+                                 now=self._ctx.now)
             if sale.is_applicable(landed, game_data):
                 return sale
         return None
@@ -192,7 +191,8 @@ class SellInventoryGoal(Goal):
                     continue
                 act = NpcSellAction(npc_code=npc_code, item_code=code,
                                     quantity=quantity, npc_location=loc,
-                                    travel_region=game_data.npc_region(npc_code))
+                                    travel_region=game_data.npc_region(npc_code),
+                                    now=self._ctx.now)
                 if act.is_applicable(state, game_data):
                     result.append(act)
                     break
@@ -200,7 +200,7 @@ class SellInventoryGoal(Goal):
 
     def _active_window_for_inventory(self, state: WorldState, game_data: GameData) -> bool:
         """True if some held item can be sold to a currently-active reachable merchant."""
-        now = datetime.now(timezone.utc)
+        now = self._ctx.now
         for item_code, qty in state.inventory.items():
             if qty <= 0:
                 continue

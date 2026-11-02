@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 K = LearnedDrops((), (), Fraction(1, 100))
 """A drop-chance slope of 1/100 per prospecting point: a +100 tool doubles a
@@ -63,7 +63,7 @@ def test_the_narrowing_ranks_sources_at_the_gather_loadouts_prospecting() -> Non
     """At the worn total `far_spot` (a sure drop) beats `near_spot`; with the
     net the gather is made in both are sure, and the nearer one is kept."""
     gd = _gd()
-    goal = GatherMaterialsGoal(target_item="pearl", needed={"pearl": 1})
+    goal = GatherMaterialsGoal(target_item="pearl", needed={"pearl": 1}, now=cycle_now())
     actions = [_gather("near_spot", (1, 0)), _gather("far_spot", (9, 0))]
     bare = make_state(skills={**make_state().skills, "fishing": 5})
     kept = goal.relevant_actions(actions, bare, gd)

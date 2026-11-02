@@ -76,7 +76,7 @@ from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = Path(__file__).parent / "scenarios" / "fixtures" / "gamedata_bundle.json"
@@ -178,7 +178,7 @@ def test_a_layer_zero_piece_is_served_or_climbs() -> None:
                 continue
             step = actionable_step(ObtainItem(piece.code, 1, slot=piece.slot), state, world,
                                    ctx)
-            gated = objective.classify_target(piece.code, state).blocking_skill is not None
+            gated = objective.classify_target(piece.code, state, now=cycle_now()).blocking_skill is not None
             assert step is not None or gated, (name, piece)
             served += 1
     assert served > 100, served
@@ -222,7 +222,7 @@ def test_every_layer_zero_piece_the_model_calls_achievable_the_walk_serves() -> 
         for piece in ctx.gear_objective.missing:
             if piece.layer != 0 or piece.awaits_delivery(state):
                 continue
-            target = piece_target(piece, objective, state)
+            target = piece_target(piece, objective, state, now=cycle_now())
             root = IsThisTargetBlocked(piece.slot, target, RootWalk(step_decline=decline)).resolve(
                 state, world, ctx, None)
             reason = decline(root)
@@ -565,7 +565,7 @@ def test_a_piece_s_grey_material_is_farmed(name: str) -> None:
     plan = decompose(goal, state, world, actions, ctx, declined)
     assert plan is not None, declined
     # Not a piece's material: the directive stands, as before.
-    plain = GatherMaterialsGoal(goal.target_item, goal.needed)
+    plain = GatherMaterialsGoal(goal.target_item, goal.needed, now=cycle_now())
     refused: list[str] = []
     assert decompose(plain, state, world, actions, ctx, refused) is None
     assert refused == ["infeasible:cloth:no_route:wool"]
@@ -588,7 +588,7 @@ def test_the_piece_exemption_keeps_the_demand_gate() -> None:
     player, _goal = _shield_step(SHIELD_CELL)
     state = player.state
     assert state is not None
-    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True)
+    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True, now=cycle_now())
     declined: list[str] = []
     assert decompose(egg, state, world, player._build_actions(),
                      player._selection_context(), declined) is None
@@ -831,6 +831,6 @@ def test_a_piece_s_search_keeps_the_demand_gate() -> None:
     player, _goal = _shield_step(SHIELD_CELL)
     state, world = player.state, player.game_data
     assert state is not None and world is not None
-    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True)
+    egg = GatherMaterialsGoal("golden_egg", {"golden_egg": 1}, piece_material=True, now=cycle_now())
     assert not [a for a in egg.relevant_actions(player._build_actions(), state, world)
                 if isinstance(a, FightAction) and a.monster_code == "chicken"]

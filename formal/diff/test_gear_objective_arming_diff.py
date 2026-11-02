@@ -40,13 +40,13 @@ from artifactsmmo_cli.ai.decisions import which_piece_is_next as wp
 from artifactsmmo_cli.ai.decisions.root import RootWalk, resolve_root
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
-from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ReachCharLevel, no_decline
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.shared_world import attached, shared_world
 
 BUNDLE = (Path(__file__).resolve().parents[2] / "tests" / "test_ai" / "scenarios"
@@ -131,7 +131,7 @@ def test_production_matches_the_lean_root_walk(name: str, carried: bool) -> None
     # The root: production's `resolve_root` from `WhichPieceIsNext`.
     walk = RootWalk(step_decline=no_decline)
     served = ([not piece.awaits_delivery(state)
-               and walk.serves(piece.slot, wp.piece_target(piece, sheet, state),
+               and walk.serves(piece.slot, wp.piece_target(piece, sheet, state, now=cycle_now()),
                                state, gd, ctx, None)
                for piece in objective.missing] if objective is not None else [])
     at_cap = wp.next_level(state, gd) is None
@@ -146,7 +146,7 @@ def test_production_matches_the_lean_root_walk(name: str, carried: bool) -> None
     else:
         assert objective is not None
         piece = objective.missing[expected[1]]
-        want = wp.piece_step(piece.slot, wp.piece_target(piece, sheet, state),
+        want = wp.piece_step(piece.slot, wp.piece_target(piece, sheet, state, now=cycle_now()),
                              RootWalk(step_decline=no_decline), state, gd, ctx, None)
     assert actual == want, (name, carried, actual, want)
 
@@ -170,7 +170,7 @@ def test_both_halves_are_in_the_sweep() -> None:
         walk = RootWalk(step_decline=no_decline)
         seen["piece"] += any(
             not piece.awaits_delivery(state)
-            and walk.serves(piece.slot, wp.piece_target(piece, sheet, state), state, gd, ctx, None)
+            and walk.serves(piece.slot, wp.piece_target(piece, sheet, state, now=cycle_now()), state, gd, ctx, None)
             for piece in objective.missing)
         if seen["held"] and seen["piece"]:
             return
@@ -198,7 +198,7 @@ def test_a_declined_first_piece_hands_the_root_to_the_next() -> None:
 
         walk = RootWalk(step_decline=decline_first)
         served = [not piece.awaits_delivery(state)
-                  and walk.serves(piece.slot, wp.piece_target(piece, sheet, state),
+                  and walk.serves(piece.slot, wp.piece_target(piece, sheet, state, now=cycle_now()),
                                   state, gd, ctx, None)
                   for piece in objective.missing]
         expected = _lean_root(objective, served, False)
@@ -208,7 +208,7 @@ def test_a_declined_first_piece_hands_the_root_to_the_next() -> None:
         else:
             piece = objective.missing[expected[1]]
             assert actual == wp.piece_step(
-                piece.slot, wp.piece_target(piece, sheet, state),
+                piece.slot, wp.piece_target(piece, sheet, state, now=cycle_now()),
                 RootWalk(step_decline=decline_first), state, gd, ctx, None), name
             assert actual != first, name
         return

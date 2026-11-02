@@ -35,7 +35,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import _delete_cost
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def make_game_data(
@@ -1647,7 +1647,7 @@ class TestGatherRareDropTargeting:
         gd.world.bank_tile = (1, 1)
         gd.world.taskmaster_tile = (2, 2)
         actions = build_actions(gd, None, None, bank_accessible=False,
-                                task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())
+                                task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(), now=cycle_now())
         names = {repr(a) for a in actions}
         assert "Gather(copper_rocks×1)" in names
         assert "Gather(copper_rocks->emerald_stone×1)" in names
@@ -1670,12 +1670,14 @@ def test_factory_emits_equip_for_owned_recipeless_equippable():
     gd.world.taskmaster_tile = (2, 2)
     held = make_state(inventory={"dune_bag": 1})
     names = {repr(a) for a in build_actions(gd, held, None, bank_accessible=True,
-                                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())}
+                                            task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                            now=cycle_now())}
     assert "Equip(dune_bag->bag_slot)" in names, sorted(
         n for n in names if "dune" in n)
     banked = make_state(bank_items={"dune_bag": 1})
     names_b = {repr(a) for a in build_actions(gd, banked, None, bank_accessible=True,
-                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty())}
+                                              task_exchange_min_coins=0, learned_drops=LearnedDrops.empty(),
+                                              now=cycle_now())}
     assert "Equip(dune_bag->bag_slot)" in names_b
     assert any(n.startswith("Withdraw(dune_bag") for n in names_b), sorted(
         n for n in names_b if "dune" in n)

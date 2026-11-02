@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def test_a_character_grind_is_measured_in_character_xp():
@@ -33,7 +33,7 @@ def test_a_skill_grind_is_measured_in_that_skill_only():
 
 
 def test_other_goals_have_no_xp_measure():
-    assert progress_measure(GatherMaterialsGoal("x", {"x": 1}), make_state()) is None
+    assert progress_measure(GatherMaterialsGoal("x", {"x": 1}, now=cycle_now()), make_state()) is None
 
 
 def test_a_successful_leg_or_rising_xp_is_progress():

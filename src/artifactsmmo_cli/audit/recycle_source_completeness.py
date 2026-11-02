@@ -489,7 +489,7 @@ def plan_recycle_source(cell: RecycleSourceCell, state: WorldState,
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     goal, plan, tried = arbiter.select(
         census_decision(cell), state, game_data, actions, ctx)

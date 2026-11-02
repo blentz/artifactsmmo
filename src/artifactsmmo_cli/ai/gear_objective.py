@@ -57,7 +57,7 @@ and a monster with heavy drops far from the bank values it more.
 from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import EQUIP_ACTIONS, cheapest_route
@@ -229,7 +229,7 @@ def _targets(state: WorldState, game_data: GameData,
     return {code: _target(bare, game_data, code) for code in _candidates(state, game_data)}
 
 
-def _universe(state: WorldState, game_data: GameData) -> frozenset[str]:
+def _universe(state: WorldState, game_data: GameData, now: datetime) -> frozenset[str]:
     """Level-legal gear (every slot type but the consumables `best_loadout`
     owns) that this character holds, wears or banks, or can ever come to hold:
     `is_suppliable`, which counts a fixed-supply item only while a free copy is
@@ -239,7 +239,7 @@ def _universe(state: WorldState, game_data: GameData) -> frozenset[str]:
         code for code, stats in game_data.items.stats.items()
         if stats.type_ in ITEM_TYPE_TO_SLOTS and stats.type_ != POTION
         and stats.level <= state.level
-        and (code in held or is_suppliable(code, state, game_data)))
+        and (code in held or is_suppliable(code, state, game_data, now)))
 
 
 def _held(state: WorldState) -> frozenset[str]:
@@ -262,8 +262,9 @@ def achievable(state: WorldState, game_data: GameData,
     every WINNABLE gate open (`_reachable_by_some_fighter`) is out of reach of
     every later layer too, and later walks skip it: the layers are the ones
     walking it again would give."""
-    open_items = set(_universe(state, game_data))
-    now = datetime.now(UTC)
+    # The cycle clock (ruling T8b): every layer's walk reads one instant.
+    now = ctx.now
+    open_items = set(_universe(state, game_data, now))
 
     def unlock(owned: frozenset[str]) -> frozenset[str]:
         model = ObtainModel(state, game_data, ctx, now, fighter=_fighters(state, owned, game_data))

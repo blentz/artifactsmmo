@@ -123,11 +123,11 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # A buyer that can take it NOW — never the window-blind "some held code
         # has a located buyer" test. See `sellable_tradeable_now`.
         return (used_fraction(state) >= SELL_PRESSURE_FRACTION
-                and sellable_tradeable_now(state, game_data))
+                and sellable_tradeable_now(state, game_data, ctx.now))
 
     if kind is MeansKind.SELL_IDLE:
         return (used_fraction(state) < SELL_PRESSURE_FRACTION
-                and sellable_tradeable_now(state, game_data))
+                and sellable_tradeable_now(state, game_data, ctx.now))
 
     if kind is MeansKind.RECYCLE_SURPLUS:
         # Idle/low-pressure only: recovered materials need room to land (under

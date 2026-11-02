@@ -1568,8 +1568,10 @@ ONE_DROP_MODEL_PLAYER_MUTATIONS = [
      "        ctx = self._timed(replace(NO_PROFILE_CONTEXT,\n"
      "                                  learned_drops=LearnedDrops.empty()))\n        work"),
     ("player: the actions carry the prior",
-     "            learned_drops=self._cycle_learned_drops(),\n        )\n        # Route around",
-     "            learned_drops=LearnedDrops.empty(),\n        )\n        # Route around"),
+     "            learned_drops=self._cycle_learned_drops(),\n"
+     "            now=self._cycle_now,\n        )\n        # Route around",
+     "            learned_drops=LearnedDrops.empty(),\n"
+     "            now=self._cycle_now,\n        )\n        # Route around"),
 ]
 # The cycle's selection context carries the cycle's evidence (ruling T16b, I2).
 # Killed by tests/test_ai/test_player_gear_objective.py.
@@ -2771,12 +2773,14 @@ GATHERING_CURRENCY_BATCH_MUTATIONS = [
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
      "                                               quantity=batch,\n"
-     "                                               travel_region=game_data.npc_region(npc_code)))\n"
+     "                                               travel_region=game_data.npc_region(npc_code),\n"
+     "                                               now=self._now))\n"
      "                continue",
      "                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,\n"
      "                                               npc_location=game_data.npc_location(npc_code),\n"
      "                                               quantity=qty,\n"
-     "                                               travel_region=game_data.npc_region(npc_code)))\n"
+     "                                               travel_region=game_data.npc_region(npc_code),\n"
+     "                                               now=self._now))\n"
      "                continue"),
     ("gathering: ferry nets the pocket a second time",
      "                quantity = shortfall if cap is None else min(shortfall, cap)",
@@ -3236,15 +3240,15 @@ SKILL_GRINDABLE_MUTATIONS = [
     # fixture (under-target but no feasible rung).
     ("skill_grindable: drop grind-rung conjunct",
      "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
-     "            or has_grind_target(skill, state, game_data))\n",
+     "            or has_grind_target(skill, state, game_data, now))\n",
      "    return True\n"),
     # drop the GATHER arm of the rung conjunct -- a gather skill with no craft
     # rung (alchemy @ 1) becomes not-applicable, violating hasGrindRung. Killed
     # by the gather-skill fixture (skill_grind_target None, best_gather present).
     ("skill_grindable: drop gather arm of grind-rung conjunct",
      "    return (best_gather_resource_drop(skill, current, game_data) is not None\n"
-     "            or has_grind_target(skill, state, game_data))\n",
-     "    return has_grind_target(skill, state, game_data)\n"),
+     "            or has_grind_target(skill, state, game_data, now))\n",
+     "    return has_grind_target(skill, state, game_data, now)\n"),
 ]
 
 
@@ -3466,7 +3470,7 @@ STRATEGY_MUTATIONS = [
     # obtain leaf is wrongly returned as the actionable step (a node with no real
     # action). The actionable-correctness contract (obtain ⇒ producible) catches it.
     ("strategy: actionable_step drop producible check",
-     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):\n"
+     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data, ctx.now):\n"
      "                return None\n"
      "            return node",
      "            return node"),
@@ -4462,11 +4466,11 @@ PIECE_POLICY_PRICER_MUTATIONS = [
 # reachability walk's policy (M4).
 SERVED_BY_ITS_ROUTE_WHICH_PIECE_MUTATIONS = [
     ("which-piece: every piece classified behind its crafting gate",
-     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
-     "    if True:\n        return objective.classify_target(piece.code, state)\n"),
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state, now)\n",
+     "    if True:\n        return objective.classify_target(piece.code, state, now)\n"),
     ("which-piece: no piece classified behind its crafting gate",
-     "    if piece.crafted:\n        return objective.classify_target(piece.code, state)\n",
-     "    if False:\n        return objective.classify_target(piece.code, state)\n"),
+     "    if piece.crafted:\n        return objective.classify_target(piece.code, state, now)\n",
+     "    if False:\n        return objective.classify_target(piece.code, state, now)\n"),
 ]
 SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
     ("gear_objective_result: a GE fill counts as crafted",
@@ -4475,8 +4479,8 @@ SERVED_BY_ITS_ROUTE_RESULT_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_ROOT_MUTATIONS = [
     ("root: the alternatives classify every piece behind its crafting gate",
-     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),",
-     "        _which_piece.piece_step(piece.slot, objective.classify_target(piece.code, state),"),
+     "                                _which_piece.piece_target(piece, objective, state, ctx.now),",
+     "                                objective.classify_target(piece.code, state, ctx.now),"),
 ]
 SERVED_BY_ITS_ROUTE_PRICE_MUTATIONS = [
     ("gear_objective: the piece forgets the route that priced it",
@@ -4586,9 +4590,9 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
 PIECE_GE_ROUTING_MUTATIONS = [
     ("piece GE: a piece's currency step is walked without the piece's routes",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=piece)",
+     "                                           fight_gold=piece, now=ctx.now)",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=False)"),
+     "                                           fight_gold=False, now=ctx.now)"),
 ]
 PIECE_GE_DECOMPOSE_MUTATIONS = [
     ("piece GE: a piece's walk has no GE fill (D-E kept)",
@@ -4764,7 +4768,7 @@ DECOMPOSE_GAP_MUTATIONS = [
      "            return WithdrawItemAction(code=step.item, quantity=step.amount,",
      "            return None and WithdrawItemAction(code=step.item, quantity=step.amount,"),
     ("craft_plan_gen: a skill gate is never a sub-task",
-     "            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data)",
+     "            verdicts[key] = skill_is_grindable(gate.subject, gate.level, state, game_data, ctx.now)",
      "            verdicts[key] = False"),
     ("craft_plan_gen: a skill already being ground is opened again inside itself",
      "                or gate.level is None or gate.subject in grinding):",
@@ -5630,7 +5634,7 @@ ROOT_DECISION_MUTATIONS = [
     ("root: the orphan rule drops the open-rung conjunct, so a skill with no"
      " XP-positive rung is routed anyway (the o1_silent_stall residual)",
      "        and _skill_grindable.skill_is_grindable(\n"
-     "            skill, state.skills.get(skill, 1) + 1, state, game_data)]\n",
+     "            skill, state.skills.get(skill, 1) + 1, state, game_data, ctx.now)]\n",
      "        ]\n"),
     ("root: the orphan order runs from the LEAST-behind skill",
      "    orphans.sort(key=lambda skill: (state.skills.get(skill, 1) - state.level,\n",
@@ -5641,7 +5645,7 @@ ROOT_DECISION_MUTATIONS = [
     # `test_the_orphan_roots_sit_behind_the_trunk` still witnesses the order.
     ("root: the sibling conversion reuses the real walk, so converting an"
      " alternative pollutes the trail",
-     "                                RootWalk(step_decline=step_decline, now=walk.now),\n",
+     "                                RootWalk(step_decline=step_decline),\n",
      "                                walk,\n"),
     # `RootResolution.alternatives` construction. Both conjuncts are load
     # bearing and each gets its own mutant: without `alt != root` the chosen
@@ -6572,8 +6576,8 @@ GEAR_OBJECTIVE_MUTATIONS = [
      "        and stats.level <= state.level",
      "        and True"),
     ("gear objective: worn gear with no supplier is not achievable",
-     "        and (code in held or is_suppliable(code, state, game_data)))",
-     "        and is_suppliable(code, state, game_data))"),
+     "        and (code in held or is_suppliable(code, state, game_data, now)))",
+     "        and is_suppliable(code, state, game_data, now))"),
     ("gear objective: one copy of a ring",
      "RING_COPIES = 2",
      "RING_COPIES = 1"),
@@ -6870,11 +6874,13 @@ DROP_TOOL_WALK_MUTATIONS = [
 ]
 DROP_TOOL_ALTERNATIVES_MUTATIONS = [
     ("root: a missing piece's alternative ignores the prospecting item",
-     "        _which_piece.piece_step(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
-     "                                RootWalk(step_decline=step_decline, now=walk.now),\n"
+     "        _which_piece.piece_step(piece.slot,\n"
+     "                                _which_piece.piece_target(piece, objective, state, ctx.now),\n"
+     "                                RootWalk(step_decline=step_decline),\n"
      "                                state, game_data, ctx, history)\n",
-     "        IsThisTargetBlocked(piece.slot, _which_piece.piece_target(piece, objective, state),\n"
-     "                            RootWalk(step_decline=step_decline, now=walk.now)\n"
+     "        IsThisTargetBlocked(piece.slot,\n"
+     "                            _which_piece.piece_target(piece, objective, state, ctx.now),\n"
+     "                            RootWalk(step_decline=step_decline)\n"
      "                            ).resolve(state, game_data, ctx, history)\n"),
 ]
 DROP_TOOL_WORK_MUTATIONS = [
@@ -7850,8 +7856,8 @@ CARRY_GOAL_MUTATIONS = [
 ]
 CARRY_PREP_MUTATIONS = [
     ("carry: heal prep emits a plain gather (bank satisfies it)",
-     "                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True)\n",
-     "                return GatherMaterialsGoal(target_item=code, needed={code: target})\n"),
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target}, carry=True,\n",
+     "                return GatherMaterialsGoal(target_item=code, needed={code: target},\n"),
 ]
 FIGHT_STEP_PREP_MUTATIONS = [
     ("fight steps: the grind never preps",
@@ -8657,8 +8663,8 @@ PIECE_GREY_GOAL_MUTATIONS = [
      "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
      "                            or self.piece_material\n"),
     ("piece grey: for_piece leaves the goal unmarked",
-     "                                   fight_gold=self.fight_gold, piece_material=True)",
-     "                                   fight_gold=self.fight_gold, piece_material=False)"),
+     "                                   fight_gold=self.fight_gold, piece_material=True, now=self._now)",
+     "                                   fight_gold=self.fight_gold, piece_material=False, now=self._now)"),
 ]
 PIECE_GREY_SEAM_MUTATIONS = [
     ("piece grey: a piece's gather is never marked",
@@ -9398,23 +9404,27 @@ NPC_REGION_FACTORY_MUTATIONS = [
     ("npc region: the factory's buys travel in the overworld",
      "                npc_location=npc_loc,\n"
      "                travel_region=game_data.npc_region(npc_code),\n"
+     "                now=now,\n"
      "            ))\n"
      "\n"
      "    # NPC sell actions",
-     "                npc_location=npc_loc,\n            ))\n\n    # NPC sell actions"),
+     "                npc_location=npc_loc,\n                now=now,\n            ))\n\n    # NPC sell actions"),
     ("npc region: the factory's sells travel in the overworld",
      "                npc_location=npc_loc,\n"
      "                travel_region=game_data.npc_region(npc_code),\n"
+     "                now=now,\n"
      "            ))\n"
      "\n"
      "    # P5b",
-     "                npc_location=npc_loc,\n            ))\n\n    # P5b"),
+     "                npc_location=npc_loc,\n                now=now,\n            ))\n\n    # P5b"),
 ]
 NPC_REGION_GOAL_MUTATIONS = [
     ("npc region: a goal's craft-vs-buy offer travels in the overworld",
      "                                       quantity=qty,\n"
-     "                                       travel_region=game_data.npc_region(npc_code)))\n",
-     "                                       quantity=qty))\n"),
+     "                                       travel_region=game_data.npc_region(npc_code),\n"
+     "                                       now=self._now))\n",
+     "                                       quantity=qty,\n"
+     "                                       now=self._now))\n"),
 ]
 GREY_CURRENCY_MUTATIONS = [
     ("grey farm: a currency serves only its own consumers",
@@ -9526,7 +9536,7 @@ FIGHT_NEED_MUTATIONS = [
 # The fight step carries the potions the CRAFT_POTIONS ladder cannot brew (2026-10-10).
 POTION_PREP_MUTATIONS = [
     ("potion prep: a potion the ladder brews is carried twice",
-     "                and not ladder_supplies(code, needed, state, game_data)\n",
+     "                and not ladder_supplies(code, needed, state, game_data, ctx.now)\n",
      "\n"),
     ("potion prep: the worn units are carried again",
      "        needed = potion_carry(used) - equipped_potion_qty(state, code)\n",
@@ -9554,14 +9564,14 @@ FIGHT_STEP_POTION_MUTATIONS = [
 ]
 LADDER_SUPPLIES_MUTATIONS = [
     ("ladder supplies: every potion is the ladder's",
-     "    return _sized(code, deficit, state, game_data) is not None\n",
+     "    return _sized(code, deficit, state, game_data, now) is not None\n",
      "    return True\n"),
     ("prep supplies: greys are never admitted",
      "                      grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible\n",
      "                      grey_ok=lambda item: False).feasible\n"),
     ("potion stockable: a held potion is not stockable",
-     "    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)\n",
-     "    return (ladder_supplies(code, 1, state, game_data)\n"),
+     "    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data, ctx.now)\n",
+     "    return (ladder_supplies(code, 1, state, game_data, ctx.now)\n"),
     ("potion stockable: the prep never stocks",
      "            or prep_supplies(code, 1, state, game_data, ctx))\n",
      "            or False)\n"),
@@ -11570,9 +11580,9 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     (
         "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
         "        return (used_fraction(state) < SELL_PRESSURE_FRACTION\n"
-        "                and sellable_tradeable_now(state, game_data))",
+        "                and sellable_tradeable_now(state, game_data, ctx.now))",
         "        return (used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
-        "                and sellable_tradeable_now(state, game_data))",
+        "                and sellable_tradeable_now(state, game_data, ctx.now))",
     ),
     (
         # The guard delegates to the proven should_expand_bank core
@@ -11817,7 +11827,7 @@ SKILL_CLIMB_MUTATIONS = [
      "        return ClimbGap.SKILL_CATALOGUE_EMPTY\n",
      "        return ClimbGap.WALL_SKILL_TOPPED\n"),
     ("skill climb: the verdict ignores production's predicate",
-     "            open_climb = skill_is_grindable(skill, level + 1, state, game_data)\n",
+     "            open_climb = skill_is_grindable(skill, level + 1, state, game_data, _OFFLINE_CONTEXT.now)\n",
      "            open_climb = True\n"),
 ]
 
@@ -12536,7 +12546,7 @@ TASK_STEP_MUTATIONS = [
      "            if ctx.draw_master is not None:\n",
      "            if False:\n"),
     ("step: an items task is never worked (c-2 pursue fold)",
-     "            return _pursue_goal(state, game_data)\n",
+     "            return _pursue_goal(state, game_data, ctx.now)\n",
      "            return None\n"),
     ("step: an owed draw is never taken (c-2 accept fold)",
      "        if step.task_code is None and accept_due(state, ctx):\n",
@@ -13393,8 +13403,8 @@ CRAFT_POTIONS_GUARD_MONSTER_MUTATIONS = [
 # tests/test_ai/test_tiers_guards.py, player arms by tests/test_ai/test_fight_monster.py.
 POTION_FIGHT_AHEAD_GUARD_MUTATIONS = [
     ("guards(CRAFT_POTIONS): stock the loadout without a fight ahead",
-     "guard_loadout(ctx.loadout, ctx.fight_monster))",
-     "ctx.loadout)"),
+     "guard_loadout(ctx.loadout, ctx.fight_monster),\n",
+     "ctx.loadout,\n"),
 ]
 POTION_FIGHT_AHEAD_PLAYER_MUTATIONS = [
     ("player: the fight is forgotten when an interrupt replaces the plan cache",

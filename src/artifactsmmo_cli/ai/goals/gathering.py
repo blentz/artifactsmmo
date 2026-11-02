@@ -1,6 +1,7 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
 import dataclasses
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -72,8 +73,13 @@ class GatherMaterialsGoal(Goal):
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
                  carry: bool = False, fight_gold: bool = False,
-                 piece_material: bool = False) -> None:
+                 piece_material: bool = False, *, now: datetime) -> None:
         self._target_item = target_item
+        # now: the cycle clock (ruling T8b), the `SelectionContext.now` of the
+        # cycle that built this goal. Every NPC buy the goal mints carries it,
+        # so the buy's event window is judged at the instant the rest of the
+        # cycle's decision is. Not part of goal identity, like `skill_grind`.
+        self._now = now
         # piece_material: the goal walks a material of a missing `L*` piece
         # (ruling T14a-D; `for_piece`), so a grey dropper of a material that
         # serves a demand may be farmed: the grey-farm directive's next-tier
@@ -116,7 +122,7 @@ class GatherMaterialsGoal(Goal):
         return GatherMaterialsGoal(self._target_item, dict(self._needed),
                                    skill_grind=self.skill_grind,
                                    exclude_recycle=self._exclude_recycle, carry=self.carry,
-                                   fight_gold=self.fight_gold, piece_material=True)
+                                   fight_gold=self.fight_gold, piece_material=True, now=self._now)
 
     @property
     def needed(self) -> dict[str, int]:
@@ -549,7 +555,8 @@ class GatherMaterialsGoal(Goal):
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
                                                quantity=batch,
-                                               travel_region=game_data.npc_region(npc_code)))
+                                               travel_region=game_data.npc_region(npc_code),
+                                               now=self._now))
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
@@ -582,7 +589,8 @@ class GatherMaterialsGoal(Goal):
                     result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                                npc_location=game_data.npc_location(npc_code),
                                                quantity=batch,
-                                               travel_region=game_data.npc_region(npc_code)))
+                                               travel_region=game_data.npc_region(npc_code),
+                                               now=self._now))
                 continue
             # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
             # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
@@ -598,7 +606,8 @@ class GatherMaterialsGoal(Goal):
             result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                        npc_location=game_data.npc_location(npc_code),
                                        quantity=qty,
-                                       travel_region=game_data.npc_region(npc_code)))
+                                       travel_region=game_data.npc_region(npc_code),
+                                       now=self._now))
             # Immediate-fill GE buy source (DUAL of the discard_overstock GE
             # liquidation): when a standing GE SELL order is strictly cheaper than
             # the NPC buy price AND can supply the whole qty in one fill, also offer

@@ -44,7 +44,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     TaskHorizon,
 )
 from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.test_grey_farm import _gd, make_state
 
 
@@ -91,7 +91,7 @@ class TestTaskKillsGoal:
 
     def test_it_round_trips_through_the_plan_cache(self) -> None:
         goal = TaskKillsGoal("chicken", 3)
-        back = goal_from_dict(goal_to_dict(goal), None)
+        back = goal_from_dict(goal_to_dict(goal), None, now=cycle_now())
         assert isinstance(back, TaskKillsGoal)
         assert repr(back) == repr(goal) == "TaskKills(chicken)"
         assert not back.is_satisfied(_held(3)) and back.is_satisfied(_held(4))

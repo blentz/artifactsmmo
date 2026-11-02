@@ -27,7 +27,7 @@ from artifactsmmo_cli.ai.strategy_driver import _fight_step_prep
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 
 _CTX = TIMED_NO_PROFILE_CONTEXT
 _UTILITY = dict(level=1, type_="utility")
@@ -270,7 +270,7 @@ class TestChosen:
         assert loadout_for(state, gd, _CTX, "ogre") == got
         prep = heal_prep_goal(state, gd, replace(ctx, loadout=got), got)
         assert repr(prep) == repr(GatherMaterialsGoal(target_item="apple", needed={"apple": 3},
-                                                      carry=True))
+                                                      carry=True, now=cycle_now()))
         step = _fight_step_prep(state, gd, replace(ctx, loadout=got), got)
         assert repr(step) == repr(prep)
 

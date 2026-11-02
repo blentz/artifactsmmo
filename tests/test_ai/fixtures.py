@@ -73,7 +73,7 @@ API cannot produce. Any hand-built `GameData` a `StrategyEngine.decide` or
 def obtainable_now(code: str, state: WorldState, gd: GameData) -> bool:
     """One `code` obtainable from `state`: production's `feasible_now`, the
     question `classify_target` asks of its target and materials."""
-    return feasible_now(near_term_model(state, gd), code)
+    return feasible_now(near_term_model(state, gd, cycle_now()), code)
 
 
 def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionContext:
@@ -83,6 +83,15 @@ def with_missing(ctx: SelectionContext, *pieces: tuple[str, str]) -> SelectionCo
                     for slot, code in pieces)
     return replace(ctx, gear_objective=GearObjective(
         "chicken", {slot: code for slot, code in pieces}, Fraction(1), missing))
+
+
+def cycle_now() -> datetime:
+    """The cycle clock a test hands to decision code that takes one (ruling
+    T8b), read at CALL time: the instant `GamePlayer._stamp_cycle` would read
+    for a cycle run now. A test about a wall-clock-relative window (an event
+    expiring an hour from now) keeps the meaning it had when the code read the
+    wall itself; a test about the clock passes its own fixed instant."""
+    return datetime.now(tz=timezone.utc)
 
 
 def coordination_now() -> datetime:

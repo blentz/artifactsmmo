@@ -6,7 +6,7 @@ Lives above goals/ and progression/ (imports both) to avoid the goals→progress
 import time
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime
 
 from artifactsmmo_cli.ai.accumulation_sell import bank_sellable_surplus, sell_targets
 from artifactsmmo_cli.ai.actions.base import Action
@@ -352,7 +352,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         # cannot stock for different potions or fights.
         return CraftPotionsGoal(
             loadout=guard_loadout(ctx.loadout, ctx.fight_monster),
-            game_data=game_data, state=state)
+            game_data=game_data, state=state, now=ctx.now)
     if kind is GuardKind.PARTY_JOIN:
         if ctx.party_hold is None:
             raise ValueError("PARTY_JOIN mapped but no lease names this character")
@@ -628,7 +628,7 @@ def objective_step_goal(
             return None
         if state.task_type == "items":
             # c-2 #4/#5: a held items task not cancelled for its worth is worked.
-            return _pursue_goal(state, game_data)
+            return _pursue_goal(state, game_data, ctx.now)
         loadout = _fight_step_loadout(state, game_data, ctx, step.task_code)
         if loadout is not None:
             no_room = refused_monster(loadout)
@@ -696,7 +696,7 @@ def _fleet_step_goal(step: ReachFleetOutcome, state: WorldState,
         if not supply_due(ctx) or target is None or target[0] != step.code:
             return None
         item_code, quantity, demand = target
-        goal = SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand)
+        goal = SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand, now=ctx.now)
     else:
         if not turn_in_due(ctx):
             return None
@@ -777,7 +777,7 @@ def raid_may_fight(objective: GearObjective | None, chosen_root: MetaGoal | None
     return any(item in closure for item, *_ in boss_drops)
 
 
-def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
+def _pursue_goal(state: WorldState, game_data: GameData, now: datetime) -> Goal:
     """The held items task's work: the task skill's grind while it gates the
     task item, else the task pursuit batch."""
     req = task_requirement(state, game_data)
@@ -799,7 +799,7 @@ def _pursue_goal(state: WorldState, game_data: GameData) -> Goal:
         # cycles of Wait. Decomposition sizes the gathers and withdraws banked
         # stock; the trade follows once the batch is held.
         return GatherMaterialsGoal(target_item=state.task_code,
-                                   needed={state.task_code: batch})
+                                   needed={state.task_code: batch}, now=now)
     return PursueTaskGoal(task_code=state.task_code,
                           initial_progress=state.task_progress,
                           batch=batch)
@@ -1018,8 +1018,7 @@ class StrategyArbiter:
         # that actually touch event-only content are affected -- content with a
         # permanent spawn is never gated, and a plan with no event content at all
         # short-circuits before any cost is summed.
-        if plan and not plan_fits_event_window(plan, state, game_data,
-                                               datetime.now(timezone.utc)):
+        if plan and not plan_fits_event_window(plan, state, game_data, ctx.now):
             plan = []
         self.goals_tried.append({
             "goal": repr(goal),

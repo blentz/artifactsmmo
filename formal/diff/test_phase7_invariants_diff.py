@@ -36,6 +36,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
+from tests.test_ai.fixtures import cycle_now
 
 
 def _mkstate(
@@ -68,7 +69,7 @@ def _mkstate(
 def test_gather_total_needed_zero_returns_zero():
     """Pre-fix probe: needed sums to 0 but is_satisfied is False → ZeroDivisionError.
     Post-fix returns 0 (the guard catches `total_needed <= 0`)."""
-    g = GatherMaterialsGoal(target_item="x", needed={"a": -5, "b": 5})
+    g = GatherMaterialsGoal(target_item="x", needed={"a": -5, "b": 5}, now=cycle_now())
     state = _mkstate()
     gd = GameData()
     # The post-fix returns 0.0 without crashing.
@@ -81,7 +82,7 @@ def test_gather_total_needed_zero_returns_zero():
 def test_gather_total_needed_negative_returns_zero():
     """Pre-fix: negative totalNeeded would also divide (1 - x/-n). The guard
     catches the `<= 0` branch."""
-    g = GatherMaterialsGoal(target_item="x", needed={"a": -3})
+    g = GatherMaterialsGoal(target_item="x", needed={"a": -3}, now=cycle_now())
     state = _mkstate()
     gd = GameData()
     assert g.value(state, gd) == 0.0
@@ -103,7 +104,7 @@ def test_gather_positive_branch_matches_lean(needed_qty, have_qty):
     # finished target trips is_satisfied's finished-target short-circuit
     # (ash-wood preemption fix), which would zero the value upstream of the
     # baseValue math under test.
-    g = GatherMaterialsGoal(target_item="x", needed={"mat": needed_qty})
+    g = GatherMaterialsGoal(target_item="x", needed={"mat": needed_qty}, now=cycle_now())
     state = _mkstate(inventory={"mat": have_qty})
     gd = GameData()
     py = g.value(state, gd)

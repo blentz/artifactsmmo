@@ -355,7 +355,7 @@ def drive_selector(cell: ShedCell, state: WorldState,
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     step = ReachCharLevel(level=CENSUS_STEP_LEVEL)
     decision = StrategyDecision(interrupt=None, chosen_root=step,

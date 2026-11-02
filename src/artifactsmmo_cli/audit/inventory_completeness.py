@@ -67,6 +67,7 @@ blankets, so the in-bag LIVENESS cells fail today. That is the census working.
 
 import dataclasses
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Literal
 
@@ -696,7 +697,7 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(game_data, state, objective,
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     _goal, plan, tried = arbiter.select(
         census_decision(cell.reason, game_data), state, game_data, actions, ctx)
@@ -855,7 +856,10 @@ def _sellable(code: str, state: WorldState, game_data: GameData) -> bool:
     route — production is right to keep holding it."""
     return any(NpcSellAction(npc_code=npc, item_code=code, quantity=1,
                              npc_location=game_data.npc_location(npc),
-                             travel_region=game_data.npc_region(npc)
+                             travel_region=game_data.npc_region(npc),
+                             # The census is an offline sweep, outside any
+                             # cycle: its clock is the instant it is asked.
+                             now=datetime.now(UTC)
                              ).is_applicable(state, game_data)
                for npc, _price in game_data.npcs_buying_item(code))
 

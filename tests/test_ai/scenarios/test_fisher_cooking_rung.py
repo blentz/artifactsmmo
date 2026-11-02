@@ -57,7 +57,7 @@ from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit.grind_cycle_census import earned_skill
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.scenarios.routing import scenario_resolution, skills_offered
 
 CELL = "l24_fisher_cooking_rung"
@@ -97,7 +97,7 @@ def _gather_plan(state: WorldState, game_data: GameData,
     player._learned_drops = LearnedDrops.empty()
     player.seed_offline(state, game_data)
     actions = list(player._build_actions())
-    goal = GatherMaterialsGoal(target_item=code, needed={code: quantity})
+    goal = GatherMaterialsGoal(target_item=code, needed={code: quantity}, now=cycle_now())
     return decompose(goal, state, game_data, actions, TIMED_NO_PROFILE_CONTEXT) or []
 
 
@@ -135,7 +135,7 @@ def test_the_grind_stands_on_a_cooking_rung(
     assert stats.crafting_skill == SKILL
     assert stats.crafting_level <= state.skills[SKILL]
     assert bundle_game_data.crafting_recipes[RUNG] == {RAW: 1}
-    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data)
+    assert skill_is_grindable(SKILL, state.skills[SKILL] + 1, state, bundle_game_data, now=cycle_now())
 
 
 def test_the_descent_lands_on_the_fishing_gather(

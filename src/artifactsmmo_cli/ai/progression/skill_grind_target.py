@@ -34,7 +34,7 @@ such items so the reachable `copper_dagger` wins.
 
 import dataclasses
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
@@ -412,7 +412,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
 
 
 def has_grind_target(skill: str, state: WorldState,
-                    game_data: GameData) -> bool:
+                    game_data: GameData, now: datetime) -> bool:
     """Whether ANY rung qualifies to grind `skill` — existence, not the argmax.
 
     EXACTLY `skill_grind_target(skill, state, game_data) is not None`, and much
@@ -441,8 +441,8 @@ def has_grind_target(skill: str, state: WorldState,
     A caller that filters reserved materials wants the target itself anyway.
     """
     current = state.skills.get(skill, 0)
-    # Unmemoised and asked per planner node without a context: the wall clock.
-    model = grind_model(state, game_data, datetime.now(UTC))
+    # Unmemoised; the caller's cycle clock (ruling T8b).
+    model = grind_model(state, game_data, now)
     for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill or stats.crafting_level > current:
             continue

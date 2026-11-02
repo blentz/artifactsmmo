@@ -179,17 +179,17 @@ def plan_craft(recipe: str, state: WorldState, game_data: GameData, grey: bool =
 
     task_exchange_min_coins=0: task funding is irrelevant to craft planning."""
     objective = CharacterObjective.from_game_data(game_data)
-    actions = build_actions(
-        game_data, state, objective,
-        bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
-    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
-                               exclude_recycle=keep)
-    arbiter = StrategyArbiter(GOAPPlanner(), None)
     ctx = offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
     ))
+    actions = build_actions(
+        game_data, state, objective,
+        bank_accessible=True, task_exchange_min_coins=0,
+        learned_drops=LearnedDrops.empty(), now=ctx.now)
+    goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, skill_grind=grey,
+                               exclude_recycle=keep, now=ctx.now)
+    arbiter = StrategyArbiter(GOAPPlanner(), None)
     return arbiter._plans(goal, state, game_data, actions, ctx,
                           budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
@@ -208,11 +208,11 @@ def funding_plan(recipe: str, state: WorldState, game_data: GameData) -> list[Ac
         return []
     currency, amount = funding
     goal = funding_step_goal(currency, amount, state, game_data)
-    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
-                            bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
     ctx = offline_context(SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
                            initial_xp=0, task_exchange_min_coins=0, combat_monster=None))
+    actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
+                            bank_accessible=True, task_exchange_min_coins=0,
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     return StrategyArbiter(GOAPPlanner(), None)._plans(
         goal, state, game_data, actions, ctx,
         budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
@@ -866,9 +866,10 @@ def _armory(char_level: int, game_data: GameData) -> dict[str, int]:
     """Every suppliable equippable at `char_level` (two of each, for the ring
     pair), utility potions and bags excepted: the geared cell's held gear."""
     bare = scenario_state(ScenarioCharacter(name="census_armory", level=char_level), game_data)
+    now = _census_context().now
     return {code: 2 for code, stats in game_data.all_item_stats.items()
             if stats.type_ in ITEM_TYPE_TO_SLOTS and stats.type_ not in ("utility", "bag")
-            and stats.level <= char_level and is_suppliable(code, bare, game_data)}
+            and stats.level <= char_level and is_suppliable(code, bare, game_data, now)}
 
 
 CENSUS_GEAR_STEP = 5
@@ -963,12 +964,13 @@ def _census_declines(recipe: str, state: WorldState, game_data: GameData) -> lis
     no crossing to fail, so it is not asked (none)."""
     if not game_data.world.transition_edges:
         return []
+    ctx = _census_context()
     actions = build_actions(game_data, state, CharacterObjective.from_game_data(game_data),
                             bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=ctx.now)
     declined: list[str] = []
-    decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}), state, game_data,
-              actions, _census_context(), declined)
+    decompose(GatherMaterialsGoal(target_item=recipe, needed={recipe: 1}, now=ctx.now), state, game_data,
+              actions, ctx, declined)
     return declined
 
 

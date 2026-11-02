@@ -29,7 +29,7 @@ from artifactsmmo_cli.ai.player import PARTY_ASSEMBLY_SECONDS, GamePlayer
 from artifactsmmo_cli.ai.progression.guards import GuardKind
 from artifactsmmo_cli.ai.scenario import load_bundle_game_data
 from artifactsmmo_cli.ai.strategy_driver import map_guard
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 from tests.test_ai.test_strategy_driver import _ctx
 
@@ -110,7 +110,7 @@ def test_a_member_on_another_layer_crosses_to_the_tile() -> None:
     state = make_state(character="HAL", x=-3, y=12, layer="interior")
     goal = JoinPartyGoal(lease, gd)
     actions = build_actions(gd, state, None, bank_accessible=True, task_exchange_min_coins=0,
-                            learned_drops=LearnedDrops.empty())
+                            learned_drops=LearnedDrops.empty(), now=cycle_now())
     plan = GOAPPlanner().plan(state, goal, actions, gd)
     assert [repr(a) for a in plan] == ["Transition((-3,12,interior)->(-3,12,overworld))",
                                        "HoldForParty(king_slime)"]

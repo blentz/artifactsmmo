@@ -7,7 +7,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.teleport import TELEPORT_COST, TeleportAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import cycle_now, make_state
 
 
 def _gd() -> GameData:
@@ -135,7 +135,7 @@ class TestTeleportInFactory:
         gd._taskmaster_location = (1, 0)
         gd._next_expansion_cost = 1000
         actions = build_actions(gd, make_state(), None, bank_accessible=True,
-                                task_exchange_min_coins=1, learned_drops=LearnedDrops.empty())
+                                task_exchange_min_coins=1, learned_drops=LearnedDrops.empty(), now=cycle_now())
         teleports = [a for a in actions if isinstance(a, TeleportAction)]
         # only the resolvable teleport item yields an action.
         assert len(teleports) == 1

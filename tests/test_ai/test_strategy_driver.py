@@ -83,7 +83,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.thresholds import CURRENCY_GRIND_BATCH
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data
 
 
 def _gd():
@@ -222,7 +222,7 @@ def test_skill_grind_gather_caps_bag_reserve():
     state = make_state(inventory={"sunflower": 40}, bank_items={"sunflower": 97})
     # held = 40 + 97 = 137 -> grind target = held + 1 = 138
     grind = GatherMaterialsGoal(target_item="sunflower",
-                                needed={"sunflower": 138}, skill_grind=True)
+                                needed={"sunflower": 138}, skill_grind=True, now=cycle_now())
     profile = sd._step_protection_profile(grind, state, gd)
     assert profile is not None
     assert profile["sunflower"] == sd.GRIND_BAG_RESERVE  # capped, NOT 138
@@ -235,7 +235,7 @@ def test_non_grind_gather_keeps_full_needed_protection():
     gd = served_game_data()
     gd._crafting_recipes = {}
     state = make_state(inventory={"steel_bar": 2}, bank_items={})
-    normal = GatherMaterialsGoal(target_item="steel_bar", needed={"steel_bar": 6})
+    normal = GatherMaterialsGoal(target_item="steel_bar", needed={"steel_bar": 6}, now=cycle_now())
     profile = sd._step_protection_profile(normal, state, gd)
     assert profile is not None
     assert profile["steel_bar"] == 6  # full needed still protected
@@ -1465,7 +1465,7 @@ def test_select_skips_satisfied_step_goal_continues_to_next():
 
     # The satisfied GatherMaterialsGoal must have been skipped (not attempted)
     attempted_reprs = [e["goal"] for e in goals_tried]
-    gather_repr = repr(GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6}))
+    gather_repr = repr(GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 6}, now=cycle_now()))
     assert gather_repr not in attempted_reprs, (
         f"satisfied goal should be skipped, but appeared in goals_tried: {attempted_reprs}"
     )
@@ -1491,7 +1491,7 @@ class TestLevelLookahead:
             crafting_skill="weaponcrafting", crafting_level=50)
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->4)"   # min(50, 1+3)
 
     def test_skill_step_caps_at_required_level(self):
@@ -1502,7 +1502,7 @@ class TestLevelLookahead:
             crafting_skill="weaponcrafting", crafting_level=50)
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 48})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->50)"   # min(50, 48+3)
 
 
@@ -1516,7 +1516,7 @@ class TestPursueTaskMapping:
         # the whole remaining task is already in the bag, so the step is the trade.
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, inventory={"copper_bar": 20})
-        goal = _pursue_goal(state, served_game_data())
+        goal = _pursue_goal(state, served_game_data(), now=cycle_now())
         assert repr(goal) == "PursueTask(copper_bar)"
 
     def test_a_short_batch_is_produced_through_decomposition_first(self):
@@ -1532,11 +1532,11 @@ class TestPursueTaskMapping:
                            bank_items={"copper_bar": 1})
         batch = task_batch_size(state, gd)
         assert batch > 2
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert isinstance(goal, GatherMaterialsGoal)
         assert repr(goal) == f"GatherMaterials(copper_bar, {{copper_bar:{batch}}})"
         held = dataclasses.replace(state, inventory={"copper_bar": batch - 1})
-        assert repr(_pursue_goal(held, gd)) == "PursueTask(copper_bar)"  # bag + bank = batch
+        assert repr(_pursue_goal(held, gd, now=cycle_now())) == "PursueTask(copper_bar)"  # bag + bank = batch
 
     def test_skill_gated_items_task_maps_to_level_skill(self):
         gd = served_game_data()
@@ -1546,7 +1546,7 @@ class TestPursueTaskMapping:
         )
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         assert repr(goal) == "ReachSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
 
     def test_pursue_task_goal_carries_batch(self):
@@ -1557,7 +1557,7 @@ class TestPursueTaskMapping:
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=2, inventory={}, inventory_max=100,
                            bank_items={"copper_bar": 20})
-        goal = _pursue_goal(state, gd)
+        goal = _pursue_goal(state, gd, now=cycle_now())
         expected = 2 + task_batch_size(state, gd)
         assert goal.desired_state(state, gd) == {"task_progress": expected}
         assert task_batch_size(state, gd) > 1   # this state genuinely batches
@@ -2329,7 +2329,7 @@ class TestFightStepsCarryTheirLoadout:
     kill first stock the cycle's chosen loadout food (live: 120 banked
     cooked_rat_meat, none ever withdrawn, 652 Rests against 13 eats)."""
 
-    PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20})
+    PREP = GatherMaterialsGoal(target_item="cooked_chicken", needed={"cooked_chicken": 20}, now=cycle_now())
 
     def _loadout(self, monster: str) -> ChosenLoadout:
         return ChosenLoadout(monster=monster, potions=(), food=(("cooked_chicken", 1),),
@@ -2396,7 +2396,7 @@ class TestFightStepsCarryTheirLoadout:
 
     def test_the_potions_prep_before_the_food(self, monkeypatch):
         potion = GatherMaterialsGoal(target_item="water_boost_potion",
-                                     needed={"water_boost_potion": 20}, carry=True)
+                                     needed={"water_boost_potion": 20}, carry=True, now=cycle_now())
         monkeypatch.setattr(sd, "potion_prep_goal", lambda *a: potion)
         monkeypatch.setattr(sd, "heal_prep_goal", lambda *a: self.PREP)
         ctx = _ctx(combat_monster="chicken", loadout=self._loadout("chicken"))
@@ -2417,11 +2417,12 @@ class TestCarryGoal:
     banked stock satisfied the prep, the arbiter skipped it, and no
     GrindCharacterXP ran anywhere in the fleet)."""
 
-    GOAL = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, carry=True)
+    GOAL = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, carry=True,
+                               now=cycle_now())
 
     def test_banked_stock_does_not_satisfy_a_carry(self):
         assert not self.GOAL.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
-        plain = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20})
+        plain = GatherMaterialsGoal(target_item="cooked_rat_meat", needed={"cooked_rat_meat": 20}, now=cycle_now())
         assert plain.is_satisfied(make_state(bank_items={"cooked_rat_meat": 120}))
 
     def test_the_bag_satisfies_it(self):
@@ -2429,5 +2430,5 @@ class TestCarryGoal:
 
     def test_carry_is_part_of_the_identity_and_survives_the_cache(self):
         assert repr(self.GOAL) == "GatherMaterials(cooked_rat_meat, {cooked_rat_meat:20}, carry)"
-        back = sd_goal_from_dict(self.GOAL.serialize(), None)
+        back = sd_goal_from_dict(self.GOAL.serialize(), None, cycle_now())
         assert isinstance(back, GatherMaterialsGoal) and back.carry and repr(back) == repr(self.GOAL)

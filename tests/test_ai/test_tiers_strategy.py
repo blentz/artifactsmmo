@@ -28,7 +28,7 @@ from artifactsmmo_cli.ai.progression.strategy import (
 )
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state, served_game_data
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data
 
 
 def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
@@ -313,9 +313,9 @@ def _reach_gd():
 def test_producible():
     gd = _reach_gd()
     s = make_state(level=1)
-    assert _producible("iron_helm", s, gd) is True   # craftable
-    assert _producible("iron_ore", s, gd) is True     # gatherable (iron_rocks drops it)
-    assert _producible("drop_blade", s, gd) is False   # no recipe, drop, or winnable monster
+    assert _producible("iron_helm", s, gd, now=cycle_now()) is True   # craftable
+    assert _producible("iron_ore", s, gd, now=cycle_now()) is True     # gatherable (iron_rocks drops it)
+    assert _producible("drop_blade", s, gd, now=cycle_now()) is False   # no recipe, drop, or winnable monster
 
 
 def test_is_reachable_gatherable_and_craftable_chain():
@@ -500,7 +500,7 @@ def test_producible_recognizes_task_earnable_currency():
     return True without needing a recipe, resource-drop, or winnable fight."""
     gd = served_game_data()
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
-    assert _producible("tasks_coin", make_state(), gd) is True
+    assert _producible("tasks_coin", make_state(), gd, now=cycle_now()) is True
 
 
 def _gd_task_vendor() -> GameData:
@@ -522,7 +522,7 @@ def test_producible_recognizes_currency_buy_with_task_earnable_currency():
     it is sold by a permanent vendor for tasks_coin (task-earnable) →
     _producible must return True (Finding A fix)."""
     gd = _gd_task_vendor()
-    assert _producible("jasper_crystal", make_state(), gd) is True
+    assert _producible("jasper_crystal", make_state(), gd, now=cycle_now()) is True
 
 
 def test_not_producible_for_currency_buy_with_unattainable_currency():
@@ -534,4 +534,4 @@ def test_not_producible_for_currency_buy_with_unattainable_currency():
     gd._npc_buy_currency = {"mystery_shop": {"rare_gem": "void_token"}}  # not earnable
     gd._npc_locations = {"mystery_shop": (3, 3)}
     gd._item_stats = {"rare_gem": ItemStats(code="rare_gem", level=1, type_="resource")}
-    assert _producible("rare_gem", make_state(), gd) is False
+    assert _producible("rare_gem", make_state(), gd, now=cycle_now()) is False

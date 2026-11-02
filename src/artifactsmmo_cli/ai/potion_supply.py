@@ -3,7 +3,7 @@ CraftPotionsGoal plans (`potion_batch`), for the potions of the chosen
 consumable loadout only (docs/PLAN_consumable_utility.md increment 5)."""
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import datetime
 
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
@@ -41,7 +41,8 @@ only other source was a drop, so the guard fired and the goal found no plan
 821 times in 24 h (up to 98k nodes a search)."""
 
 
-def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) -> int:
+def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData,
+                  now: datetime) -> int:
     """The largest run count <= `runs` the one walk can supply under
     `POTION_POLICY`, or 0: the bag plus `candidate * yield` copies of `code`,
     with `code` MADE (`produce`: its craft route, whose own skill gate counts)
@@ -52,10 +53,10 @@ def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) 
     if not game_data.crafting_recipes.get(code):
         return 0
     # A store-less feasibility walk: every drop at its API prior, passed
-    # explicitly (ruling T16b).
+    # explicitly (ruling T16b), on the caller's cycle clock (ruling T8b).
     model = ObtainModel(state, game_data,
-                       replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty()),
-                       datetime.now(UTC))
+                       replace(NO_PROFILE_CONTEXT, now=now, learned_drops=LearnedDrops.empty()),
+                       now)
     potion = frozenset({code})
     held = model.in_bag(code)
     craft_yield = game_data.craft_yield(code)
@@ -67,7 +68,7 @@ def feasible_runs(code: str, runs: int, state: WorldState, game_data: GameData) 
 
 
 def potion_batch(state: WorldState, game_data: GameData,
-                 loadout: ChosenLoadout | None) -> tuple[str, int, int] | None:
+                 loadout: ChosenLoadout | None, now: datetime) -> tuple[str, int, int] | None:
     """`(target_code, runs, equip_qty)`: the potion batch to stock this cycle, or
     None when there is nothing to stock that the ladder can supply.
 
@@ -88,25 +89,26 @@ def potion_batch(state: WorldState, game_data: GameData,
     with nothing held and no run supplyable is skipped for the next one.
 
     No loadout (no fight ahead) stocks nothing: there is no in-combat
-    consumption to stock for."""
+    consumption to stock for. `now` is the caller's cycle clock (ruling T8b),
+    the instant the supply walk's event gates read."""
     if loadout is None:
         return None
     for code, used in loadout.potions:
         deficit = potion_carry(used) - equipped_potion_qty(state, code)
         if deficit > 0:
-            batch = _sized(code, deficit, state, game_data)
+            batch = _sized(code, deficit, state, game_data, now)
             if batch is not None:
                 return batch
     return None
 
 
 def craft_potions_fires(state: WorldState, game_data: GameData,
-                        loadout: ChosenLoadout | None) -> bool:
+                        loadout: ChosenLoadout | None, now: datetime) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind: exactly when
     `potion_batch` names a batch for the chosen loadout. The exclusive gating
     truth for `CraftPotionsGoal`, by construction rather than by a parallel
     re-derivation."""
-    return potion_batch(state, game_data, loadout) is not None
+    return potion_batch(state, game_data, loadout, now) is not None
 
 
 def guard_loadout(loadout: ChosenLoadout | None, fight_monster: str | None) -> ChosenLoadout | None:
@@ -128,7 +130,7 @@ def prep_supplies(code: str, qty: int, state: WorldState, game_data: GameData,
     suppliable is one `GatherMaterials` plans. Plain `feasible` under the
     policy disagreed with the walk on a grey ingredient: it refused C3P0's
     blue_slimeball that the decomposition fights for (2026-10-10)."""
-    model = ObtainModel(state, game_data, ctx, datetime.now(UTC))
+    model = ObtainModel(state, game_data, ctx, ctx.now)
     return model.walk(code, qty, DECOMPOSE_POLICY, keep=frozenset({code}),
                       grey_ok=lambda item: grey_farm_allowed(item, state, game_data)).feasible
 
@@ -139,20 +141,21 @@ def potion_stockable(code: str, state: WorldState, game_data: GameData,
     CRAFT_POTIONS ladder brews it, or the fight step's prep makes it. A
     loadout's potion that nothing stocks is fought without (live C3P0
     2026-10-10: a GE-priced health_potion it could not brew at alchemy 17)."""
-    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data)
+    return (held_count(code, state) > 0 or ladder_supplies(code, 1, state, game_data, ctx.now)
             or prep_supplies(code, 1, state, game_data, ctx))
 
 
-def ladder_supplies(code: str, deficit: int, state: WorldState, game_data: GameData) -> bool:
+def ladder_supplies(code: str, deficit: int, state: WorldState, game_data: GameData,
+                    now: datetime) -> bool:
     """The CRAFT_POTIONS guard can stock `deficit` more of `code` worn from
     here (`potion_batch`'s own sizing): held copies, or a run the ladder can
     supply. A loadout potion it cannot is the fight step's prep
     (`grind_heal_prep.potion_prep_goal`) — one stocker per potion."""
-    return _sized(code, deficit, state, game_data) is not None
+    return _sized(code, deficit, state, game_data, now) is not None
 
 
 def _sized(code: str, deficit: int, state: WorldState,
-           game_data: GameData) -> tuple[str, int, int] | None:
+           game_data: GameData, now: datetime) -> tuple[str, int, int] | None:
     """The batch for `deficit` more of `code` worn: the bag's and bank's copies
     first, then the runs the ladder sizes for the rest, cut to what can be
     supplied; None when nothing is held and not one run can be supplied."""
@@ -164,7 +167,7 @@ def _sized(code: str, deficit: int, state: WorldState,
     craft_yield = game_data.craft_yield(code)
     runs_needed = -(-short // craft_yield)
     runs = feasible_runs(code, max(1, _ladder_runs(state, game_data, recipe, runs_needed, craft_yield)),
-                         state, game_data)
+                         state, game_data, now)
     equip = min(deficit, have + runs * craft_yield)
     if equip == 0:
         return None

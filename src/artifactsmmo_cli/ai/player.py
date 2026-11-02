@@ -801,6 +801,8 @@ class GamePlayer:
         """Reuse the cached plan unless should_replan fires. Returns
         (selected_goal, plan, goals_tried, replanned)."""
         cache = self._plan_cache
+        if cache is not None:
+            cache.on_cycle_clock(self._cycle_now)
         step = cache.current() if cache is not None else None
         goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
         step_applicable = (step is not None and step.is_applicable(state, game_data)
@@ -897,7 +899,7 @@ class GamePlayer:
         goal_data = json.loads(row.goal_json)
         if not goal_data or "type" not in goal_data:
             return  # goal was not a plan-bearing type — re-plan cold
-        goal = goal_from_dict(goal_data, game_data)
+        goal = goal_from_dict(goal_data, game_data, self._cycle_now)
         by_repr = {repr(a): a for a in self._build_actions()}
         tail = json.loads(row.plan_json)[row.cursor:]
         if game_data is None:
@@ -2707,6 +2709,7 @@ class GamePlayer:
             bank_accessible=not self._blockers.is_blocked("bank"),
             task_exchange_min_coins=self._exchange_min_coins(),
             learned_drops=self._cycle_learned_drops(),
+            now=self._cycle_now,
         )
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
@@ -3444,7 +3447,8 @@ class GamePlayer:
             self._role_unservable_cycles = 0
             return
         item_code, quantity, demand = target
-        wanted = repr(SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand))
+        wanted = repr(SupplyBankGoal(item_code=item_code, quantity=quantity, demand=demand,
+                                     now=self._cycle_now))
         attempt = next((gt for gt in goals_tried if gt.get("goal") == wanted), None)
         if attempt is None:
             return

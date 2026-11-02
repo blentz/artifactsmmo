@@ -66,7 +66,7 @@ from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 from artifactsmmo_cli.audit import craft_completeness
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, make_state
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state
 from tests.test_ai.shared_world import shared_world
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
@@ -363,7 +363,7 @@ def test_the_plan_fetches_the_key_first(monkeypatch: pytest.MonkeyPatch) -> None
     The level-30 sheet: the lich (level 30) is not grey for it."""
     state, world, player = _seeded("l30_band_entry")
     monkeypatch.setattr(drop_routes_module, "drop_fight_winnable", lambda rested, gd, monster: True)
-    goal = GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1})
+    goal = GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}, now=cycle_now())
     ctx = player._selection_context()
     plan = decompose(goal, state, world, player._build_actions(), ctx)
     assert plan is not None
@@ -385,13 +385,13 @@ def test_a_fee_door_is_opened_by_fighting_for_its_gold() -> None:
     state, world, player = _seeded("l48_band_adequate")
     assert state.gold < 5000
     piece = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, player._build_actions(), player._selection_context())
     assert plan is not None
     (fight,) = plan
     assert isinstance(fight, FightAction) and fight.gold_target is not None
     declined: list[str] = []
-    plain = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1})
+    plain = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, now=cycle_now())
     assert decompose(plain, state, world, player._build_actions(), player._selection_context(),
                      declined) is None
     assert declined == ["infeasible:dryad_hair:no_route:dryad_hair"]
@@ -432,7 +432,7 @@ def test_a_door_route_cheaper_than_a_ready_one_is_the_price_and_the_route_served
                                                       ("lich", "door:lich_tomb_keyx1")]
     assert door_route("life_crystal_shard", state, world, ctx, policy=DECOMPOSE_POLICY,
                       pocket=state.gold, store=None) == (SourceKind.DROP, "lich")
-    plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}),
+    plan = decompose(GatherMaterialsGoal("life_crystal_shard", {"life_crystal_shard": 1}, now=cycle_now()),
                      state, world, player._build_actions(), ctx)
     assert plan is not None
     fights = [a.monster_code for a in plan if isinstance(a, FightAction)]
@@ -609,7 +609,7 @@ def test_a_fee_the_reserve_keeps_is_priced_and_fought_for_alike(
     monkeypatch.setattr(craft_plan_gen, "_walk_plan",
                         lambda goal, *a, **k: walked.append(goal.needed) or walk_plan(goal, *a, **k))
     piece = GatherMaterialsGoal("dryad_hair", {"dryad_hair": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     plan = decompose(piece, rich, world, player._build_actions(), ctx)
     assert plan is not None
     (fight,) = plan
@@ -728,7 +728,7 @@ def test_the_walk_opens_the_cheapest_door_as_the_pricer_does(
     monkeypatch.setattr(craft_plan_gen, "_open_door",
                         lambda door, *a, **k: opened.append(door) or open_door(door, *a, **k))
     piece = GatherMaterialsGoal("palm_wood", {"palm_wood": 1}, piece_material=True,
-                                fight_gold=True)
+                                fight_gold=True, now=cycle_now())
     assert decompose(piece, state, world, player._build_actions(), ctx) is not None
     assert opened == [cheap]
     step = model.walk("palm_wood", 1, PIECE_POLICY).plan[0]
@@ -803,7 +803,7 @@ def _served(monkeypatch: pytest.MonkeyPatch, world: GameData, store: LearningSto
                         lambda door, *a, **k: opened.append(door))
     monkeypatch.setattr(craft_plan_gen, "_decompose_grind",
                         lambda skill, level, *a, **k: grinds.append((skill, level)))
-    decompose(GatherMaterialsGoal("loot", {"loot": 1}), _climber(), world,
+    decompose(GatherMaterialsGoal("loot", {"loot": 1}, now=cycle_now()), _climber(), world,
               region_edges.region_edge_actions(world), TIMED_NO_PROFILE_CONTEXT, store=store)
     return opened, grinds
 
@@ -871,7 +871,7 @@ def test_the_cycle_hands_its_store_to_the_walk(
         asked.append(store)
         return []
 
-    goal = GatherMaterialsGoal("loot", {"loot": 1})
+    goal = GatherMaterialsGoal("loot", {"loot": 1}, now=cycle_now())
     monkeypatch.setattr(strategy_driver, "decompose", walk)
     StrategyArbiter(GOAPPlanner(), history=rated_store)._plans(
         goal, make_state(), GameData(), [], TIMED_NO_PROFILE_CONTEXT)

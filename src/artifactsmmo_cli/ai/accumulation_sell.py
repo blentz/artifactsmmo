@@ -52,7 +52,7 @@ pure cores — they mirror the Lean `Formal.AccumulationSell` defs byte-for-byte
 the differential gate.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -182,7 +182,7 @@ def sell_targets(state: WorldState, game_data: GameData, ctx: SelectionContext,
     return sellable_accumulation(state, game_data, ctx)
 
 
-def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
+def sellable_tradeable_now(state: WorldState, game_data: GameData, now: datetime) -> bool:
     """A held item a buyer can actually take RIGHT NOW.
 
     THE PREDICATE ALL THREE SELL RUNGS ASK — SELL_PRESSURED, SELL_IDLE and the
@@ -207,8 +207,10 @@ def sellable_tradeable_now(state: WorldState, game_data: GameData) -> bool:
     match each would need a SECOND opaque Bool in the Lean ladder state, and that
     vector is the 33-slot one `cycle_step_d` reuses by index for the composed
     liveness capstone. So the licence half stays out until that slot exists, and
-    SELL_IDLE can still fire on a surplus below its ratio gate."""
-    now = datetime.now(timezone.utc)
+    SELL_IDLE can still fire on a surplus below its ratio gate.
+
+    `now` is the caller's cycle clock (`SelectionContext.now`, ruling T8b): the
+    buyer's window is judged at the instant the rest of the decision is."""
     for code, quantity in state.inventory.items():
         if quantity <= 0 or not _is_sellable(code, game_data):
             continue

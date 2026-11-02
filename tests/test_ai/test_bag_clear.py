@@ -58,7 +58,7 @@ from artifactsmmo_cli.ai.scenario import ScenarioCharacter, load_bundle_game_dat
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
 from tests.test_ai.scenarios.test_slot_coverage import BUNDLE
 
 # R2D2's live bag on 2026-10-26, less the 20th slot (`raw_porkchop`, below).
@@ -637,8 +637,8 @@ def test_a_heal_prep_never_clears_the_grinds_own_stack(gd: GameData,
     smelt = CraftAction(code="iron_bar", quantity=1, workshop_location=gd.workshop_location("mining"))
     fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
                         learned_drops=LearnedDrops.empty())
-    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1})
-    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1})
+    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1}, now=cycle_now())
+    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1}, now=cycle_now())
     walk = craft_plan_gen_mod._walk_plan
 
     def walk_plan(goal: GatherMaterialsGoal, *args: object, **kwargs: object) -> object:
@@ -674,8 +674,8 @@ def test_a_prep_that_does_not_fit_after_the_clear_never_blocks_the_grind(
     smelt = CraftAction(code="iron_bar", quantity=1, workshop_location=gd.workshop_location("mining"))
     fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}),
                         learned_drops=LearnedDrops.empty())
-    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1})
-    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1})
+    rung = GatherMaterialsGoal("iron_bar", {"iron_bar": 1}, now=cycle_now())
+    prep = GatherMaterialsGoal("cooked_porkchop", {"cooked_porkchop": 1}, now=cycle_now())
     walk = craft_plan_gen_mod._walk_plan
     clear_first = craft_plan_gen_mod._clear_first
     asked: list[list[object]] = []

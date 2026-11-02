@@ -44,4 +44,4 @@ def grind_rung_goal(skill: str, state: WorldState, game_data: GameData,
     bank = state.bank_items or {}
     held = state.inventory.get(rung, 0) + bank.get(rung, 0)
     return GatherMaterialsGoal(target_item=rung, needed={rung: held + 1},
-                               skill_grind=True, exclude_recycle=frozenset({rung}))
+                               skill_grind=True, exclude_recycle=frozenset({rung}), now=ctx.now)
