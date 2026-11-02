@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
-from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.attempt_prospecting import gather_prospecting
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
@@ -74,13 +74,21 @@ class GatherMaterialsGoal(Goal):
                  skill_grind: bool = False,
                  exclude_recycle: frozenset[str] = frozenset(),
                  carry: bool = False, fight_gold: bool = False,
-                 piece_material: bool = False, *, now: datetime) -> None:
+                 piece_material: bool = False, farmed_for: str | None = None, *,
+                 now: datetime) -> None:
         self._target_item = target_item
         # now: the cycle clock (ruling T8b), the `SelectionContext.now` of the
         # cycle that built this goal. Every NPC buy the goal mints carries it,
         # so the buy's event window is judged at the instant the rest of the
         # cycle's decision is. Not part of goal identity, like `skill_grind`.
         self._now = now
+        # farmed_for: the item a fleet currency is farmed to buy (the ticket
+        # farm, live 2026-10-31: medals farmed for the trophy). The farmer
+        # holds the turn-in election for THAT sink only
+        # (`GamePlayer._claim_currency_farm`, review M3), so siblings are not
+        # locked out of the currency's other sinks. Not part of goal
+        # identity, like `fight_gold`: the target and `needed` name the walk.
+        self.farmed_for = farmed_for
         # piece_material: the goal walks a material of a missing `L*` piece
         # (ruling T14a-D; `for_piece`), so a grey dropper of a material that
         # serves a demand may be farmed: the grey-farm directive's next-tier
@@ -130,7 +138,8 @@ class GatherMaterialsGoal(Goal):
         return GatherMaterialsGoal(self._target_item, dict(self._needed),
                                    skill_grind=self.skill_grind,
                                    exclude_recycle=self._exclude_recycle, carry=self.carry,
-                                   fight_gold=self.fight_gold, piece_material=True, now=self._now)
+                                   fight_gold=self.fight_gold, piece_material=True,
+                                   farmed_for=self.farmed_for, now=self._now)
 
     @property
     def needed(self) -> dict[str, int]:
@@ -644,17 +653,12 @@ class GatherMaterialsGoal(Goal):
         # the plan can chain WithdrawGold → NpcBuy (admit/emit symmetry —
         # without this edge, a pocket-short/bank-rich state is admitted by
         # is_plannable but the search has no gold source and dies at 0-length).
-        # Resized from a factory-emitted action so bank location/accessibility
-        # survive; capped at the KNOWN bank balance (a None bank ferries
-        # nothing — WithdrawGoldAction.is_applicable rejects it anyway).
+        # Sized and capped by `gold_ferry`, the one ferry every gold-buying
+        # goal admits (a GeFillSellOrder gates on the pocket as NpcBuy does).
         analysis = analyze_currency_leaves(self._needed, state, game_data)
-        deficit = analysis.gold_deficit
-        if deficit > 0 and state.bank_gold is not None and state.bank_gold > 0:
-            template = next(
-                (a for a in actions if isinstance(a, WithdrawGoldAction)), None)
-            if template is not None:
-                result.append(dataclasses.replace(
-                    template, quantity=min(deficit, state.bank_gold)))
+        ferry = gold_ferry(actions, state, analysis.gold_deficit)
+        if ferry is not None:
+            result.append(ferry)
 
         # ITEM-CURRENCY ferry — the gold ferry's twin, same admit/emit break
         # (2026-08-05). NpcBuyAction's non-gold branch gates on the POCKET stack

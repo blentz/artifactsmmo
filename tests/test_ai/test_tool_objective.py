@@ -11,8 +11,16 @@ import importlib
 from dataclasses import replace
 from datetime import UTC, datetime
 from fractions import Fraction
+from math import ceil
 
-from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions, drop_work, drop_work_actions
+from artifactsmmo_api_client.models.log_type import LogType
+
+from artifactsmmo_cli.ai.acquisition_cost import (
+    _kind_actions,
+    acquisition_actions,
+    drop_work,
+    drop_work_actions,
+)
 from artifactsmmo_cli.ai.decisions.root import RootWalk, resolve_root
 from artifactsmmo_cli.ai.decisions.which_piece_is_next import fleet_piece_root, with_drop_tool
 from artifactsmmo_cli.ai.drop_leg import DropLeg
@@ -236,6 +244,12 @@ def _learned(k: Fraction = Fraction(1, 100)):
     return replace(_ctx(), learned_drops=LearnedDrops((), (), k))
 
 
+def _gather() -> Fraction:
+    """One gather in planner actions: its measured seconds over a planner
+    action's (ruling "seconds inside", 2026-10-31)."""
+    return _kind_actions(LogType.GATHERING, _learned())
+
+
 def _counting(monkeypatch, target: str) -> list[object]:
     """Record every call to `target` (a dotted path) and let it run."""
     module, name = target.rsplit(".", 1)
@@ -264,7 +278,7 @@ def test_the_saving_is_read_on_top_of_the_worn_prospecting() -> None:
     gd = _with(_pearl_world(), old_charm=_artifact("old_charm", 50))
     state = make_state(level=15, prospecting=50,
                        equipment={**make_state().equipment, "artifact1_slot": "old_charm"})
-    assert drop_work_actions(PEARLS, state, gd, _learned()) == 4000
+    assert drop_work_actions(PEARLS, state, gd, _learned()) == 4000 * _gather()
     assert drop_tool_target(PEARLS, state, gd, _learned()) == CHARM
 
 
@@ -330,11 +344,13 @@ def test_the_scan_walks_only_the_items_that_would_be_worn(monkeypatch) -> None:
 
 def test_the_strongest_item_that_pays_for_itself_is_named() -> None:
     """A stronger charm too dear to pay for itself is passed over for a weaker,
-    cheap one; when both pay, the stronger wins."""
+    cheap one; when both pay, the stronger wins. (5,000 planks: a craft run
+    is its recorded 5.5 s, review I3, not the logs' batched 13.2 s mean, and
+    2,500 planks now pay for the charm.)"""
     gd = _with(_pearl_world(), great_charm=ItemStats(
         code="great_charm", level=1, type_="artifact", prospecting=100,
         crafting_skill="weaponcrafting", crafting_level=1))
-    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 2500}}
+    gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 5000}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == CHARM
     gd._crafting_recipes = {**gd._crafting_recipes, "great_charm": {"ash_plank": 1}}
     assert drop_tool_target(PEARLS, make_state(level=15), gd, _learned()) == "great_charm"
@@ -364,10 +380,10 @@ def test_the_saving_is_the_one_drop_models() -> None:
     """`drop_work_actions` reads `ctx.drops()` at the leg's loadout: 20 pearls
     are 6,000 gathers with nothing worn and 4,000 wearing the +50 charm."""
     gd = _pearl_world()
-    assert drop_work_actions(PEARLS, make_state(level=15), gd, _learned()) == 6000
+    assert drop_work_actions(PEARLS, make_state(level=15), gd, _learned()) == 6000 * _gather()
     wearing = make_state(level=15, prospecting=50,
                          equipment={**make_state().equipment, "artifact1_slot": CHARM})
-    assert drop_work_actions(PEARLS, wearing, gd, _learned()) == 4000
+    assert drop_work_actions(PEARLS, wearing, gd, _learned()) == 4000 * _gather()
 
 
 def test_with_drop_tool_offers_the_item_unless_its_step_is_declined() -> None:
@@ -455,8 +471,11 @@ def test_the_walk_prices_a_gather_at_the_loadout_it_is_made_in() -> None:
     held = make_state(level=15, inventory={CHARM: 1})
     plain = acquisition_actions("pearl_ring", 1, bare, gd, _learned(), equip=False)
     charmed = acquisition_actions("pearl_ring", 1, held, gd, _learned(), equip=False)
-    assert plain - charmed == 2000
-    assert drop_work_actions(PEARLS, held, gd, _learned()) == 4000
+    # Priced at a gather's measured seconds (ruling "seconds inside"), each
+    # whole price rounded up once.
+    assert plain - charmed in (ceil(6000 * _gather()) - ceil(4000 * _gather()) + d
+                               for d in (-1, 0, 1))
+    assert drop_work_actions(PEARLS, held, gd, _learned()) == 4000 * _gather()
 
 
 def test_a_scan_is_reused_only_for_the_very_inputs_it_read(tmp_path, monkeypatch) -> None:

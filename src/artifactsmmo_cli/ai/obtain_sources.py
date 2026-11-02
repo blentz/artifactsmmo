@@ -29,6 +29,7 @@ its STATE-FREE counterpart, and their relationship is asserted
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY, Policy
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY as UNBOUNDED_CAPACITY
@@ -79,13 +80,16 @@ def _sources(model: ObtainModel, item: str, policy: Policy = LEGACY) -> list[Sou
 def obtain_sources(
     item: str, state: WorldState, game_data: GameData, ctx: SelectionContext,
     *, policy: Policy = LEGACY, crossing: WorldState | None = None,
+    store: LearningStore | None = None,
 ) -> list[Source]:
     """Every way `item` can be obtained from the current state, in the declared
     priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, GE_FILL, DROP, SELL).
     `policy` is LEGACY, the executor's readiness, unless a caller prices under
     its own (the skill grind's ranking treats a gathering-skill gate as open).
-    `crossing` is the state the crossings are asked of (`ObtainModel`'s)."""
-    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),
+    `crossing` is the state the crossings are asked of (`ObtainModel`'s);
+    `store` memoises its fight gates across the decision (`ObtainModel`'s)."""
+    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing,
+                                store=store),
                     item, policy)
 
 

@@ -78,6 +78,8 @@ ALLOWED: dict[tuple[str, str], tuple[int, str]] = {
     ("player.py", "GamePlayer._update_coordination"): (1, _COORDINATION),
     ("player.py", "GamePlayer._resolve_turn_in"):
         (1, _COORDINATION_DECISION.format("turn-in decision")),
+    ("player.py", "GamePlayer._claim_currency_farm"):
+        (1, _COORDINATION_DECISION.format("currency-farm turn-in claim")),
     ("player.py", "GamePlayer._record_learning_cycle"): (1, _LEARNING_ROW),
     ("player.py", "GamePlayer._now"): (1, "console log time (display)"),
 }

@@ -32,8 +32,9 @@ re-validates `is_applicable` on the plan head every cycle before running it, and
 import dataclasses
 from collections.abc import Callable
 from dataclasses import replace
+from fractions import Fraction
 
-from artifactsmmo_cli.ai.acquisition_cost import door_price, door_route, fight_gold_monster
+from artifactsmmo_cli.ai.acquisition_cost import door_price, fight_gold_monster, route_order
 from artifactsmmo_cli.ai.actions.base import Action, serves_region
 from artifactsmmo_cli.ai.actions.combat import FightAction, win_gold
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
@@ -44,6 +45,7 @@ from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_clear import clear_actions, related_codes
 from artifactsmmo_cli.ai.bag_peak import plan_bag_peak
@@ -75,6 +77,7 @@ from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
 from artifactsmmo_cli.ai.region_edges import REGION_EDGE_TAG, admit_region_edges, crossings, door_legs
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grindable import skill_is_grindable
+from artifactsmmo_cli.ai.unservable_drop_route_error import UnservableDropRouteError
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
 
 
@@ -129,8 +132,8 @@ def decompose(goal: Goal, state: WorldState, game_data: GameData,
 
     `store` is the cycle's learning store, the same object the pricer read
     (`route.route_price` and `gear_objective._price` pass `store=history`).
-    The walk's door choice (`door_price`) and its preferred route past a door
-    (`door_route`) price with it, so the walk opens the door and serves the
+    The walk's door choice (`door_price`) and its route order (`route_order`)
+    price with it, so the walk opens the door and serves the
     route the price charged: a key that needs a climb, and a climb or sibling
     route that beats a door, are priced only with the store (final review
     I-2). None (the default) is the store-less pricer's walk, as an audit
@@ -332,10 +335,11 @@ def _decompose_upgrade(goal: UpgradeEquipmentGoal, state: WorldState, game_data:
         return _decline(declined, f"upgrade:equip_inapplicable:{equip!r}")
     if state.inventory.get(item, 0) >= 1:
         return [equip]
-    if game_data.ge_best_sell_order(item) is not None:
-        # The book sells it: buying off the GE against making it is a price
-        # question the walk does not answer (no GE routes, D-E); the search,
-        # which prices both, keeps that choice.
+    if goal.ge_fill:
+        # The book sells it and the price took the fill (S-046,
+        # `ge_fill_priced`): the walk has no GE routes (D-E), so the search,
+        # which admits the fill and its gold ferry, plans the buy. A goal whose
+        # price did not take the fill walks the item like any other.
         return _decline(declined, f"upgrade:ge_venue:{item}")
     legs = _walk_plan(GatherMaterialsGoal(item, {item: 1}, now=ctx.now), state, game_data, actions, ctx,
                       declined, subtasks, frozenset(), grey_exempt=frozenset({item}), store=store)
@@ -492,16 +496,21 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     walked = replace(state, gold=_walk_pocket(state, game_data, frozenset(goal.needed), policy))
     gold_monster = (fight_gold_monster(state, game_data, ctx, policy=PIECE_POLICY)
                     if policy.fight_gold else None)
-    preferred: dict[str, tuple[SourceKind, str] | None] = {}
+    preferred: dict[tuple[str, Policy], dict[tuple[SourceKind, str], int | Fraction]] = {}
 
-    def prefer(code: str) -> tuple[SourceKind, str] | None:
-        """The route past a door the pricer took for `code`, asked only of an
-        item the walk can reach past a door (ruling T14e-1): the walk serves
-        the route the price took."""
-        if code not in preferred:
-            preferred[code] = door_route(code, state, game_data, ctx, policy=policy,
+    def prefer(code: str, admitted: Policy) -> dict[tuple[SourceKind, str], int | Fraction]:
+        """`code`'s routes at the unit costs the pricer fills them at
+        (`route_order`), asked only of an item the walk can serve more than
+        one way, under the policy the walk `admitted` its routes by (a grey
+        dropper `grey_ok` licenses is priced too, or it would rank after
+        every gather: live Robby 2026-10-31, the chicken at 91 actions a
+        ticket behind shrimp at 154): the walk serves the route the price took
+        (ruling T14e-1, and the ticket farm of 2026-10-31)."""
+        key = (code, admitted)
+        if key not in preferred:
+            preferred[key] = route_order(code, state, game_data, ctx, policy=admitted,
                                          pocket=walked.gold, store=store)
-        return preferred[code]
+        return preferred[key]
 
     ranks: dict[Door, int] = {}
 
@@ -518,7 +527,8 @@ def _walk_plan(goal: GatherMaterialsGoal, state: WorldState, game_data: GameData
     for item, needed in goal.needed.items():
         qty = _bag_target(item, needed, goal.exclude_recycle, state)
         model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,
-                            spend=frozenset(goal.needed) if policy.fight_gold else None)
+                            spend=frozenset(goal.needed) if policy.fight_gold else None,
+                            store=store)
         answer = model.walk(item, qty, policy, goal.exclude_recycle, openable,
                             frozenset(goal.needed), grey_ok, prefer, rank)
         trip = _one_trip(item, qty, answer, state, game_data)
@@ -666,6 +676,13 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
     candidates = (*relevant, *pool)
     assert isinstance(step, Act), "an open gate is expanded by `_walk_plan`"
     route = graph.sources[step.item][step.route]
+    if route.kind is SourceKind.WITHDRAW and step.item == GOLD_CODE:
+        # Banked gold for a buy the pocket alone cannot pay (`ObtainModel`'s
+        # gold withdraw): the buy pays from the pocket, so the gold is
+        # withdrawn first, the amount the walk drew on the bank, at the bank
+        # tile (the route's own gate already asked `bank_accessible`).
+        return WithdrawGoldAction(quantity=step.amount, bank_location=game_data.bank_location(),
+                                  accessible=bank_accessible)
     if route.kind is SourceKind.WITHDRAW:
         found = next((a for a in candidates
                       if isinstance(a, WithdrawItemAction) and a.code == step.item), None)
@@ -720,14 +737,27 @@ def _action_for(step: Step[str], graph: WalkGraph, relevant: list[Action], pool:
         return dataclasses.replace(fight, drop_farm=fight.drop_farm or grey,
                                    gold_target=win_gold(fight.monster_code, game_data))
     if route.kind is SourceKind.DROP:
-        # Which dropper to fight is the proved selection's (expected kills,
-        # then distance; the grey drop_farm variant): the route only proved a
-        # fight can serve the item.
+        # The dropper fought is the route's own (`route.via`), the one the walk
+        # served because the price took it (the ticket farm, live 2026-10-31:
+        # the walk served the chicken at 91 actions a ticket and this arm, by
+        # expected kills alone, fought an ogre). The proved selection still
+        # vets it (the oracle's approval, the grey drop_farm variant).
         # The goal's own actions come last so their fight (possibly the
         # synthesized drop_farm variant the static pool lacks) wins per monster.
-        fight = select_drop_fight(step.item, [*pool, *relevant], state, game_data,
+        # A pool with no fight for the dropper serves nothing yet, as every
+        # other arm's missing action. The walk admitted the route on the
+        # oracle's own gates, so the oracle refusing a fight the pool holds
+        # is a broken agreement, raised by name (review I4), never a plan
+        # that silently dies.
+        droppers: list[Action] = [a for a in (*pool, *relevant)
+                                  if isinstance(a, FightAction) and a.monster_code == route.via]
+        if not droppers:
+            return None
+        fight = select_drop_fight(step.item, droppers, state, game_data,
                                   allow_grey=grey_ok(step.item))
-        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))
+        if fight is None:
+            raise UnservableDropRouteError(step.item, route.via)
+        return dataclasses.replace(fight, drop_target=(step.item, step.amount))
     return None
 
 

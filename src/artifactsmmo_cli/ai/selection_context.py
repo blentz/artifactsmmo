@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from fractions import Fraction
 
+from artifactsmmo_api_client.models.log_type import LogType
+
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
@@ -29,6 +31,7 @@ from artifactsmmo_cli.ai.fleet_piece import FleetPiece
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.party_lease_core import PartyLease
+from artifactsmmo_cli.ai.untimed_action_kind_error import UntimedActionKindError
 
 
 @dataclass(frozen=True)
@@ -300,6 +303,12 @@ class SelectionContext:
     # (`timing` / `action_seconds_of`), never a constant.
     fight_seconds: FightSecondsModel | None = None
     action_seconds: Fraction | None = None
+    # The measured seconds of one action of each `/my/logs` kind (`gathering`,
+    # `crafting`, ...: `fight_seconds_model.kind_seconds`), from the
+    # account-log bootstrap or the committed capture offline: the pricer
+    # charges each route's action at its own kind's seconds (B, ruling
+    # "seconds inside", 2026-10-31). None on a context that never prices.
+    kind_seconds: tuple[tuple[str, Fraction], ...] | None = None
 
     # The fleet's drop evidence this cycle (spec 2026-10-18 §2.8, ruling
     # T16a): the ONE drop model the acquisition walk, the obtain model's gather
@@ -343,6 +352,18 @@ class SelectionContext:
         if self.fight_seconds is None:
             raise ValueError("this context carries no learned fight seconds")
         return self.fight_seconds
+
+    def seconds_of(self, kind: LogType) -> Fraction:
+        """The measured seconds of one action of `/my/logs` kind `kind`.
+        Raises when this context carries no kind seconds, and
+        `UntimedActionKindError` for a kind the log never timed (the user's
+        I2 ruling, 2026-10-31: no default stands in for it)."""
+        if self.kind_seconds is None:
+            raise ValueError("this context carries no learned action-kind seconds")
+        measured = dict(self.kind_seconds).get(kind.value)
+        if measured is None:
+            raise UntimedActionKindError(kind.value)
+        return measured
 
     def action_seconds_of(self) -> Fraction:
         """The learned seconds of one planner action; raises when this context

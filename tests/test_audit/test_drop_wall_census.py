@@ -239,25 +239,26 @@ def test_the_crossing_is_the_pricers_own_answer(results: list[DropResult]) -> No
     scenario = SCENARIOS[wall.scenario]
     game_data = declared_world(scenario, BUNDLE, cache)
     state = scenario_state(scenario, game_data)
+    # The census prices on the cycle's context (S-046: spent gold is priced
+    # at the cycle's earning rate), so the cross-read does too.
+    cycle = attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
     resolution = resolve_root(state, game_data,
-                              CharacterObjective.from_game_data(game_data),
-                              attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None),
-                              None)
+                              CharacterObjective.from_game_data(game_data), cycle, None)
     candidate = next(c for c in (resolution.root, *resolution.alternatives)
                      if repr(c) == wall.candidate)
     assert wall.evidence is not None
-    base = route_price(candidate, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
+    base = route_price(candidate, state, game_data, cycle, None,
                        gated_drop=False)
     rich = dataclasses.replace(state, inventory={
         **state.inventory,
         wall.evidence.item: state.inventory.get(wall.evidence.item, 0) + GRANT})
-    granted = route_price(candidate, rich, game_data, TIMED_NO_PROFILE_CONTEXT, None,
+    granted = route_price(candidate, rich, game_data, cycle, None,
                           gated_drop=False)
     assert base >= UNOBTAINABLE_PER_UNIT
     assert granted < base
     assert (base, granted) == (wall.base_price, wall.granted_price)
     assert wall.gate_price == route_price(candidate, state, game_data,
-                                          TIMED_NO_PROFILE_CONTEXT, None,
+                                          cycle, None,
                                           gated_drop=True)
 
 
@@ -359,7 +360,7 @@ def test_the_unattributed_residual_can_fire(
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
     gap, base, granted, _gate, evidence = classify(
-        object(), state, game_data, walled, walled)  # type: ignore[arg-type]
+        object(), state, game_data, walled, walled, TIMED_NO_PROFILE_CONTEXT)  # type: ignore[arg-type]
     assert gap == DropGap.DROP_WALL_UNATTRIBUTED.value
     assert base == UNOBTAINABLE_PER_UNIT
     assert granted == 1
@@ -389,7 +390,7 @@ def test_the_unattributed_residual_can_fire_behind_the_objective(
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
     gap, base, granted, gate, evidence = classify(
-        object(), state, game_data, (), worn_walled)  # type: ignore[arg-type]
+        object(), state, game_data, (), worn_walled, TIMED_NO_PROFILE_CONTEXT)  # type: ignore[arg-type]
     assert gap == DropGap.DROP_WALL_UNATTRIBUTED.value
     assert (base, granted, gate) == (UNOBTAINABLE_PER_UNIT, 1, UNOBTAINABLE_PER_UNIT)
     assert evidence is None
@@ -413,7 +414,8 @@ def test_a_candidate_with_no_walled_items_is_not_this_censuss_subject(
 
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price",
                         fake_price)
-    gap, base, granted, gate, evidence = classify(object(), state, game_data, (), ())  # type: ignore[arg-type]
+    gap, base, granted, gate, evidence = classify(object(), state, game_data, (), (),  # type: ignore[arg-type]
+                                                 TIMED_NO_PROFILE_CONTEXT)
     assert gap == DropGap.NOT_DROP_WALLED.value
     assert (base, granted, gate, evidence) == (UNOBTAINABLE_PER_UNIT,
                                                UNOBTAINABLE_PER_UNIT, None, None)
@@ -440,7 +442,8 @@ def test_a_worn_wall_the_objective_beats_is_named_by_its_gate(
         return 5 if priced_state.inventory.get("forest_ring", 0) else UNOBTAINABLE_PER_UNIT
 
     monkeypatch.setattr("artifactsmmo_cli.audit.drop_wall_census.route_price", fake_price)
-    got = classify(object(), state, game_data, (), ("forest_ring",))  # type: ignore[arg-type]
+    got = classify(object(), state, game_data, (), ("forest_ring",),  # type: ignore[arg-type]
+                   TIMED_NO_PROFILE_CONTEXT)
     gap, base, granted, gate_price, evidence = got
     assert (gap, base, granted, gate_price) == (arm.value, UNOBTAINABLE_PER_UNIT, 5, gate)
     assert evidence is not None and evidence.item == "forest_ring"

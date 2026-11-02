@@ -1,5 +1,6 @@
 """WithdrawGoldAction: withdraw gold from bank to character."""
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -58,3 +59,29 @@ class WithdrawGoldAction(Action):
 
     def __repr__(self) -> str:
         return f"WithdrawGold({self.quantity})"
+
+
+def gold_ferry(actions: list[Action], state: WorldState, deficit: int) -> WithdrawGoldAction | None:
+    """The WithdrawGold that ferries `deficit` gold from the bank to the pocket,
+    sized from the pool's own withdraw, or None when nothing is short or
+    nothing can be ferried.
+
+    EVERY GOLD SINK PAYS FROM THE POCKET. `can_spend` asks the reserve of the
+    ACCOUNT (pocket plus bank), so a buy the account affords can still be one
+    the server refuses: HTTP 492, "the character does not have enough gold".
+    Live 2026-10-30: HAL held 6,516 in pocket against a 6,550 GE order and the
+    plan was a bare `GeBuy` five cycles running, with tens of thousands in the
+    bank. The buy actions now gate on the pocket too, and a goal that admits a
+    gold buy admits this ferry beside it so A* can chain WithdrawGold -> buy.
+
+    Resized from a pool withdraw so the bank tile and its accessibility survive
+    (the factory threads both from the cycle context), and capped at the KNOWN
+    bank balance: an unknown bank (`None`) ferries nothing, which is also what
+    `WithdrawGoldAction.is_applicable` would say. A ferry the bank cannot fully
+    fund still leaves the buy inapplicable, so no buy is planned past it."""
+    if deficit <= 0 or state.bank_gold is None or state.bank_gold <= 0:
+        return None
+    template = next((a for a in actions if isinstance(a, WithdrawGoldAction)), None)
+    if template is None:
+        return None
+    return dataclasses.replace(template, quantity=min(deficit, state.bank_gold))

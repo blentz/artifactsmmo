@@ -48,6 +48,8 @@ from artifactsmmo_cli.ai.scenario import (
     SCENARIOS,
     scenario_state,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
+from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.audit import currency_wall_census as cwc
 from artifactsmmo_cli.audit.currency_wall_census import (
     GOLD_ROW,
@@ -109,6 +111,13 @@ def _offered(state, game_data):  # type: ignore[no-untyped-def]
                               attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None),
                               None)
     return [g for g in (resolution.root, *resolution.alternatives) if g is not None]
+
+
+def _cycle(state: WorldState, game_data: GameData) -> SelectionContext:
+    """The cycle's context, as `run_census` prices on it: the gear objective
+    attached (ruling W), so spent gold costs the time the cycle earns it in
+    (S-046)."""
+    return attached(state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
 
 
 @pytest.fixture(scope="module")
@@ -215,7 +224,17 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
 
     21 -> 22 (ruling T14a-B', capacity is priced): on `l20_relief_full_bank`
     the census's LEGACY rune price sold the one banked sap for 18,500 gold;
-    the sell route delivers 135, so the rune is honestly gold-walled there."""
+    the sell route delivers 135, so the rune is honestly gold-walled there.
+
+    7 -> 11 resolved roots, walls still 22 (ruling "seconds inside",
+    2026-10-31): on `l48_capstone_approach`, `l48_band_adequate`,
+    `l48_raid_active` and `l48_event_active` the rune was already a walled
+    alternative; it now heads the walk over `goblin_guard_shield`. Its gold is
+    fought for off a grey `highwayman` (4 gold a win) whose fight takes 5.2 s,
+    the 5 s cooldown floor every captured 1-3 turn fight shows, where it was
+    charged one ~36 s action a win: the rune fell from 5263 to 1224 actions.
+    The shield's ~1894 drop fights take ~46 s each, so it rose from 1897 to
+    2458. Gain per price now ranks the rune first."""
     walls = [r for r in results if r.gap.startswith("wall_")]
     assert {r.gap for r in walls} == {CurrencyGap.WALL_GOLD.value}
     assert {r.currency for r in walls} == {GOLD_ROW}
@@ -224,7 +243,8 @@ def test_only_the_gold_wall_is_exercised_and_the_matrix_says_so(
     assert {r.scenario for r in walls if r.is_resolved_root} == {
         "l32_items_task", "l32_held_task_workable", "l32_held_task_closable",
         "l32_held_task_open", "l20_dual_utility", "l20_dual_utility_one_stocked",
-        "l24_fisher_cooking_rung"}
+        "l24_fisher_cooking_rung", "l48_capstone_approach", "l48_band_adequate",
+        "l48_raid_active", "l48_event_active"}
     assert "walled 22" in summary_line(results)
 
 
@@ -239,10 +259,11 @@ def test_the_charge_is_the_pricers_own_answer() -> None:
     root = FUNDED_CANDIDATE
     assert root in _offered(state, game_data)
     charges = charged_currencies(root, state, game_data,
-                                 catalogue_currencies(game_data))
+                                 catalogue_currencies(game_data),
+                                 _cycle(state, game_data))
     assert set(charges) == {FUNDED_CURRENCY}
     base, granted = charges[FUNDED_CURRENCY]
-    assert base == route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT,
+    assert base == route_price(root, state, game_data, _cycle(state, game_data),
                                None)
     assert base >= 1_000_000 > granted
 
@@ -256,9 +277,11 @@ def test_granting_the_currency_clears_the_charge() -> None:
     funded = dataclasses.replace(
         state, inventory={**state.inventory, FUNDED_CURRENCY: 500})
     assert charged_currencies(FUNDED_CANDIDATE, state, game_data,
-                              catalogue_currencies(game_data))
+                              catalogue_currencies(game_data),
+                                 _cycle(state, game_data))
     assert charged_currencies(FUNDED_CANDIDATE, funded, game_data,
-                              catalogue_currencies(game_data)) == {}
+                              catalogue_currencies(game_data),
+                                 _cycle(state, game_data)) == {}
 
 
 def test_a_merely_cheaper_route_is_not_a_charge() -> None:
@@ -278,12 +301,13 @@ def test_a_merely_cheaper_route_is_not_a_charge() -> None:
         root = _offered(state, game_data)[0]
         if root is None:
             continue
-        base = route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT, None)
+        base = route_price(root, state, game_data, _cycle(state, game_data), None)
         if base >= UNOBTAINABLE_PER_UNIT:
             continue
         obtainable += 1
         assert charged_currencies(root, state, game_data,
-                                  catalogue_currencies(game_data)) == {}
+                                  catalogue_currencies(game_data),
+                                 _cycle(state, game_data)) == {}
     assert obtainable > 1, "the claim needs obtainable roots to be about"
 
 
@@ -420,12 +444,13 @@ def test_an_obtainable_root_is_never_an_unattributed_wall() -> None:
         state = scenario_state(scenario, game_data)
         root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
-                                       TIMED_NO_PROFILE_CONTEXT,
+                                       _cycle(state, game_data),
                                        None) >= UNOBTAINABLE_PER_UNIT:
             continue
         checked += 1
         assert not unattributed_wall(root, state, game_data,
-                                     catalogue_currencies(game_data))
+                                     catalogue_currencies(game_data),
+                                 _cycle(state, game_data))
     assert checked > 1, "the claim needs obtainable roots to be about"
 
 
@@ -440,10 +465,11 @@ def test_a_root_walled_on_a_non_currency_leaf_is_not_an_unattributed_wall(
     state = scenario_state(scenario, game_data)
     # A target whose closure contains no currency at all.
     root = ObtainItem(code="mithril_bar", quantity=99)
-    assert route_price(root, state, game_data, TIMED_NO_PROFILE_CONTEXT,
+    assert route_price(root, state, game_data, _cycle(state, game_data),
                        None) >= UNOBTAINABLE_PER_UNIT
     assert not unattributed_wall(root, state, game_data,
-                                 catalogue_currencies(game_data))
+                                 catalogue_currencies(game_data),
+                                 _cycle(state, game_data))
 
 
 def test_the_single_currency_case_is_attributed_not_left_unnamed() -> None:
@@ -455,11 +481,13 @@ def test_the_single_currency_case_is_attributed_not_left_unnamed() -> None:
     state = scenario_state(scenario, game_data)
     root = FUNDED_CANDIDATE
     currencies = catalogue_currencies(game_data)
-    assert set(charged_currencies(root, state, game_data, currencies)) == \
+    assert set(charged_currencies(root, state, game_data, currencies,
+                                 _cycle(state, game_data))) == \
         {FUNDED_CURRENCY}
     # It would ALSO cross when everything is granted — which is exactly why the
     # combined probe must not be the thing that decides the verdict.
-    assert unattributed_wall(root, state, game_data, currencies)
+    assert unattributed_wall(root, state, game_data, currencies,
+                                 _cycle(state, game_data))
 
 
 def test_the_multi_currency_residual_is_a_must_be_zero_class() -> None:
@@ -496,7 +524,8 @@ def test_forcing_one_world_hides_the_only_funded_arm() -> None:
         fighter = achievable_fighter(state, default_world, TIMED_NO_PROFILE_CONTEXT)
         for index, candidate in enumerate(_offered(state, default_world)):
             forced.extend(cwc._candidate_cells(name, candidate, index == 0, state,
-                                               default_world, currencies, fighter))
+                                               default_world, currencies, fighter,
+                                               _cycle(state, default_world)))
 
     assert len(forced) >= MIN_CELLS, "the forced grid must be full-sized"
     assert [r for r in forced if r.gap == CurrencyGap.FUNDED.value] == []
@@ -683,10 +712,10 @@ def test_a_rich_character_is_not_gold_walled() -> None:
     state = scenario_state(scenario, game_data)
     root = GOLD_CANDIDATE
     assert root in _offered(state, game_data)
-    assert gold_charge(root, state, game_data) is not None, "premise: walled"
+    assert gold_charge(root, state, game_data, _cycle(state, game_data)) is not None, "premise: walled"
 
     rich = dataclasses.replace(state, gold=1_000_000)
-    assert gold_charge(root, rich, game_data) is None
+    assert gold_charge(root, rich, game_data, _cycle(state, game_data)) is None
 
 
 def test_an_obtainable_root_is_never_gold_walled() -> None:
@@ -699,11 +728,11 @@ def test_an_obtainable_root_is_never_gold_walled() -> None:
         state = scenario_state(scenario, game_data)
         root = _offered(state, game_data)[0]
         if root is None or route_price(root, state, game_data,
-                                       TIMED_NO_PROFILE_CONTEXT,
+                                       _cycle(state, game_data),
                                        None) >= UNOBTAINABLE_PER_UNIT:
             continue
         checked += 1
-        assert gold_charge(root, state, game_data) is None
+        assert gold_charge(root, state, game_data, _cycle(state, game_data)) is None
     assert checked > 1, "the claim needs obtainable roots to be about"
 
 

@@ -26,9 +26,9 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.acquisition_cost import acquisition_actions
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
-from artifactsmmo_cli.ai.fight_gold_rate import fight_gold_rate
 from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gold_rate import fight_gold_rate
 from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_codes import objective_codes

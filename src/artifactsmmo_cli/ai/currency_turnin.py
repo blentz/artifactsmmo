@@ -22,6 +22,15 @@ class TurnIn:
     buyer: str
     fleet_total: int
 
+    @property
+    def ready(self) -> bool:
+        """The fleet can pay the price now (`turn_in_ready_pure`): the buyer
+        buys. Short of it, the claim elects the one character that farms the
+        fleet's shortfall (the ticket farm, live 2026-10-31: Robby and C3P0
+        farmed the same 3-medal shortfall and raced for the bank's tickets),
+        and nobody buys or surrenders yet."""
+        return turn_in_ready_pure(self.fleet_total, self.price)
+
 
 def fleet_total_pure(own: Mapping[str, int], siblings: Mapping[str, int],
                      bank: Mapping[str, int], code: str) -> int:

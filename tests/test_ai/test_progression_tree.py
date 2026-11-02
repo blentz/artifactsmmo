@@ -156,7 +156,11 @@ class TestPerScenarioPins:
         The shield precedes the helmet since plan C Task 7: at the base sheet's
         initiative 100 the shield's gain per unit of price (0.0291 / 121) edges
         the helmet's (0.0665 / 280); at initiative 0 it was 0.0194 / 121
-        against 0.0500 / 279."""
+        against 0.0500 / 279. Since ruling "seconds inside" (2026-10-31) every
+        route is priced at its actions' measured seconds: on origin/main the
+        helmet moved ahead of the leg armor; merged with plan C's initiative
+        100 the leg armor still leads the helmet, and the helmet now precedes
+        the shield."""
         d, _ = _decide("l10_copper_adequate")
         assert d.chosen_root == ObtainItem(code="greater_wooden_staff", quantity=1,
                                            slot="weapon_slot")
@@ -166,8 +170,8 @@ class TestPerScenarioPins:
             "ObtainItem(code='leather_armor', quantity=1, slot='body_armor_slot')",
             "ObtainItem(code='leather_boots', quantity=1, slot='boots_slot')",
             "ObtainItem(code='leather_legs_armor', quantity=1, slot='leg_armor_slot')",
-            "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='adventurer_helmet', quantity=1, slot='helmet_slot')",
+            "ObtainItem(code='iron_shield', quantity=1, slot='shield_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring1_slot')",
             "ObtainItem(code='forest_ring', quantity=1, slot='ring2_slot')",
             "ReachSkillLevel(skill='jewelrycrafting', level=2)",

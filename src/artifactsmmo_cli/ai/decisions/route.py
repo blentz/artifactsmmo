@@ -24,6 +24,14 @@ enter: no gold price, no level gap, no wall-clock cooldown, no travel distance.
 A caller that needs seconds converts ONCE, at the call site, by the published
 `ge_order_config.AVG_CYCLE_SECONDS`, and says so.
 
+INSIDE, THE PRICER COUNTS SECONDS (ruling "seconds inside", 2026-10-31). Every
+route option is priced at the measured seconds its actions take (a gather, a
+craft, a withdraw at its `/my/logs` kind's mean cooldown; a fight at its
+learned seconds with the rest it forces) and converted to planner actions in
+ONE place, `acquisition_cost._in_actions`, by the measured seconds of one
+planner action. So the arms still return planner actions, and a fight and a
+gather compare by the time they take.
+
 A LOWER BOUND, never an estimate, and NOT CACHEABLE ACROSS CYCLES —
 `UNOBTAINABLE_PER_UNIT` is charged for an item with no route THIS cycle.
 

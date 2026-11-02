@@ -479,8 +479,11 @@ def test_a_starved_cascade_witnesses_the_standing_arm_end_to_end(gd: GameData) -
     # WHERE EACH VERDICT IS SERVED: the gear verdict by the task root.
     roots = {m: _task_root(_starved_state(m, gd), gd, TIMED_NO_PROFILE_CONTEXT, None)
              for m in (STARVED_GEAR, STARVED_OUT_OF_REACH)}
+    # RE-DERIVED by the merge of seconds pricing (ruling "seconds inside"):
+    # `L*(dryad)`'s first missing piece is the `snakeskin_boots` (it was the
+    # `goblin_guard_shield`).
     assert roots == {
-        STARVED_GEAR: ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
+        STARVED_GEAR: ObtainItem(code="snakeskin_boots", quantity=1, slot="boots_slot"),
         STARVED_OUT_OF_REACH: None}
 
 
@@ -533,12 +536,21 @@ def test_an_out_of_horizon_task_leaves_the_character_doing_its_own_work(
     # piece, `goblin_guard_shield`, which is also the head of the character's
     # own `L*`: the task asks for the piece the character already pursues, so it
     # adds no alternative (the deleted deficit walk appended `slime_shield`).
+    #
+    # RE-DERIVED by the merge of seconds pricing into plan C (ruling "seconds
+    # inside", 2026-10-31): the character's own `L*` is headed by the
+    # gold-priced `lifesteal_rune` (its gold earned at the fastest gold
+    # fight's seconds), and `L*(dryad)`'s first missing piece is the
+    # `snakeskin_boots`, which the character's own objective does not name. So
+    # the task root adds that one alternative, LAST, after the character's own
+    # pieces and climb: the head, the declines and the work are the control's.
     _, _, gear = _starved_run(STARVED_GEAR, gd)
-    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
+    rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
+    boots = ObtainItem(code="snakeskin_boots", quantity=1, slot="boots_slot")
     assert gear.decision.ranking[0].category == "WhichPieceIsNext → IsThisTargetBlocked"
-    assert gear.decision.chosen_root == control.decision.chosen_root == shield
+    assert gear.decision.chosen_root == control.decision.chosen_root == rune
     assert gear.decision.declined == control.decision.declined == ()
-    assert gear.decision.fallback_roots == control.decision.fallback_roots
+    assert gear.decision.fallback_roots == [*control.decision.fallback_roots, boots]
     assert repr(gear.selected_goal) == control_goal
 
 

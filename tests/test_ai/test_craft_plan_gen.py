@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.obtain_model.obtain_model import ObtainModel
 from artifactsmmo_cli.ai.obtain_model.route import Route
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkGraph
@@ -47,6 +48,7 @@ from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.region_edges import crossings
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.unservable_drop_route_error import UnservableDropRouteError
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
@@ -61,7 +63,7 @@ def _ctx(**kw: object) -> SelectionContext:
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
     )
     base.update(kw)
-    return SelectionContext(**base, learned_drops=LearnedDrops.empty())
+    return offline_context(SelectionContext(**base, learned_drops=LearnedDrops.empty()))
 
 def _gd_copper_ring() -> GameData:
     """copper_ring → copper_bar (1 bar each) → copper_ore (10 ore per bar).
@@ -1000,6 +1002,28 @@ class TestDropLeafFightLeg:
         assert isinstance(result[0], FightAction)
         assert result[0].drop_farm is True
 
+    @staticmethod
+    def _drop_leg(state, gd, pool):  # type: ignore[no-untyped-def]
+        graph = SimpleNamespace(sources={"feather": [SimpleNamespace(kind=SourceKind.DROP,
+                                                                       via="chicken")]})
+        return cpg._action_for(Act("feather", 0, 8, 8), graph, [], pool, state, gd, True,
+                               lambda _item: False)
+
+    def test_a_walked_dropper_the_oracle_vetoes_is_a_named_defect(self):
+        """Review I4: the DROP leg fights the route's own dropper. When the
+        proved selection refuses it (the oracle: chicken unbeatable) or the
+        pool holds no fight for it, the walk's admission and the oracle
+        disagree, and the step raises by name instead of planning nothing. A
+        pool with no fight for it serves nothing yet (None), as every other
+        arm's missing action."""
+        state = _fighter_state()
+        fought = self._drop_leg(state, _gd_drop_leaf(), _drop_leaf_actions())
+        assert isinstance(fought, FightAction) and fought.drop_target == ("feather", 8)
+        with pytest.raises(UnservableDropRouteError) as vetoed:
+            self._drop_leg(state, _gd_drop_leaf(char_beats_chicken=False), _drop_leaf_actions())
+        assert (vetoed.value.item, vetoed.value.monster) == ("feather", "chicken")
+        assert self._drop_leg(state, _gd_drop_leaf(), _drop_leaf_actions()[:1]) is None
+
     def test_unwinnable_dropper_returns_none(self):
         """A dropper exists but is_winnable rejects it → relevant_actions
         emits no Fight → the generator falls back to A* honestly (the
@@ -1860,8 +1884,9 @@ class TestACommittedUpgradeDecomposes:
     item, then the equip; its only A* route to a skill-gated item was the
     LevelSkill macro, which is leaving the pool."""
 
-    def _goal(self, state, target=("copper_ring", "ring1_slot")):
-        return UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=target)
+    def _goal(self, state, target=("copper_ring", "ring1_slot"), ge_fill=False):
+        return UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=target,
+                                    ge_fill=ge_fill)
 
     def test_the_item_is_made_then_equipped(self):
         gd = _gd_copper_ring()
@@ -1907,15 +1932,23 @@ class TestACommittedUpgradeDecomposes:
         assert decompose(self._goal(infeasible), infeasible, gd, [], _ctx()) is None
 
     def test_an_item_the_ge_sells_is_left_to_the_search(self, monkeypatch):
-        """Buying off the book against making it is a price question the walk
-        does not answer (no GE routes, D-E); the search keeps that choice."""
+        """A fill its price took (`ge_fill`, S-046) is the search's to plan:
+        the walk has no GE routes (D-E). The same book with the fill NOT
+        priced walks the ring like any other item: a standing order alone is
+        no reason to buy (live Robby 2026-10-30, `GeBuy(mithril_helm)` at
+        92.5k while its price took the climb)."""
         gd = _gd_copper_ring()
         monkeypatch.setattr(gd, "ge_best_sell_order",
                             lambda code: ("order", 5, 1) if code == "copper_ring" else None)
         state = make_state(inventory={}, bank_items={}, skills={"mining": 5, "jewelrycrafting": 5})
         declined: list[str] = []
-        assert decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx(), declined) is None
+        assert decompose(self._goal(state, ge_fill=True), state, gd, _copper_ring_actions(),
+                         _ctx(), declined) is None
         assert declined == ["upgrade:ge_venue:copper_ring"]
+        walked = decompose(self._goal(state), state, gd, _copper_ring_actions(), _ctx())
+        assert walked is not None
+        assert repr(walked[-1]) == "Equip(copper_ring->ring1_slot)"
+        assert not any(repr(a).startswith("GeBuy") for a in walked)
 
     def test_an_equip_that_could_not_apply_declines_before_obtaining(self):
         """A copy the equip could not use is not fetched: the withdraw would be

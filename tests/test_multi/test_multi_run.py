@@ -44,7 +44,7 @@ def _characters_response(*names: str) -> SimpleNamespace:
                                  for index, n in enumerate(names)])
 
 
-_BOOTSTRAP = FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,))
+_BOOTSTRAP = FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,), kinds=(("fight", 10, None, 1),))
 
 
 @pytest.fixture(autouse=True)

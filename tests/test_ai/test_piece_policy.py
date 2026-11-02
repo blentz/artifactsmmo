@@ -103,16 +103,24 @@ LEATHER = ObtainItem("leather_armor", 1, slot="body_armor_slot")
 woodcutting-10 craft from woodcutting-10 spruce_wood. The character has 1 in
 both."""
 
-MAP_PRICE = 9715
+MAP_PRICE = 2197
 """The map's price at the live event: its 14900 gold short of the pocket,
-fought for at the wolf's exact win cost and rounded once (ruling T2m M1;
+fought for at the cheapest gold fight's exact win cost (the yellow slime since
+ruling "seconds inside", 2026-10-31: a 5-second fight's gold is the fastest
+earned; the wolf, 9781, while every win counted one fight-equivalent) and rounded once (ruling T2m M1;
 14904 when each win was rounded up), plus the wolf's tile, the vendor's tile,
-the buy and the equip."""
+the buy and the equip. 9715 -> 9781 with S-046: the pocket's 100 gold is no
+longer free, it costs the wolf time that earns it again (67 actions, rounded
+once), so the map costs what the piece does, but for one rounding. 2599 ->
+2197 when the merge of the ticket-farm fix brought seconds pricing together
+with plan C Task 7's base initiative 100: the yellow slime's fight is a turn
+shorter, so its gold is earned in fewer seconds."""
 
-PIECE_MAP_PRICE = 9780
+PIECE_MAP_PRICE = 2197
 """The map's price as a piece of `L*` (ruling T3e m3): its 100-gold pocket sits
 under the 100-gold safety floor its buy must keep, so all 15000 gold is fought
-for, 25 more wolf wins than `MAP_PRICE`'s 14900."""
+for, 50 more yellow-slime wins than `MAP_PRICE`'s 14900, which rounding hides
+since every action is priced in measured seconds."""
 
 RUNE_CELL = "l20_dual_utility"
 """A level-20 character whose `L*` heads with the 20000-gold `lifesteal_rune`."""
@@ -274,7 +282,12 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     (initiative 50) and each fight is a turn shorter; the Rest a kill forces is
     priced in fight-equivalents of that shorter fight (`cycles_per_kill`), so a
     `red_slime` win costs 2.41 actions (was 2.23) and a `yellow_slime` win 1.62
-    (was 1.54) for the amulet's slimeballs."""
+    (was 1.54) for the amulet's slimeballs. It moved 115 -> 70 with ruling
+    "seconds inside" (2026-10-31): a withdraw (3 s) and a craft (13 s) cost
+    their measured seconds, not one 36-second planner action each. The two
+    together (the merge of the ticket-farm fix into plan C) price it at 68:
+    the slime fights are priced at the seconds of the shorter fight the base
+    initiative 100 gives."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     quiet = shared_world(BUNDLE)
     ctx = TIMED_NO_PROFILE_CONTEXT
@@ -286,7 +299,10 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     assert [(r.kind, r.venue, r.inputs) for r in route_options(
         AMULET.code, with_order, busy, ctx, None, policy=PIECE_POLICY)] == [
         ("ge_fill", order[0], {"gold": 213})]
-    assert route_price(AMULET, with_order, busy, ctx, None, policy=PIECE_POLICY) == 3
+    # A hop, the fill, the equip, and the 213 gold at the time its cheapest
+    # fight takes to earn it again (S-046; 3 when held gold was free).
+    assert route_price(AMULET, with_order, busy, ctx, None, policy=PIECE_POLICY) == \
+        3 + ceil(213 * _fight_per_gold(with_order, busy))
     assert actionable_step(AMULET, with_order, busy, ctx) == AMULET
 
     assert quiet.ge_best_sell_order(AMULET.code) is None
@@ -295,7 +311,7 @@ def test_a_standing_order_is_a_route_while_it_stands() -> None:
     assert [(r.kind, r.unlock, r.unlock_actions) for r in route_options(
         AMULET.code, climbing, quiet, ctx, store, policy=PIECE_POLICY)] == [
         ("craft", "skill:jewelrycrafting:10", 25)]
-    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 121
+    assert route_price(AMULET, climbing, quiet, ctx, store, policy=PIECE_POLICY) == 68
     assert actionable_step(AMULET, gone, quiet, ctx) == ObtainItem("iron_bar", 4)
 
 
@@ -327,7 +343,17 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     with plan C Task 7: at the base sheet's initiative 100 the character moves
     first against the `cow` whose cowhide the armor takes, and the Rest a win
     forces is priced in fight-equivalents of that shorter fight
-    (`cycles_per_kill`)."""
+    (`cycles_per_kill`); and 213 -> 180 with
+    ruling "seconds inside" (2026-10-31): every action is priced at its kind's
+    measured seconds over a planner action's (a craft 13 s, a gather 34 s, a
+    cowhide fight its own seconds), against one planner action each before;
+    and 180 -> 176 with the user's I2 ruling and review I3: a kind is timed by
+    the learning store's recorded cooldowns per action run (a craft run 5.5 s,
+    not the logs' batched 13.2 s mean; a gather 34.06 s, not 34.5 s). The
+    two together (the merge of the ticket-farm fix into plan C) price it at
+    175: the cowhide fight is priced at the seconds of the shorter fight the
+    base initiative 100 gives. The climbs, priced in grind cycles, are
+    unchanged."""
     world = _world(CLIMB_CELL)
     ctx = TIMED_NO_PROFILE_CONTEXT
     state = replace(derived_scenario_state(SCENARIOS[CLIMB_CELL], world),
@@ -338,10 +364,10 @@ def test_a_climb_is_priced_though_the_policy_admits_the_craft() -> None:
     assert rates == {"gearcrafting": 30.0, "woodcutting": 30.0}
     climbs = sum(skill_grind_cycles(1, 0, MAX_XP, 10, 30.0) for _ in rates)
 
-    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 214
+    assert route_price(LEATHER, skilled, world, ctx, store, policy=PIECE_POLICY) == 175
     assert climbs == 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 214 + 90
-    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 214 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=PIECE_POLICY) == 175 + 90
+    assert route_price(LEATHER, state, world, ctx, store, policy=LEGACY) == 175 + 90
 
 
 def test_an_unpriceable_climb_leaves_the_piece_unpriced() -> None:
@@ -368,7 +394,7 @@ def test_fight_gold_is_priced_per_kill_at_the_mean_gold() -> None:
         low, high = world.monster_min_gold(option.venue), world.monster_max_gold(option.venue)
         assert option.yield_per == max(1, (low + high) // 2), option.venue
         assert option.actions_per_application == _kill_actions(
-            option.venue, state, world, ctx.timing(), ctx.fight_records), option.venue
+            option.venue, state, world, ctx, ctx.fight_records), option.venue
         assert isinstance(option.actions_per_application, Fraction), option.venue
     assert any(world.monster_min_gold(option.venue) < world.monster_max_gold(option.venue)
                for option in options)
@@ -429,7 +455,8 @@ def test_a_gold_funded_piece_is_achievable_and_served() -> None:
 
 def test_fight_gold_is_rounded_once_per_route() -> None:
     """Ruling T2m M1: the map's 14900 gold short is farmed off the monster whose
-    exact win cost per gold is least (the wolf: about 2.61 actions for 4 gold),
+    exact win cost per gold is least (the yellow slime since every action is
+    priced at its measured seconds, ruling "seconds inside"; the wolf before),
     not off the first that rounds to one action a gold, and its wins are rounded
     up once: ceil(3725 wins x the exact cost), then the two tiles, the buy and
     the equip."""
@@ -438,49 +465,66 @@ def test_fight_gold_is_rounded_once_per_route() -> None:
     live = _event(derived_scenario_state(SCENARIOS[EVENT_CELL], world), world, True)
     gold = acquisition_options(EVENT_ITEM, live, world, ctx, None, policy=PIECE_POLICY)["gold"]
     best = min(gold, key=lambda r: Fraction(r.actions_per_application) / r.yield_per)
-    assert best.venue == "wolf"
+    assert best.venue == "yellow_slime"
     short = 15000 - live.gold
     wins = -(-short // best.yield_per)
-    assert ceil(wins * best.actions_per_application) + 4 == MAP_PRICE
-    assert wins * ceil(best.actions_per_application) + 4 > MAP_PRICE
+    # The pocket's gold is spent at the same wolf rate (S-046), rounded once.
+    held = ceil(live.gold * Fraction(best.actions_per_application) / best.yield_per)
+    assert held + ceil(wins * best.actions_per_application) + 4 == MAP_PRICE
+    assert held + wins * ceil(best.actions_per_application) + 4 > MAP_PRICE
     node = ObtainItem(EVENT_ITEM, 1, slot=EVENT_SLOT)
     assert route_price(node, live, world, ctx, None, policy=PIECE_POLICY) == MAP_PRICE
 
 
-def test_held_gold_is_free_up_to_the_pocket() -> None:
-    """Ruling T2k ("free until used up", as held potions): cell 5's 213-gold
-    fill, which the pocket covers, costs a hop, the fill and the equip with a
-    store as without one, under either policy; with a store the priced climb
-    no longer outbids it. Only gold beyond the pocket costs its production:
-    200 held leaves 13 to fight for under `PIECE_POLICY`, while `LEGACY`, with
-    no gold route, takes the climbed craft.
+def _fight_per_gold(state, world):  # type: ignore[no-untyped-def]
+    """Actions one gold piece takes to earn by the cheapest gold fight
+    `PIECE_POLICY` offers `state`: with no grind target on the bare context,
+    the rate spent gold is charged at (S-046, `acquisition_cost._gold_priced`)."""
+    gold = acquisition_options(AMULET.code, state, world, TIMED_NO_PROFILE_CONTEXT, None,
+                               policy=PIECE_POLICY)["gold"]
+    return min(Fraction(r.actions_per_application) / r.yield_per
+               for r in gold if r.kind == "gold_drop")
 
-    The 13 are 7 yellow_slime wins (12 actions, rounded once; 11 until plan C
-    Task 7, when the derived character's base initiative 100 let it move first
-    and the Rest each win forces became 0.62 of the shorter fight, was 0.54,
-    `cycles_per_kill`): ruling T15a
-    takes the level-15 highwayman, whose gold per action was the cheapest, out
-    of a level-12 character's gold routes (above its fight ceiling), and its
-    4 wins cost 12. The LEGACY craft moved 38 -> 42 with ruling T14a-B': the
-    bank holds 3 of its 4 iron_bar, and the 4th is smelted from gathered ore
-    (smelt, gathers, two hops)."""
+
+def test_held_gold_costs_the_time_to_earn_it_again() -> None:
+    """S-046 (the USER's ruling 2026-10-30), which replaced ruling T2k's "free
+    until used up": cell 5's 213-gold fill costs a hop, the fill, the equip and
+    its 213 gold at the time the cheapest gold fight takes to earn it (about
+    0.23 actions a gold piece, 48 actions, once every action is priced at its
+    kind's measured seconds: ruling "seconds inside", 2026-10-31, and the
+    shorter yellow_slime fight of plan C Task 7's base initiative 100, which
+    the merge of the two brought together; 0.28 and 60 with seconds alone,
+    0.77 and 164 before either). Time, not gold, now decides it:
+
+    * `PIECE_POLICY` without a store: the fill, 51 (63 with seconds alone,
+      167 in fight-equivalents, 3 when held gold was free).
+    * `PIECE_POLICY` with a store: the priced climb and craft, 45 + the equip,
+      beat the fill's 51.
+    * `LEGACY`: it has no gold fight and the bare context no grind target, so
+      no gold rate, and spent gold is unpriceable as buying is with no rate
+      (`consumable_price_core.buy_seconds`). Without a store nothing prices;
+      with one the climbed craft does, 68 (70 with seconds alone, 115 before).
+    * 200 held: the piece takes the same craft, 46 (48 with seconds alone, 66
+      before); `LEGACY` the climbed craft at 67 (69 with seconds alone, 114
+      before)."""
     busy = shared_world(BUNDLE, with_ge_orders=True)
     ctx = TIMED_NO_PROFILE_CONTEXT
     climbing = replace(scenario_state(SCENARIOS[GE_CELL], busy),
                        skill_max_xp={"jewelrycrafting": MAX_XP})
     store = _store("jewelrycrafting")
     assert climbing.gold >= 213
-    for policy in (PIECE_POLICY, LEGACY):
-        for history in (None, store):
-            assert route_price(AMULET, climbing, busy, ctx, history, policy=policy) == 3
+    fill = 3 + ceil(213 * _fight_per_gold(climbing, busy))
+    assert fill == 51
+    assert route_price(AMULET, climbing, busy, ctx, None, policy=PIECE_POLICY) == fill
     assert cheapest_route(AMULET.code, 1, climbing, busy, ctx, store, policy=PIECE_POLICY,
-                          pocket=climbing.gold) == (
-        2, SourceKind.GE_FILL)
+                          pocket=climbing.gold) == (45, SourceKind.CRAFT)
+    assert route_price(AMULET, climbing, busy, ctx, None, policy=LEGACY) == \
+        UNOBTAINABLE_PER_UNIT + 1
+    assert route_price(AMULET, climbing, busy, ctx, store, policy=LEGACY) == 68
     short = replace(climbing, gold=200)
-    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 16
+    assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 46
     assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY,
-                          pocket=short.gold) == (
-        42, SourceKind.CRAFT)
+                          pocket=short.gold) == (67, SourceKind.CRAFT)
 
 
 def test_an_unpriced_climb_is_served_as_its_craft() -> None:

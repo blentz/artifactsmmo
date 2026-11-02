@@ -57,6 +57,10 @@ class _Store:
     def fleet_skill_grind_rate(self, skill: str) -> float | None:
         return None
 
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
+
 
 def _resolution(root: object, alternatives: tuple = (),
                 blocked_target: str | None = None) -> RootResolution:

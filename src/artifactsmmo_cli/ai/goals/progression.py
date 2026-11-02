@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import gold_ferry
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.drop_fight_selection import select_drop_fight
 from artifactsmmo_cli.ai.equip_value import equip_value
@@ -43,8 +44,18 @@ class UpgradeEquipmentGoal(Goal):
     """Craft and equip better gear when an upgrade is available or craftable."""
 
     def __init__(self, initial_equipment: dict[str, str | None] | None = None,
-                 committed_target: tuple[str, str] | None = None) -> None:
+                 committed_target: tuple[str, str] | None = None, *,
+                 ge_fill: bool = False) -> None:
         self._initial_equipment: dict[str, str | None] = dict(initial_equipment) if initial_equipment else {}
+        # Whether the committed target may be BOUGHT off a standing GE sell
+        # order: True only when its priced route IS that fill (S-046,
+        # `obtain_item_routing.ge_fill_priced`), so the gold it spends has paid
+        # for itself against the time to earn it. Off by default: the search
+        # prices an edge by its travel, never its gold, so an admitted fill was
+        # always the cheapest edge however much it cost — live Robby,
+        # `WithdrawGold(90843)` -> `GeBuy(mithril_helm)` while the helm's price
+        # took the gearcrafting climb.
+        self._ge_fill = ge_fill
         # When set, the goal commits to crafting exactly this (item, slot)
         # upgrade and ignores all other craftable candidates. The player
         # persists the target across cycles so a transient inventory change
@@ -57,6 +68,12 @@ class UpgradeEquipmentGoal(Goal):
     def committed_target(self) -> tuple[str, str] | None:
         """The (item, slot) this goal committed to, or None (any upgrade)."""
         return self._committed_target
+
+    @property
+    def ge_fill(self) -> bool:
+        """The committed target may be bought off its standing GE sell order
+        (its priced route is that fill, S-046)."""
+        return self._ge_fill
 
     @property
     def max_depth(self) -> int:
@@ -315,13 +332,20 @@ class UpgradeEquipmentGoal(Goal):
             # re-emitted: the factory enumerates neither.
             ge_location = game_data.grand_exchange_location()
             ge_order = game_data.ge_best_sell_order(target_item)
-            if ge_location is not None and ge_order is not None and ge_order[2] >= 1:
+            if self._ge_fill and ge_location is not None and ge_order is not None \
+                    and ge_order[2] >= 1:
                 order_id, ge_price, _available = ge_order
                 # Affordability and the gold reserve are `is_applicable`'s job
                 # (S-045), not a second gate here that could disagree with it.
                 result.append(GeFillSellOrderAction(
                     order_id=order_id, item_code=target_item, price=ge_price,
                     quantity=1, ge_location=ge_location))
+                # The fill pays from the pocket; when the pocket is short the
+                # bank's gold is ferried first (`gold_ferry`), or the search has
+                # no edge that makes the fill applicable.
+                ferry = gold_ferry(actions, state, ge_price - state.gold)
+                if ferry is not None:
+                    result.append(ferry)
                 if not any(isinstance(a, EquipAction) and a.code == target_item
                            and a.slot == target_slot for a in result):
                     result.append(EquipAction(code=target_item, slot=target_slot))
@@ -694,7 +718,8 @@ class UpgradeEquipmentGoal(Goal):
         committed = list(self._committed_target) if self._committed_target is not None else None
         return {"type": "UpgradeEquipmentGoal",
                 "initial_equipment": dict(self._initial_equipment),
-                "committed_target": committed}
+                "committed_target": committed,
+                "ge_fill": self._ge_fill}
 
     def __repr__(self) -> str:
         # The committed target is part of the goal's identity. Run-18 trace

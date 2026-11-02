@@ -2,6 +2,7 @@
 to the fleet's recorded fights and a `/my/logs` bootstrap, refitted only when
 either changes, and fitted offline from the committed live capture."""
 
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,21 +10,38 @@ from types import SimpleNamespace
 import pytest
 from artifactsmmo_api_client.models.log_type import LogType
 
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.fight_seconds_core import FightSecondsModel
 from artifactsmmo_cli.ai.learning import fight_seconds_model as mod
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     BOOTSTRAP_FIGHTS,
     BOOTSTRAP_PAGE,
+    PRICED_KINDS,
+    STORE_KINDS,
     FleetBootstrap,
+    committed_kind_seconds,
     fetch_fleet_bootstrap,
     fit_model,
+    kind_seconds,
     learned_action_seconds,
+    learned_kind_seconds,
     learned_model,
     log_fights,
+    log_kind,
+    store_kind_seconds,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
+from artifactsmmo_cli.ai.untimed_action_kind_error import UntimedActionKindError
 
 
 def _store(tmp_path: Path) -> LearningStore:
@@ -93,7 +111,9 @@ def test_a_character_without_fights_bootstraps_from_the_account_log() -> None:
     bootstrap = fetch_fleet_bootstrap(api, {"R2D2": 0, "Robby": 8, "Lor": 2},  # type: ignore[arg-type]
                                       lambda: calls.append("acquire"))
     assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0), (10, 2, 20.0)),
-                                       cooldowns=(25, 9, 0, 20))
+                                       cooldowns=(25, 9, 0, 20),
+                                       kinds=(("gathering", 25, None, 1), ("fight", 9, None, 1),
+                                              ("fight", 0, None, 1), ("fight", 20, None, 1)))
     assert calls == ["acquire"] and api.calls == [(1, BOOTSTRAP_PAGE)]
     model, seconds = timing_of(None, bootstrap)
     assert (model.samples, model.haste_identified, seconds) == (2, True, 18)
@@ -133,11 +153,13 @@ def test_a_character_off_the_roster_is_no_observation() -> None:
     api = _Api([[_entry("Ghost", LogType.FIGHT, 30, 15), _entry("Ghost", LogType.GATHERING, 40),
                  _entry("Robby", LogType.FIGHT, 9, 5)]])
     bootstrap = fetch_fleet_bootstrap(api, {"Robby": 8}, lambda: None)  # type: ignore[arg-type]
-    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9,))
+    assert bootstrap == FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9,),
+                                       kinds=(("fight", 9, None, 1),))
 
 
 def test_a_bootstrap_round_trips_through_json() -> None:
-    bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25))
+    bootstrap = FleetBootstrap(fights=((5, 8, 9.0),), cooldowns=(9, 25),
+                               kinds=(("crafting", 10, "copper_bar", 2), ("rest", 3, None, 1)))
     assert FleetBootstrap.from_json(bootstrap.to_json()) == bootstrap
 
 
@@ -196,18 +218,18 @@ def test_the_action_seconds_are_learned_then_bootstrapped_or_raise(tmp_path: Pat
 
 
 def test_timing_without_a_store_fits_the_bootstrap_alone(tmp_path: Path) -> None:
-    bootstrap = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30))
+    bootstrap = FleetBootstrap(fights=((5, 0, 10.0), (10, 0, 20.0)), cooldowns=(10, 20, 30), kinds=())
     model, seconds = timing_of(None, bootstrap)
     assert (model.s_turn, model.samples, seconds) == (Fraction(2), 2, Fraction(20))
     with pytest.raises(ValueError, match="the /my/logs bootstrap: no action with a cooldown"):
-        timing_of(None, FleetBootstrap(fights=(), cooldowns=(0, 0)))
+        timing_of(None, FleetBootstrap(fights=(), cooldowns=(0, 0), kinds=()))
 
 
 def test_timing_with_a_store_pools_the_fleet_and_the_bootstrap(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:
         _fight(store, 0, 5, 0, 15.0)
-        model, seconds = timing_of(store, FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,)))
+        model, seconds = timing_of(store, FleetBootstrap(fights=((5, 0, 10.0),), cooldowns=(10,), kinds=()))
         assert (model.s_turn, model.samples, seconds) == (Fraction(5, 2), 2, Fraction(15))
     finally:
         store.close()
@@ -299,3 +321,171 @@ def test_the_action_mean_is_read_once_per_recorded_cycle(tmp_path: Path) -> None
     finally:
         store.close()
         other.close()
+
+
+def test_each_log_kind_is_timed_by_its_mean_positive_cooldown() -> None:
+    """`kind_seconds` (ruling "seconds inside", 2026-10-31): the measured
+    seconds of one action of each log kind, its entries' positive cooldowns
+    over the actions they ran; a kind never timed (only zero cooldowns) is
+    absent."""
+    assert kind_seconds([("gathering", 30, None, 1), ("gathering", 40, None, 1),
+                         ("fight", 0, None, 1), ("crafting", 13, "copper_bar", 1)],
+                        lambda _item: 1) == (
+        ("crafting", Fraction(13)), ("gathering", Fraction(35)))
+    assert dict(committed_kind_seconds())["gathering"] > dict(committed_kind_seconds())["crafting"]
+
+
+def test_a_logged_craft_or_recycle_is_timed_per_action() -> None:
+    """Review I3, settled on the account's 5,000 newest `/my/logs` entries
+    (2026-10-31): a craft request's cooldown is 5 s per craft run, its log
+    quantity the units made (hardwood plank x6: 30 s; cheese, 2 a run, logs
+    2 made at 5 s); a recycle's is 3 s a unit; a withdraw is one action
+    whatever it carries. A batched entry is its cooldown over the runs."""
+    entries = [("crafting", 30, "hardwood_plank", 6), ("crafting", 5, "cheese", 2),
+               ("recycling", 6, "skeleton_helmet", 2), ("withdraw_item", 3, None, 1)]
+    yields = {"hardwood_plank": 1, "cheese": 2}
+    assert kind_seconds(entries, yields.__getitem__) == (
+        ("crafting", Fraction(5)), ("recycling", Fraction(3)), ("withdraw_item", Fraction(3)))
+    entry = SimpleNamespace(character="Lor", type_=LogType.CRAFTING, cooldown=10,
+                            content={"item": "cheese", "quantity": 4})
+    assert log_kind(entry) == ("crafting", 10, "cheese", 4)  # type: ignore[arg-type]
+    assert log_kind(_entry("Lor", LogType.GATHERING, 25)) == ("gathering", 25, None, 1)  # type: ignore[arg-type]
+
+
+def _priced(store: LearningStore, index: int, action_class: str, action_repr: str,
+            seconds: float, outcome: str = "ok") -> None:
+    store.record_cycle(Cycle(ts=f"2026-10-19T00:01:{index:02d}+00:00", cycle_index=index,
+                             outcome=outcome, actual_cooldown_seconds=seconds,
+                             action_class=action_class, action_repr=action_repr))
+
+
+def test_the_store_times_each_priced_kind_per_action_run(tmp_path: Path) -> None:
+    """The user's I2 ruling (2026-10-31, "learning DB, then raise") and review
+    I3: a priced kind is timed by the learning store's recorded server
+    cooldowns of its action class, each over the runs its repr records (a
+    craft's runs, a recycle's units); a failed cycle, a zero cooldown and an
+    unpriced class are not observations. A kind it never recorded raises
+    where it is priced, by name."""
+    store = _store(tmp_path)
+    try:
+        _priced(store, 1, "CraftAction", "Craft(cheese×3)", 15.0)
+        _priced(store, 2, "CraftAction", "Craft(copper_bar×1)", 5.0)
+        _priced(store, 3, "CraftAction", "Craft(copper_bar×1)", 99.0, "error:cooldown")
+        _priced(store, 4, "RecycleAction", "Recycle(iron_dagger×2)", 6.0)
+        _priced(store, 5, "GatherAction", "Gather(ash_tree)", 30.0)
+        _priced(store, 6, "GatherAction", "Gather(ash_tree)", 0.0)
+        _priced(store, 7, "RestAction", "Rest", 12.0)
+        rows = store.fleet_action_cooldowns(frozenset(STORE_KINDS), 0, store.last_cycle_id())
+        assert sorted(rows) == [("CraftAction", "Craft(cheese×3)", 15.0, 1),
+                                ("CraftAction", "Craft(copper_bar×1)", 5.0, 1),
+                                ("GatherAction", "Gather(ash_tree)", 30.0, 1),
+                                ("RecycleAction", "Recycle(iron_dagger×2)", 6.0, 1)]
+        timed = store_kind_seconds(rows)
+        assert timed == (("crafting", Fraction(5)), ("gathering", Fraction(30)),
+                         ("recycling", Fraction(3)))
+        ctx = replace(NO_PROFILE_CONTEXT, kind_seconds=timed)
+        assert ctx.seconds_of(LogType.CRAFTING) == 5
+        with pytest.raises(UntimedActionKindError) as untimed:
+            ctx.seconds_of(LogType.WITHDRAW_GOLD)
+        assert untimed.value.kind == "withdraw_gold"
+        # a context carrying no kind seconds at all refuses every kind
+        assert NO_PROFILE_CONTEXT.kind_seconds is None
+        with pytest.raises(ValueError, match="no learned action-kind seconds"):
+            NO_PROFILE_CONTEXT.seconds_of(LogType.CRAFTING)
+    finally:
+        store.close()
+    with pytest.raises(ValueError, match="no quantity"):
+        store_kind_seconds([("CraftAction", "Craft(cheese)", 5.0, 1)])
+
+
+def test_a_fresh_install_times_its_kinds_from_the_account_log(tmp_path: Path) -> None:
+    """The user's I2 ruling: `/my/logs` stays the bootstrap for a store that
+    has recorded no priced action, or no store at all."""
+    bootstrap = FleetBootstrap((), (), (("withdraw_gold", 3, None, 1),
+                                        ("crafting", 10, "cheese", 4)))
+    expected = (("crafting", Fraction(5)), ("withdraw_gold", Fraction(3)))
+    assert learned_kind_seconds(None, bootstrap, {"cheese": 2}.__getitem__) == expected
+    store = _store(tmp_path)
+    try:
+        assert learned_kind_seconds(store, bootstrap, {"cheese": 2}.__getitem__) == expected
+    finally:
+        store.close()
+
+
+def test_every_priced_kind_is_a_recorded_action_class_and_the_capture_times_it() -> None:
+    """The user's I2 ruling: each priced kind maps to the executed action class
+    the store records it under, and the committed store capture
+    (`STORE_COOLDOWNS`) times every one, so no offline world prices an
+    untimed kind."""
+    classes = {GatherAction, CraftAction, RecycleAction, WithdrawItemAction, WithdrawGoldAction,
+               NpcSellAction, NpcBuyAction, GeFillSellOrderAction}
+    assert set(STORE_KINDS) == {cls.__name__ for cls in classes}
+    assert set(STORE_KINDS.values()) == PRICED_KINDS
+    assert {kind.value for kind in PRICED_KINDS} == set(dict(committed_kind_seconds()))
+
+
+def test_each_kind_is_the_store_s_and_otherwise_the_account_log_s(tmp_path: Path) -> None:
+    """The user's ruling (fix round 3, re-review N1): the per-kind seconds
+    merge per kind, real data only. A fresh install whose store has recorded
+    one gather still prices its craft from the `/my/logs` bootstrap, which a
+    whole-store cutover dropped (the craft then raised forever, and was never
+    recorded). A kind the store has timed is the store's; a kind neither
+    timed is absent and raises where it is priced."""
+    store = _store(tmp_path)
+    try:
+        _priced(store, 1, "GatherAction", "Gather(ash_tree)", 30.0)
+        bootstrap = FleetBootstrap((), (), (("crafting", 10, "cheese", 4),
+                                            ("gathering", 50, None, 1)))
+        merged = learned_kind_seconds(store, bootstrap, {"cheese": 2}.__getitem__)
+        assert merged == (("crafting", Fraction(5)), ("gathering", Fraction(30)))
+        with pytest.raises(UntimedActionKindError):
+            replace(NO_PROFILE_CONTEXT, kind_seconds=merged).seconds_of(LogType.SELL_NPC)
+    finally:
+        store.close()
+
+
+def test_the_store_sums_are_read_incrementally(tmp_path: Path) -> None:
+    """Re-review: the cycles table is append-only, so the held per-kind sums
+    take only the rows past the last id read, and equal a full scan after
+    every append; a store whose newest id dropped (replaced) reads afresh."""
+    store = _store(tmp_path)
+    classes = frozenset(STORE_KINDS)
+    try:
+        _priced(store, 1, "CraftAction", "Craft(cheese×3)", 15.0)
+        _priced(store, 2, "GatherAction", "Gather(ash_tree)", 30.0)
+        boot = FleetBootstrap((), (), ())
+
+        def full() -> tuple[tuple[str, Fraction], ...]:
+            return store_kind_seconds(store.fleet_action_cooldowns(classes, 0,
+                                                                   store.last_cycle_id()))
+
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+        # nothing appended since the last read: the held sums, no query at all
+        reads: list[tuple[int, int]] = []
+        query = store.fleet_action_cooldowns
+
+        def counted(kinds, after, through):  # type: ignore[no-untyped-def]
+            reads.append((after, through))
+            return query(kinds, after, through)
+
+        store.fleet_action_cooldowns = counted  # type: ignore[method-assign]
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+        assert reads == [(0, store.last_cycle_id())]  # `full()`'s own scan, none of the sums'
+        _priced(store, 3, "CraftAction", "Craft(cheese×1)", 7.0)
+        _priced(store, 4, "GatherAction", "Gather(ash_tree)", 34.0)
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full() == (
+            ("crafting", Fraction(22, 4)), ("gathering", Fraction(32)))
+        mod._KIND_SUMS[:] = [(store, store.last_cycle_id() + 5, {})]
+        assert learned_kind_seconds(store, boot, lambda _item: 1) == full()
+    finally:
+        store.close()
+
+
+def test_a_recorded_craft_or_recycle_repr_parses_to_its_runs() -> None:
+    """Re-review I3: the store's only quantity is the action's repr, so the
+    parse is tied to `CraftAction.__repr__` and `RecycleAction.__repr__`."""
+    craft = CraftAction(code="cheese", workshop_location=(1, 1), quantity=3)
+    recycle = RecycleAction(code="iron_dagger", workshop_location=(1, 1), quantity=2)
+    assert mod._store_runs(LogType.CRAFTING, repr(craft)) == 3
+    assert mod._store_runs(LogType.RECYCLING, repr(recycle)) == 2
+    assert mod._store_runs(LogType.GATHERING, repr(craft)) == 1

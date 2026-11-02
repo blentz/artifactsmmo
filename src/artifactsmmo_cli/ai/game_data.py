@@ -160,7 +160,17 @@ _RUNE_ABILITY_CARVEOUTS: frozenset[str] = frozenset({
 #   christmas_magic — event weapon `christmas_cane` effect; the player's hits BUFF the
 #                     enemy (a self-debuff). Never modeled; carved so the cane (if it
 #                     ever goes live) doesn't trip the equippable guard.
-_ITEM_EFFECT_CARVEOUTS: frozenset[str] = frozenset({"gems", "christmas_magic"})
+#   <skill>_crafting — Season 9 crafting-time reduction ("Reduces total <skill>
+#                     crafting time by N%"), one code per CraftSkill. Not modeled
+#                     yet: a craft is priced at its full cooldown, so a crafting
+#                     tool is uncredited (conservative), never over-valued.
+_CRAFTING_TIME_EFFECTS: frozenset[str] = frozenset(f"{s.value}_crafting" for s in CraftSkill)
+_ITEM_EFFECT_CARVEOUTS: frozenset[str] = frozenset({"gems", "christmas_magic"}) | _CRAFTING_TIME_EFFECTS
+
+#: Season 9 renamed the gathering-tool effects `<skill>` -> `<skill>_gathering`
+#: ("Reduces cooldown by N% when a character logs a tree"). The tool bonus is
+#: keyed by its gathering skill either way.
+_GATHERING_EFFECT_SUFFIX = "_gathering"
 
 #: Minimum monster-catalog size before `currency_accrues_passively` will judge a
 #: currency 'broadly dropped'. A real catalog is ~58; a test/edge catalog of one
@@ -2202,11 +2212,14 @@ class GameData:
                         # Accumulate (an item could carry several).
                         stats.antipoison += effect.value
                         stats.combat_buff += effect.value
-                    elif effect.code in _GATHERING_SKILLS:
-                        # Tool bonus for a gather skill (e.g. axe → woodcutting).
-                        # Game encodes as cooldown reduction (negative value = faster);
-                        # store as-is so callers can compare magnitudes.
-                        stats.skill_effects[effect.code] = effect.value
+                    elif effect.code.removesuffix(_GATHERING_EFFECT_SUFFIX) in _GATHERING_SKILLS:
+                        # Tool bonus for a gather skill (e.g. axe → woodcutting;
+                        # code `woodcutting_gathering` since Season 9). Game
+                        # encodes as cooldown reduction (negative value = faster);
+                        # store as-is, keyed by the skill, so callers can compare
+                        # magnitudes.
+                        skill = effect.code.removesuffix(_GATHERING_EFFECT_SUFFIX)
+                        stats.skill_effects[skill] = effect.value
                     elif effect.code == "teleport":
                         # PLAN #6b: a fast-travel consumable. The effect `value` is the
                         # destination MapSchema.map_id; TeleportAction resolves it to (x, y)

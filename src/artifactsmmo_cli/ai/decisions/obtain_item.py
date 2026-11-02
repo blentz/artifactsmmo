@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.obtain_item_routing import (
     _equippable_goal,
     _gather_step_target_is_root,
     _recipe_has_combat_drop_input,
+    ge_fill_priced,
 )
 from artifactsmmo_cli.ai.obtain_sources import has_non_craft_source
 from artifactsmmo_cli.ai.progression.meta_goal import MetaGoal, ObtainItem
@@ -278,7 +279,14 @@ class IsTheStepTheEquippableItself(Decision[Goal]):
             # this cycle, and `_step_servable` demotes the root on exactly
             # that signal. Temporary by construction -- `ctx.turn_in` clears
             # with the claim and the medal is ordinary gear again.
-            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:
+            #
+            # Only a READY turn-in reserves it (review I1): a not-ready one
+            # names the shortfall's farmer (`TurnIn.ready`), asks no buy and
+            # no surrender, and may be renewed for as long as the farm runs,
+            # so reserving on it would keep every sibling from wearing a
+            # medal in an empty artifact slot indefinitely.
+            if (ctx.turn_in is not None and ctx.turn_in.ready
+                    and ctx.turn_in.currency == self.step.code):
                 return None
             dest_slot = self.step.slot if self.step.slot is not None else slots[0]
             return _equippable_goal(self.step.code, dest_slot, state, game_data, ctx)
@@ -399,7 +407,9 @@ class DoesTheRecipeNeedAMonsterDrop(Decision[Goal]):
         for code, qty in (state.bank_items or {}).items():
             owned[code] = owned.get(code, 0) + qty
         upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                       committed_target=(self.root.code, dest_slot))
+                                       committed_target=(self.root.code, dest_slot),
+                                       ge_fill=ge_fill_priced(self.root.code, state,
+                                                              game_data, ctx))
         # Pursue the committed gear root one PLANNABLE CHUNK at a time — never
         # hand the whole craft+equip chain to the A* at once. The old code
         # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,

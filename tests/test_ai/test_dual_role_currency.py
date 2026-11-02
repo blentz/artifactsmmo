@@ -2,15 +2,19 @@
 from dataclasses import replace
 from fractions import Fraction
 
+from artifactsmmo_cli.ai import acquisition_cost
+from artifactsmmo_cli.ai.acquisition_cost import cheapest_route
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.currency_grind_target import currency_grind_target_pure
 from artifactsmmo_cli.ai.currency_turnin import TurnIn
 from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, fleet_pooled, is_dual_role
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.obtain_item_routing import _equippable_goal, _passively_funded
+from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, make_state
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 
@@ -162,6 +166,10 @@ def test_an_l_star_trophy_farms_the_tickets_its_medals_cost(monkeypatch):
     goal = _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd, ctx)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.needed == {"lich_race_medal": currency_grind_target_pure(3, 10)}
+    # Review M3: the farm names the sink it buys, and only that sink's
+    # election is the farmer's (`GamePlayer._claim_currency_farm`).
+    assert goal.farmed_for == "lich_race_trophy"
+    assert goal.for_piece().farmed_for == "lich_race_trophy"
     # Not an `L*` piece: the passive rule stands (a medal step's tickets held).
     assert _equippable_goal("lich_race_trophy", "artifact1_slot", poor, gd,
                             NO_PROFILE_CONTEXT) is None
@@ -177,3 +185,96 @@ def test_an_l_star_medal_worn_for_itself_farms_its_tickets(monkeypatch):
     assert goal.fight_gold is True
     assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd,
                             NO_PROFILE_CONTEXT) is None
+
+
+def _robby_ctx():  # type: ignore[no-untyped-def]
+    """Robby's objective, live 2026-10-31 (`plan Robby`): the amulet first
+    (gain 0.5497 for 33,766 actions), the trophy behind it (0.2423 for
+    69,264)."""
+    amulet = GearPiece("amulet_slot", "greater_sapphire_amulet", 0, Fraction("0.5497"),
+                       Fraction(33766), SourceKind.CRAFT)
+    trophy = GearPiece("artifact1_slot", "lich_race_trophy", 0, Fraction("0.2423"),
+                       Fraction(69264), SourceKind.BUY)
+    return replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "hellhound", {"amulet_slot": amulet.code, "artifact1_slot": trophy.code},
+        Fraction(1), (amulet, trophy)))
+
+
+def test_a_piece_behind_a_better_one_farms_no_tickets(monkeypatch):
+    """The ticket farm (live 2026-10-31): Robby's trophy, gain 0.24 for ~69k
+    actions, ranks behind its amulet by the measure the root walk orders its
+    work by, and 2 held tickets pay for no medal: no farm step. The trophy is
+    then the funded cap's, as any other equippable's."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    robby = make_state(level=41, inventory={"lich_race_medal": 2}, bank_items={"event_ticket": 2})
+    assert _equippable_goal("lich_race_trophy", "artifact1_slot", robby, gd, _robby_ctx()) is None
+    # 150 tickets held buy one medal, and only one
+    funded = replace(robby, bank_items={"event_ticket": 150})
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", funded, gd, _robby_ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": 2 + 1}
+
+
+def test_a_piece_ahead_that_awaits_a_sibling_does_not_hold_the_farm_back(monkeypatch):
+    """A piece a sibling crafts for this character (`awaits_delivery`) has no
+    step of its own, so the trophy behind it still leads the walk's work."""
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    robby = make_state(level=41, inventory={"lich_race_medal": 2}, bank_items={"event_ticket": 2})
+    ctx = _robby_ctx()
+    objective = ctx.gear_objective
+    assert objective is not None
+    awaited = replace(objective.missing[0], route=SourceKind.WITHDRAW)
+    waiting = replace(ctx, gear_objective=replace(objective,
+                                                  missing=(awaited, objective.missing[1])))
+    goal = _equippable_goal("lich_race_trophy", "artifact1_slot", robby, gd, waiting)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"lich_race_medal": currency_grind_target_pure(2, 10)}
+
+
+def test_a_medal_worn_for_itself_behind_a_better_piece_is_bought_with_tickets_held(monkeypatch):
+    gd = _passive_tickets(_trophy_world(), monkeypatch)
+    poor = make_state(level=30, inventory={"event_ticket": 20}, bank_items={"event_ticket": 79})
+    medal = GearPiece("artifact2_slot", "lich_race_medal", 0, Fraction(1, 10), Fraction(10),
+                      SourceKind.BUY)
+    better = GearPiece("amulet_slot", "greater_sapphire_amulet", 0, Fraction(1), Fraction(10),
+                       SourceKind.CRAFT)
+    ctx = replace(NO_PROFILE_CONTEXT, gear_objective=GearObjective(
+        "wolf", {"amulet_slot": better.code, "artifact2_slot": medal.code}, Fraction(1),
+        (better, medal)))
+    assert _equippable_goal("lich_race_medal", "artifact2_slot", poor, gd, ctx) is None
+
+
+def test_the_price_credits_the_fleet_s_pooled_medals():
+    """The ticket farm (live 2026-10-31): Robby priced the trophy at 798
+    tickets to farm while it wore a medal and its siblings held four. The
+    fleet's pooled medals (worn here, held by siblings) are the turn-in's to
+    spend, so the price counts them; a medal priced to WEAR is not credited
+    with them."""
+    gd = _trophy_world()
+    state = make_state(level=30, inventory={"lich_race_medal": 5},
+                       equipment={"artifact2_slot": "lich_race_medal"})
+    alone = replace(NO_DROPS_CONTEXT, sibling_holdings={})
+    fleet = replace(NO_DROPS_CONTEXT, sibling_holdings={"lich_race_medal": 4})
+    short, _ = cheapest_route("lich_race_trophy", 1, state, gd, alone, None, policy=LEGACY,
+                              pocket=0)
+    paid, _ = cheapest_route("lich_race_trophy", 1, state, gd, fleet, None, policy=LEGACY,
+                             pocket=0)
+    # alone: 5 bagged + 1 worn of 10, the rest unobtainable here
+    assert short >= UNOBTAINABLE_PER_UNIT
+    assert paid < 10
+    assert cheapest_route("lich_race_medal", 1, replace(state, inventory={}), gd, fleet, None,
+                          policy=LEGACY, pocket=0)[0] >= UNOBTAINABLE_PER_UNIT
+
+
+def test_the_drop_work_credits_the_pool_its_price_did(monkeypatch):
+    """`drop_work` walks the price's own holdings: the fleet's pooled medals
+    are held there too, so the drop work is the work the price is made of."""
+    gd = _trophy_world()
+    state = make_state(level=30, inventory={"lich_race_medal": 5})
+    held: list[dict[str, int]] = []
+    monkeypatch.setattr(acquisition_cost, "route_legs",
+                        lambda item, qty, options, owned, *a: held.append(dict(owned)) or ())
+    fleet = replace(NO_DROPS_CONTEXT, sibling_holdings={"lich_race_medal": 4})
+    assert acquisition_cost.drop_work("lich_race_trophy", 1, state, gd, fleet, None,
+                                      policy=LEGACY) == ()
+    assert held[0]["lich_race_medal"] == 9

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from artifactsmmo_api_client.models.drop_rate_schema import DropRateSchema
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.resource_schema import ResourceSchema
@@ -20,6 +21,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
@@ -1224,3 +1226,136 @@ def test_run_republishes_the_party_card_after_the_action():
                         patch.object(player, "_publish_party_card") as publish:
                     _run_one_action_with(player, RestAction(), post, "ok", client)
     publish.assert_any_call(post)
+
+
+def test_run_counts_a_gather_whose_drop_never_lands_toward_the_stall():
+    """The ticket farm (live 2026-10-31): through the REAL run() loop, a
+    successful `Gather(shrimp_spot->event_ticket)` that brings shrimp but no
+    ticket is no progress (`intention_progress.step_delivered`), so each
+    dry cycle counts toward the committed goal's stall."""
+    player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    client = MagicMock()
+    gather = GatherAction(resource_code="spruce_tree", drop_item_override="event_ticket",
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+    player._strategy = MagicMock()
+    player._strategy.decide.return_value = _StubDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.return_value = (goal, [gather], [])
+    player._arbiter._committed_repr = repr(goal)
+    initial_state = make_state(x=0, y=0, inventory={}, inventory_max=20,
+                               inventory_slots_max=20,
+                               skills={**make_state().skills, "woodcutting": 10})
+    dry = [replace(initial_state, inventory={"spruce_wood": n}) for n in (1, 2)]
+    executed = [0]
+
+    def fake_execute(action, client):
+        executed[0] += 1
+        return dry[executed[0] - 1], "ok", action
+
+    stalls: list[int] = []
+    ticks = [0]
+
+    def fake_tick(client):
+        ticks[0] += 1
+        stalls.append(player._intention_stall)
+        if ticks[0] > 2:
+            raise KeyboardInterrupt
+
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
+            with _patch_game_data_load():
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown"):
+                        with patch.object(player, "_maybe_periodic_refresh",
+                                          side_effect=fake_tick), \
+                                patch.object(player, "_reconcile_open_orders"):
+                            with patch.object(player, "_build_actions", return_value=[gather]):
+                                # The stub catalogue knows no `spruce_wood`, which the
+                                # gear objective's bag keep refuses to guess the kind of
+                                # (`carried_keep`); the decision is stubbed, so no
+                                # objective is attached.
+                                with patch.object(ctx_mod, "farm_target", return_value=None), \
+                                        patch.object(ctx_mod, "gear_objective", return_value=None):
+                                    with patch.object(player, "_execute", side_effect=fake_execute):
+                                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                            with pytest.raises(KeyboardInterrupt):
+                                                player.run()
+
+    assert executed[0] == 2
+    assert stalls == [0, 1, 2]
+
+
+def test_run_keeps_a_drop_farm_dry_streak_across_its_bank_trips():
+    """Review C1: a gather farm walks to the bank and back between gathers. A
+    leg planned for no drop (the move) neither resets nor adds to the dry
+    streak, which is kept per `(source, item)`; so at a 1-in-2 ticket, whose
+    99th-percentile dry streak is ceil(ln 0.01 / ln 0.5) = 7, the eighth dry
+    gather is no progress though a move came between every two gathers. A
+    failed gather (`error:*`) made no attempt and adds nothing."""
+    player = GamePlayer(character="hero")
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    client = MagicMock()
+    gather = GatherAction(resource_code="spruce_tree", drop_item_override="event_ticket",
+                          locations=frozenset({(0, 0)}), learned_drops=LearnedDrops.empty())
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+    player._strategy = MagicMock()
+    player._strategy.decide.return_value = _StubDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.return_value = (goal, [gather], [])
+    player._arbiter._committed_repr = repr(goal)
+    initial_state = make_state(x=0, y=0, inventory={}, inventory_max=200,
+                               inventory_slots_max=20,
+                               skills={**make_state().skills, "woodcutting": 10})
+    ticket_tree = [ResourceSchema(
+        name="Spruce Tree", code="spruce_tree", skill=GatheringSkill.WOODCUTTING, level=10,
+        drops=[DropRateSchema(code="spruce_wood", rate=1, min_quantity=1, max_quantity=1),
+               DropRateSchema(code="event_ticket", rate=2, min_quantity=1, max_quantity=1)])]
+    # gather, move, gather, move, ... with one failed gather after the first:
+    # eight successful dry gathers, the eighth past the 7-attempt percentile.
+    legs: list[tuple[object, str]] = [(gather, "ok"), (gather, "error:cooldown")]
+    for _ in range(7):
+        legs += [(MoveAction(x=1, y=1), "ok"), (gather, "ok")]
+    executed = [0]
+
+    def fake_execute(action, client):
+        leg, outcome = legs[executed[0]]
+        executed[0] += 1
+        return initial_state, outcome, leg
+
+    stalls: list[int] = []
+
+    def fake_tick(client):
+        stalls.append(player._intention_stall)
+        if len(stalls) > len(legs):
+            raise KeyboardInterrupt
+
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock), patched_logs():
+            with _patch_game_data_load(), patch("artifactsmmo_cli.ai.game_data.get_all_resources",
+                                                return_value=MagicMock(data=ticket_tree)):
+                with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                    with patch.object(player, "_wait_for_cooldown"):
+                        with patch.object(player, "_maybe_periodic_refresh",
+                                          side_effect=fake_tick), \
+                                patch.object(player, "_reconcile_open_orders"):
+                            with patch.object(player, "_build_actions", return_value=[gather]):
+                                with patch.object(ctx_mod, "farm_target", return_value=None):
+                                    with patch.object(player, "_execute", side_effect=fake_execute):
+                                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                            with pytest.raises(KeyboardInterrupt):
+                                                player.run()
+
+    assert executed[0] == len(legs)
+    # The failed gather is no progress; every move is; the first seven dry
+    # gathers are luck, and the eighth (the last leg) is the first stall.
+    assert stalls[-1] == 1
+    assert stalls[1:-1] == [0, 1] + [0] * (len(legs) - 3)
+    assert player._dry_streaks == {("spruce_tree", "event_ticket"): 8}

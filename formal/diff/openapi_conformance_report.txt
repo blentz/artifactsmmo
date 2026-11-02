@@ -1,6 +1,6 @@
 # Item 14 — OpenAPI conformance audit
 
-openapi.json schemas: 264
+openapi.json schemas: 282
 Tracked schemas: 4
 
 ## 14a — Schema property drift per tracked schema

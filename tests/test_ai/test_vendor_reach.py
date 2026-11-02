@@ -11,6 +11,7 @@ walked through its door, or no route.
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -133,7 +134,7 @@ def test_a_vendor_behind_a_door_is_priced_through_the_door() -> None:
         RUNE, _buy(_model(state, world), RUNE, ISLAND), BOAT_DOOR, state, world, ctx, None,
         PIECE_POLICY, True, frozenset(), state)
     assert reentry is not None and reentry > 0
-    assert option.actions_per_application == 1 + reentry
+    assert option.actions_per_application == BUY_ACTIONS + reentry
     (past,) = _model(state, world).past_a_door(RUNE, PIECE_POLICY, frozenset())
     assert past[0].via == ISLAND
     graph = _model(state, world).walk_graph(
@@ -156,19 +157,26 @@ def test_a_vendor_sale_past_a_tolled_door_carries_no_reentry() -> None:
         True, frozenset(), state) == 0
 
 
+BUY_ACTIONS = Fraction(1362159419582092343, 17300542784171671552)
+"""One NPC buy in planner actions under the committed capture's timing: its
+measured seconds over one planner action's (ruling "seconds inside",
+2026-10-31, `acquisition_cost._in_actions`; one action before it)."""
+
 PINNED = {
-    "cloth": RouteOption(kind="buy", venue="tailor", actions_per_application=1, yield_per=1,
-                         capacity=UNBOUNDED_CAPACITY, inputs={"wool": 3}),
-    "fire_crystal": RouteOption(kind="buy", venue="sorceress", actions_per_application=1,
+    "cloth": RouteOption(kind="buy", venue="tailor", actions_per_application=BUY_ACTIONS,
+                         yield_per=1, capacity=UNBOUNDED_CAPACITY, inputs={"wool": 3}),
+    "fire_crystal": RouteOption(kind="buy", venue="sorceress", actions_per_application=BUY_ACTIONS,
                                 yield_per=1, capacity=UNBOUNDED_CAPACITY,
                                 inputs={"fire_dust": 10}),
-    "healing_rune": RouteOption(kind="buy", venue="rune_vendor", actions_per_application=1,
+    "healing_rune": RouteOption(kind="buy", venue="rune_vendor",
+                                actions_per_application=BUY_ACTIONS,
                                 yield_per=1, capacity=UNBOUNDED_CAPACITY,
                                 inputs={GOLD_CODE: 10000}),
 }
 """The piece-policy options base 556104dc priced for three reached vendors at
 level 48 with no gold (a mainland one, the underground sorceress, a gold
-vendor), pinned as literals (Task 8a M-2)."""
+vendor), pinned as literals (Task 8a M-2); the buy's one action re-pinned at
+its measured seconds by the merge of the ticket-farm fix (`BUY_ACTIONS`)."""
 
 
 @pytest.mark.parametrize("item", sorted(PINNED))

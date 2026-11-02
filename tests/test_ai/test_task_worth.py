@@ -7,7 +7,7 @@ from fractions import Fraction
 
 import pytest
 
-import artifactsmmo_cli.ai.fight_gold_rate as gold_mod
+import artifactsmmo_cli.ai.gold_rate as gold_mod
 import artifactsmmo_cli.ai.task_worth as mod
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops

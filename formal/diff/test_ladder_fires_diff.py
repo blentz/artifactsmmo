@@ -1423,11 +1423,13 @@ def _gebid_gd() -> GameData:
 
 
 def _gebid_ctx(step_profile: dict[str, int]) -> SelectionContext:
-    return SelectionContext(
+    # The bid prices routes in measured seconds, so the world carries the
+    # committed capture's timing, as every offline world does.
+    return offline_context(SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         step_profile=step_profile,
-        draw_owed=True, learned_drops=LearnedDrops.empty())
+        draw_owed=True, learned_drops=LearnedDrops.empty()))
 
 
 def _gebid_world(*, open_steel_order: bool = False) -> WorldState:

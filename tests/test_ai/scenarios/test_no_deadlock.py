@@ -198,18 +198,18 @@ def test_l10_gearcrafting_gap_plans_craft_chain_not_char_grind() -> None:
     feathers take its chain from 80 to 82 actions, the legs' two take theirs
     from 81 to 82, and of the two equal rungs the first listed is the
     `copper_legs_armor`: the copper, a chicken's feathers, then the legs.
-    PRICING-UNIT DEPENDENCY (review I2): this pin rests on `cycles_per_kill`
-    pricing a fight's Rest as rest seconds over fight seconds, so a shorter
-    fight makes its Rest dearer in actions while a gather keeps its unit.
-    Seconds-consistent route pricing lands with the ticket-farm hotfix and is
-    expected to move this rung."""
+    PRICING-UNIT DEPENDENCY (review I2), DISCHARGED by the merge of the
+    ticket-farm fix: every route is priced in measured seconds, so the
+    chicken's feathers and the copper ore compare by the time they take, and
+    the coat's chain (41 actions) is cheaper than the legs' (60) again: a
+    chicken's feathers, the ash planks, then the `feather_coat`."""
     report = _run(CRITERION_1_MAIN)
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "ReachSkill(gearcrafting->6)"
     assert [repr(a) for a in report.plan] == [
-        "Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
-        "Craft(copper_legs_armor×1)"]
+        "Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
+        "Craft(feather_coat×1)"]
     assert report.decision.chosen_root == ReachSkillLevel(skill="gearcrafting", level=6)
     assert report.decision.blocked_target == "leather_boots"
     assert report.decision.declined == ()
@@ -368,7 +368,9 @@ def test_l20_dual_utility_serves_the_gold_funded_rune_not_the_char_level() -> No
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
     assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
-    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): the cheapest gold is
+    # now the yellow slime's 5-second fights, not the highwayman's.
+    assert [repr(a) for a in report.plan] == ["Fight(yellow_slime)"]
     # The climb behind it is bounded (current + 1, not the whole gate), and
     # nothing offers a level grind while a piece is missing.
     assert report.decision.fallback_roots[0] == ReachSkillLevel(skill="weaponcrafting", level=16)
@@ -419,12 +421,16 @@ def test_l48_band_adequate_names_the_wall_when_no_winnable_monster() -> None:
     assert player._last_ctx.gear_objective is not None
     assert player._last_ctx.gear_objective.monster == "hellhound"
     assert player._last_ctx.combat_monster is None
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 

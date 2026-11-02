@@ -25,10 +25,11 @@ Built once per decision from one `(state, game_data, ctx, now)` snapshot, and
 memoised per item for its lifetime. Pure: no I/O.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from fractions import Fraction
+from math import inf
 
 from artifactsmmo_cli.ai import accumulation_sell
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
@@ -40,14 +41,20 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_requirement import gather_requirement
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, rank_gather_sources
 from artifactsmmo_cli.ai.inventory_keep import destroyable
-from artifactsmmo_cli.ai.obtain_model.drop_routes import Fighter, drop_routes, gold_drop_routes
+from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.obtain_model.drop_routes import (
+    Fighter,
+    WinnableMemo,
+    drop_routes,
+    gold_drop_routes,
+)
 from artifactsmmo_cli.ai.obtain_model.gate import Door, Gate, GateKind
 from artifactsmmo_cli.ai.obtain_model.policy import Policy
 from artifactsmmo_cli.ai.obtain_model.ready_core import ready_routes
 from artifactsmmo_cli.ai.obtain_model.route import UNBOUNDED_CAPACITY, Route
 from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_gate
 from artifactsmmo_cli.ai.obtain_model.walk_graph import WalkAnswer, WalkGraph
-from artifactsmmo_cli.ai.progression_reserve import spendable_pocket
+from artifactsmmo_cli.ai.progression_reserve import account_gold, reserve_floor_multi, spendable_pocket
 from artifactsmmo_cli.ai.region_edges import (
     content_reached,
     door_legs,
@@ -58,6 +65,22 @@ from artifactsmmo_cli.ai.region_edges import (
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
+
+_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}
+"""The walk's fixed tiers around the priced middle (`walk_graph`'s `prefer`):
+stock already owned (a withdraw, a recycle of a held copy) before anything that
+makes new copies, and a sale of a licensed surplus after them. Every other
+kind is tier 1, ordered by the price."""
+
+
+def _walk_order(route: Route, priced: Mapping[tuple[SourceKind, str], int | Fraction]
+                ) -> tuple[int, int | Fraction | float]:
+    """`route`'s place in the walk: its tier (`_ORDER_STOCK`), then, in the
+    middle tier, the unit cost the pricer fills it at; a route the pricer does
+    not list goes after every priced one."""
+    tier = _ORDER_STOCK.get(route.kind, 1)
+    return tier, (priced.get((route.kind, route.via), inf) if tier == 1 else 0)
+
 
 _MINTS = (SourceKind.CRAFT, SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
           SourceKind.TASK_REWARD, SourceKind.GOLD_DROP)
@@ -97,8 +120,10 @@ class ObtainModel:
     def __init__(self, state: WorldState, game_data: GameData,
                  ctx: SelectionContext, now: datetime,
                  fighter: Fighter | None = None, crossing: WorldState | None = None,
-                 spend: frozenset[str] | None = None) -> None:
+                 spend: frozenset[str] | None = None,
+                 store: LearningStore | None = None) -> None:
         self._account = state
+        self._store = store
         self._spend = spend
         self._state = (state if spend is None else
                        replace(state, gold=spendable_pocket(state, game_data, spend)))
@@ -117,6 +142,28 @@ class ObtainModel:
         if self._regions is None:
             self._regions = reachable_regions_now(self._crossing, self._gd)
         return self._regions
+
+    def _winnable_memo(self) -> WinnableMemo | None:
+        """The WINNABLE verdict memoised through the store's decision episode
+        (`LearningStore.cached`, review I5), or None without a store: asked
+        afresh. Keyed on the fighter's identity, PINNED by the entry (the
+        cached value holds it), so no other object can take its id while the
+        verdict is held; a `WorldState` is frozen, so the fighter cannot
+        change under it. One episode prices against one catalogue; the entry
+        holds it, and a different one is a defect, not a cache miss
+        (`door_price`'s rule)."""
+        store = self._store
+        if store is None:
+            return None
+        game_data = self._gd
+
+        def memo(fighter: WorldState, monster: str, compute: Callable[[], bool]) -> bool:
+            pinned = store.cached(("drop_fight_winnable", monster, id(fighter)),
+                                  lambda: (fighter, game_data, compute()))
+            assert pinned[0] is fighter, "a pinned key's object"
+            assert pinned[1] is game_data, "one search_cache episode prices one catalogue"
+            return pinned[2]
+        return memo
 
     def routes(self, item: str) -> tuple[Route, ...]:
         """Every route to `item` in priority order, usable or not."""
@@ -200,7 +247,8 @@ class ObtainModel:
                    keep: frozenset[str] = frozenset(),
                    grey_ok: Callable[[str], bool] = lambda _item: False,
                    opening: frozenset[Door] = frozenset(),
-                   prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+                   prefer: Callable[[str, Policy], Mapping[tuple[SourceKind, str], int | Fraction]]
+                   = lambda _item, _policy: {},
                    rank: Callable[[Door], int] = lambda _door: 0) -> WalkGraph:
         """`item`'s closure as the one walk's graph (Phase 2c-2b).
 
@@ -245,10 +293,19 @@ class ObtainModel:
         `opening` holds the doors whose keys are being walked further up, so a
         key that stands only past its own door is a wall, not a loop.
 
-        `prefer` names, per item with a route past a door, the `(kind, via)`
-        route the pricer took for it (`acquisition_cost.door_route`, ruling
-        T14e-1): that route is tried first, so a door route priced below a
-        ready one is the one the walk serves. None leaves the order alone.
+        `prefer` prices, per item and under the policy the walk admits that
+        item's routes by (its grey-farm directive applied, `grey_ok`), each
+        `(kind, via)` route the pricer lists at the unit cost it fills it at
+        (`acquisition_cost.route_order`): the
+        routes that make new copies are tried cheapest first, so the route the
+        price took is the one the walk serves (ruling T14e-1 for a door route;
+        the ticket farm, live 2026-10-31: the fixed kind order served a
+        1-in-200 gather ahead of the 86.8-action fight that priced the
+        ticket). Equal prices, and routes the pricer does not list, keep the
+        priority order (gathers by `_ranked_gathers`). Stock comes first and a
+        sale last whatever the price (`_ORDER_STOCK`): the walk spends what
+        is owned before it makes more, as the pricer credits holdings before
+        any route. The default prices nothing, which leaves the order alone.
 
         `rank` prices a door (`acquisition_cost.door_price`, ruling T14e-m1):
         of the doors the walk can open, the gate is narrowed to the cheapest,
@@ -282,9 +339,10 @@ class ObtainModel:
                 if all(gate is not None for gate in opened):
                     gated.append((route, tuple(gate for gate in opened if gate is not None)))
             candidates = [(route, ()) for route in self._ranked_gathers(code, ready)] + gated
-            if gated and any(gate.doors for _route, gates in gated for gate in gates):
-                first = prefer(code)
-                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)
+            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:
+                # Only a choice between routes that make copies is priced.
+                priced = prefer(code, item_policy)
+                candidates.sort(key=lambda pair: _walk_order(pair[0], priced))
             for route, gates in candidates:
                 if code in produce and route.kind not in (SourceKind.CRAFT, SourceKind.GATHER):
                     continue
@@ -355,7 +413,7 @@ class ObtainModel:
         an earlier leg's fee gold is spent, not credited), and its pocket
         derived from that account as this one's is (`spend`, round 5)."""
         return [self, *(ObtainModel(at, self._gd, self._ctx, self._now, self._fighter,
-                                    crossing=cross, spend=self._spend)
+                                    crossing=cross, spend=self._spend, store=self._store)
                         for at, cross in leg_states(self._account, self._crossing, door,
                                                     self._gd)[1:])]
 
@@ -394,7 +452,8 @@ class ObtainModel:
              openable: Callable[[Gate], bool] = lambda _gate: False,
              keep: frozenset[str] = frozenset(),
              grey_ok: Callable[[str], bool] = lambda _item: False,
-             prefer: Callable[[str], tuple[SourceKind, str] | None] = lambda _item: None,
+             prefer: Callable[[str, Policy], Mapping[tuple[SourceKind, str], int | Fraction]]
+             = lambda _item, _policy: {},
              rank: Callable[[Door], int] = lambda _door: 0) -> WalkAnswer:
         """The one walk over `item`'s closure: can `qty` be had, and the next
         step toward it (`decompose_core`)."""
@@ -411,12 +470,40 @@ class ObtainModel:
         """A copy sits in the bank. Gated on `ctx.bank_accessible`: that is a
         persisted, level-gated blocker that stays False for the whole early game
         while `state.bank_items` is populated regardless, and
-        `WithdrawItemAction.is_applicable` refuses unconditionally without it."""
-        stock = (self._state.bank_items or {}).get(item, 0)
+        `WithdrawItemAction.is_applicable` refuses unconditionally without it.
+
+        GOLD IS WITHDRAWN TOO (`WithdrawGoldAction`), and that is what lets a
+        pocket-short, bank-rich walk pay a buy: every gold sink pays from the
+        pocket (HTTP 492 otherwise), while the reserve is the ACCOUNT's. Live
+        2026-10-30, HAL held 6,516 in pocket against a 6,550 GE order with tens
+        of thousands banked. The capacity is `_bank_gold`'s; ONE application
+        moves any amount, so its yield is the capacity."""
+        if item == GOLD_CODE:
+            stock = self._bank_gold()
+            per = stock
+        else:
+            stock = (self._state.bank_items or {}).get(item, 0)
+            per = 1
         if stock <= 0:
             return []
         gate = Gate(GateKind.BANK_ACCESSIBLE, "bank", self._ctx.bank_accessible)
-        return [Route(item, SourceKind.WITHDRAW, item, 1, stock, (gate,))]
+        return [Route(item, SourceKind.WITHDRAW, item, per, stock, (gate,))]
+
+    def _bank_gold(self) -> int:
+        """The banked gold the walk's buys may still spend on top of its
+        pocket: the account's gold above the reserve floor its buys keep
+        (`reserve_floor_multi` over `spend`, nothing named when None), less
+        the pocket the walk already counts, and never more than the bank holds.
+
+        So pocket plus withdraw never spends past the reserve `can_spend`
+        refuses, whichever pocket the walk counts (`spend`'s spendable one or
+        the whole pocket). An unread bank (`bank_gold is None`) is UNKNOWN,
+        not empty: it ferries nothing, as `account_gold` credits it nothing."""
+        banked = self._account.bank_gold
+        if banked is None:
+            return 0
+        floor = reserve_floor_multi(self._account, self._gd, self._spend or frozenset())
+        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))
 
     def _recycle(self, item: str) -> list[Route]:
         """Held (bag or bank) equippables whose recipe consumes `item`.
@@ -565,7 +652,8 @@ class ObtainModel:
         """Monsters that drop `item`: see `drop_routes`, the one place drop gates
         are evaluated (shared with `drop_obtainability`), judged against the
         projected `fighter` when one is given."""
-        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)
+        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter,
+                           self._winnable_memo())
 
     def _task_reward(self, item: str) -> list[Route]:
         """The task board pays `item`: one application is a whole task loop
@@ -584,7 +672,7 @@ class ObtainModel:
         (see `drop_routes.gold_drop_routes`, which shares the fight gates)."""
         if item != GOLD_CODE:
             return []
-        return gold_drop_routes(self._state, self._gd, self._crossing)
+        return gold_drop_routes(self._state, self._gd, self._crossing, self._winnable_memo())
 
     def _sell(self, item: str) -> list[Route]:
         """GOLD only: selling what the keep authority licenses, one route per

@@ -60,32 +60,25 @@ CELL5_BUSY_ADEQUATE = "l12_ge_book_adequate"
 TRIPLE = (CELL4_BUSY_GRIND, CELL7_QUIET_GRIND, CELL5_BUSY_ADEQUATE)
 
 SKILL = "gearcrafting"
-RUNG = "copper_legs_armor"
+RUNG = "feather_coat"
 """The grind rung both `gearcrafting 9` cells land on. Depth-2 and DROP-FED
-(`{copper_bar: 5, feather: 2}`; feather off the chicken, copper_bar from
-copper_ore) — the shape that is 70.7 % of the catalogue and 87.2 % of live
+(`{feather: 5, ash_plank: 2}`; feather off the chicken, ash_plank from
+ash_wood) — the shape that is 70.7 % of the catalogue and 87.2 % of live
 `UpgradeEquipment` cycles — and it carries a standing sell order in the busy
-book (10 gold). It was `copper_legs_armor` from spec 2026-10-18 §2.9 until
+book (248 gold). It was `copper_legs_armor` from spec 2026-10-18 §2.9 until
 plan B Task 12a, which prices a drop farm exactly and ranks a rung as its
 descent serves it (rulings T12j, T12k: produced, its closure with no GE fill),
 so the book cannot move the rung; then `feather_coat` (79 actions against the
 legs' 81). Plan C Task 7 (a derived character starts at the base sheet's
-initiative 100) makes it the legs again: the character moves first against
-`chicken`, a turn shorter a fight, so the Rest a win forces costs more of it
-(`cycles_per_kill`) and a feather is dearer; the coat takes five, the legs
-two, and both chains price 83, the legs listed first.
+initiative 100) made it the legs again (both chains priced 83, the legs listed
+first): the character moves first against `chicken`, a turn shorter a fight,
+so the Rest a win forces cost more of it in actions (`cycles_per_kill`).
 
-PRICING-UNIT DEPENDENCY (review I2): the rung rests on `cycles_per_kill`
-pricing a fight's Rest as rest seconds over fight seconds, so a shorter fight
-makes its Rest dearer in actions while a gather keeps its unit.
-Seconds-consistent route pricing lands with the ticket-farm hotfix and is
-expected to move it."""
-
-DESCENT_RUNG = "feather_coat"
-"""An unheld gearcrafting rung with a standing sell order in the busy book (248
-gold), for the plain descent's leaf: `RUNG` is worn (the cells' leg slot), so
-its plain descent stays at it in either book and cannot show the order
-leafing it. It was `RUNG` itself until plan C Task 7 moved the rung."""
+PRICING-UNIT DEPENDENCY (review I2), DISCHARGED by the merge of the
+ticket-farm fix: every route is priced in measured seconds, so a feather's
+fight and a gather's ore compare by the time they take, and the coat (36)
+beats the legs (58) again. The legs are worn in the cells' leg slot; the coat
+is not, so the plain descent below is asked of the rung itself."""
 LEG_TARGET = "iron_legs_armor"
 """Cell 5's rung: `{iron_bar: 5, cowhide: 3}`, also depth-2 drop-fed, and the
 item Robby stalled on live."""
@@ -198,16 +191,13 @@ def test_the_busy_book_leafs_the_plain_descent_at_the_rung(
     so the order book IS load-bearing here and `produce` is what neutralises it.
     Since plan B Task 12a the grind's RANKING neutralises it too: the rung is
     priced as its descent serves it (rulings T12j, T12k), so the busy book's
-    standing orders on the rung and on its rivals' materials price nothing.
-
-    The plain descent is asked of `DESCENT_RUNG`: `RUNG` is worn, so asking it
-    of `RUNG` would leaf in both books and show nothing about the order."""
-    node = ObtainItem(code=DESCENT_RUNG, quantity=1)
+    standing orders on the rung and on its rivals' materials price nothing."""
+    node = ObtainItem(code=RUNG, quantity=1)
     busy_state = _state(CELL4_BUSY_GRIND, busy)
     quiet_state = _state(CELL7_QUIET_GRIND, quiet)
     assert actionable_step(node, busy_state, busy, TIMED_NO_PROFILE_CONTEXT) == node
     assert actionable_step(node, quiet_state, quiet, TIMED_NO_PROFILE_CONTEXT) != node
-    rung_legs = ["Gather(copper_rocks×50)", "Craft(copper_bar×5)", "Fight(chicken)",
+    rung_legs = ["Fight(chicken)", "Gather(ash_tree×20)", "Craft(ash_plank×2)",
                  f"Craft({RUNG}×1)"]
     assert _grind(CELL4_BUSY_GRIND, busy)[-4:] == rung_legs
     assert _grind(CELL7_QUIET_GRIND, quiet)[-4:] == rung_legs
@@ -275,7 +265,17 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
     by its fill: the first action is the `GeBuy` of the legs, and the amulet
     behind it is an `ObtainItem`, not the jewelrycrafting climb. The quiet
     book still withdraws its banked iron bars toward the legs' craft, behind
-    which its unsold amulet keeps its climb."""
+    which its unsold amulet keeps its climb.
+
+    RE-DERIVED S-046 (USER 2026-10-30: spent gold costs the time to earn it
+    again) and the 492 hotfix's round 3 (an upgrade buys off the book only
+    when its price took the fill): the legs' 299-gold fill now costs more time
+    than their craft, so their price takes the craft (25) and the busy book
+    serves it, the same withdraw of banked iron bars as the quiet one. The
+    `GeBuy` this asserted was the bug: a fill served against a price that
+    took the craft. The book still reorders the rest of `L*` (the amulet and
+    rings priced through their fills follow the legs) and the goal (the busy
+    upgrade, the quiet material walk)."""
     busy_report = _plan(CELL5_BUSY_ADEQUATE, busy)
     quiet_report = _plan(CELL5_BUSY_ADEQUATE, quiet)
     legs = ObtainItem(code=LEG_TARGET, quantity=1, slot="leg_armor_slot")
@@ -288,8 +288,8 @@ def test_cell5_the_book_reorders_the_objective_and_the_first_action(
     assert quiet_report.decision.chosen_root == legs
     order = busy.ge_best_sell_order(LEG_TARGET)
     assert order is not None
-    assert [repr(a) for a in busy_report.plan][:2] == [
-        f"GeBuy({LEG_TARGET}×1@{order[0]})", f"Equip({LEG_TARGET}->leg_armor_slot)"]
+    assert not any(repr(a).startswith("GeBuy") for a in busy_report.plan)
+    assert [repr(a) for a in busy_report.plan][:1] == ["Withdraw(iron_bar×3)"]
     assert [repr(a) for a in quiet_report.plan][:1] == ["Withdraw(iron_bar×3)"]
     assert quiet_report.decision.fallback_roots[3] == ReachSkillLevel(skill="jewelrycrafting",
                                                                       level=6)

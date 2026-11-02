@@ -138,10 +138,17 @@ def test_the_premise_straight_from_the_catalog(game_data: GameData,
     # it prices the gloves' six feathers as six gathers.
     assert _steps("sticky_sword", state, game_data) > \
         3 * _steps("apprentice_gloves", state, game_data)
-    # The ROUTE-AWARE cost inverts it back, because a feather is a 1-in-8 drop.
+    # The ROUTE-AWARE cost closes the gap, because a feather is a 1-in-8 drop.
+    # Since ruling "seconds inside" (2026-10-31) the 48 chicken kills cost
+    # their measured seconds (5-second fights), so the gloves tied the sword
+    # (56 actions each) rather than exceed it; merged with plan C Task 7's
+    # base initiative 100 (a chicken fight a turn shorter) the gloves price 53
+    # against the sword's 54. Within one action of each other, so cost no
+    # longer decides between them: the grind's rate key picks the level-5
+    # sword (`test_selected_rung_is_the_rate_maximal_feasible_one`).
     assert game_data.monsters_dropping("feather") == [("chicken", 8, 1, 1)]
-    assert _routed("apprentice_gloves", state, game_data) > \
-        _routed("sticky_sword", state, game_data)
+    assert (_routed("apprentice_gloves", state, game_data),
+            _routed("sticky_sword", state, game_data)) == (53, 54)
 
 
 def test_grind_picks_the_chain_that_is_actually_cheap(game_data: GameData,
@@ -208,10 +215,13 @@ def test_selected_rung_is_the_rate_maximal_feasible_one(game_data: GameData,
     for c in feasible:
         assert c.craft_level * chosen.acquire_steps <= chosen.craft_level * c.acquire_steps, (
             f"{c.code} has a strictly better XP rate than the selected {chosen.code}")
-    # The coincidence, pinned rather than assumed: in THIS scenario the
-    # rate-maximal rung is also the cheapest one.
-    assert chosen.acquire_steps == min(c.acquire_steps for c in feasible)
-    assert chosen.code == "sticky_sword"
+    # The coincidence, pinned rather than assumed, is GONE since the merge of
+    # seconds pricing into plan C: the level-1 `apprentice_gloves` (53) is now
+    # one action cheaper than the rate-maximal `sticky_sword` (54), which wins
+    # on rate alone (5/54 against 1/53), the case this restatement foresaw.
+    cheapest = min(feasible, key=lambda c: c.acquire_steps)
+    assert (cheapest.code, cheapest.acquire_steps) == ("apprentice_gloves", 53)
+    assert (chosen.code, chosen.acquire_steps) == ("sticky_sword", 54)
 
 
 def test_hoisted_cost_counts_the_whole_chain(game_data: GameData,

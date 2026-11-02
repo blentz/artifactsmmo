@@ -42,14 +42,17 @@ class GePostBuyOrderAction(Action):
         if self.ge_location is None:
             return False
         cost = self.price * self.quantity
-        return can_spend(state, game_data, self.item_code, cost)
+        # The escrow leaves the POCKET (the server answers HTTP 492 otherwise),
+        # and the account must keep its reserve (`can_spend`); a pocket-short
+        # bid is fed by the goal's `gold_ferry` withdraw.
+        return state.gold >= cost and can_spend(state, game_data, self.item_code, cost)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         cost = self.price * self.quantity
-        if not can_spend(state, game_data, self.item_code, cost):
+        if state.gold < cost or not can_spend(state, game_data, self.item_code, cost):
             raise AssertionError(
-                f"GePostBuyOrderAction.apply: gold={state.gold} - cost={cost} below "
-                f"reserve floor — is_applicable invariant violated"
+                f"GePostBuyOrderAction.apply: gold={state.gold} short of cost={cost} "
+                f"or below the reserve floor — is_applicable invariant violated"
             )
         dest = self.ge_location or (state.x, state.y)
         new_order = OpenOrder(

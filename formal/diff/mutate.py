@@ -406,6 +406,12 @@ OBTAIN_MODEL_POLICY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_mod
 ACQUISITION_COST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "acquisition_cost.py"
 SKILL_CREDIT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "skill_credit.py"
 OBTAIN_MODEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "obtain_model.py"
+# HTTP 492 hotfix (2026-10-30): every gold buy pays from the pocket.
+GE_FILL_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_fill_sell.py"
+GE_POST_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ge_post_buy.py"
+WITHDRAW_GOLD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_gold.py"
+POST_BUY_BID_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "post_buy_bid.py"
+GOAL_SERIALIZATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goal_serialization.py"
 OBTAIN_MODEL_DROP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "drop_routes.py"
 VENDOR_REACH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "obtain_model" / "vendor_reach.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
@@ -430,6 +436,7 @@ WIN_THRESHOLD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "win_thresho
 GROUP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "group_fight_core.py"
 EXPECTED_DAMAGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "expected_damage.py"
 CONSUMABLE_PRICE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price_core.py"
+SELECTION_CONTEXT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "selection_context.py"
 FIGHT_SECONDS_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_seconds_core.py"
 FIGHT_SECONDS_MODEL_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
                            / "fight_seconds_model.py")
@@ -439,6 +446,23 @@ DROP_OBSERVATIONS_SRC = (ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning"
 LEARNED_DROPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learned_drops.py"
 DROP_FIGHT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "drop_fight_selection.py"
 CONSUMABLE_PRICE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_price.py"
+# The gold rate moved out of consumable_price (S-046) so the pricer can read
+# it; its mutants moved with it, still killed by test_consumable_price.py.
+GOLD_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gold_rate.py"
+GOLD_RATE_READER_MUTATIONS = [
+    ("gold_rate: gold per cycle read as gold per second",
+     "    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds",
+     "    return fight_gold_rate(fighter, game_data, monster, seconds)"),
+    ("gold_rate: no grind target never reads m* (ruling AL)",
+     "        monster = ctx.gear_objective.monster\n",
+     "        monster = None\n"),
+    ("gold_rate: m* outranks the grind target (ruling AL)",
+     "    if monster is None and ctx.gear_objective is not None:\n",
+     "    if ctx.gear_objective is not None:\n"),
+    ("gold_rate: gold is earned in the character's gear, not L*",
+     "        fighter = ctx.gear_objective.fighter\n",
+     "        fighter = state\n"),
+]
 LOOP_RATE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate_core.py"
 LOOP_RATE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loop_rate.py"
 FIGHT_ROOM_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "fight_room_license.py"
@@ -1236,9 +1260,6 @@ FIGHT_SECONDS_READER_MUTATIONS = [
 # The learned seconds a context carries (rulings CA/CC). Killed by
 # tests/test_ai/test_consumable_price.py.
 TIMED_PRICE_MUTATIONS = [
-    ("consumable price: gold is earned in the character's gear, not L*",
-     "        fighter = ctx.gear_objective.fighter\n",
-     "        fighter = state\n"),
     ("consumable price: an action is one second",
      "    return actions * ctx.action_seconds_of()",
      "    return actions * 1"),
@@ -1469,18 +1490,18 @@ PRODUCE_FILTER_MUTATIONS = [
 # plan B Task 12a). Killed by tests/test_ai/test_acquisition_cost_wrapper.py.
 DROP_PRICE_MUTATIONS = [
     ("drop price: a GATHER route ignores the context's evidence",
-     "                               item, source.code, state, game_data, ctx.drops()),",
-     "                               item, source.code, state, game_data, LearnedDrops.empty()),"),
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(",
+     "    return _gather_actions(item, resource, state, game_data, LearnedDrops.empty()) * _kind_actions("),
     ("drop price: a DROP route ignores the context's evidence",
-     "                                                  ctx.drops(), ctx.fight_records),",
-     "                                                  LearnedDrops.empty(), ctx.fight_records),"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = LearnedDrops.empty().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("drop price: a gather ignores its loadout's prospecting",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q,\n"
      "                                      gather_prospecting(resource, state, game_data))",
      "    return evidence.attempts_per_unit(resource, item, rate, min_q, max_q, 0)"),
     ("drop price: a farm is one win a unit",
-     "    kills = evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,",
-     "    kills = 0 * evidence.attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
+     "    kills = ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,",
+     "    kills = 0 * ctx.drops().attempts_per_unit(monster_code, item, rate, min_q, max_q,"),
     ("gather price: a ready gather yields two a gather",
      "                           yield_per=1, capacity=source.capacity)",
      "                           yield_per=2, capacity=source.capacity)"),
@@ -1592,8 +1613,8 @@ ONE_DROP_MODEL_GRIND_MUTATIONS = [
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n        learned_drops,\n",
      "        (state.utility1_slot_quantity, state.utility2_slot_quantity),\n"),
     ("grind: the rungs price the prior",
-     "                   learned_drops=ctx.drops())",
-     "                   learned_drops=LearnedDrops.empty())"),
+     "                   kind_seconds=ctx.kind_seconds, learned_drops=ctx.drops())",
+     "                   kind_seconds=ctx.kind_seconds, learned_drops=LearnedDrops.empty())"),
 ]
 ONE_DROP_MODEL_FACTORY_MUTATIONS = [
     ("factory: a targeted gather carries no evidence",
@@ -1797,15 +1818,6 @@ CONSUMABLE_PRICE_READER_MUTATIONS = [
     ("consumable_price reader: a GE order is ignored",
      "            prices.append(ge_price_of(code, source.code, game_data))",
      "            prices.extend(())"),
-    ("consumable_price reader: gold per cycle read as gold per second",
-     "    return fight_gold_rate(fighter, game_data, monster, seconds) / seconds",
-     "    return fight_gold_rate(fighter, game_data, monster, seconds)"),
-    ("consumable_price reader: no grind target never reads m* (ruling AL)",
-     "        monster = ctx.gear_objective.monster\n",
-     "        monster = None\n"),
-    ("consumable_price reader: m* outranks the grind target (ruling AL)",
-     "    if monster is None and ctx.gear_objective is not None:\n",
-     "    if ctx.gear_objective is not None:\n"),
     ("consumable_price reader: a replacement is free while any unit is held",
      "    return consumable_price(0, make_seconds(code, unheld, game_data, ctx, store),",
      "    return consumable_price(held_count(code, state), make_seconds(code, unheld, game_data, ctx, store),"),
@@ -2772,10 +2784,15 @@ SLOT_OCCUPANCY_MUTATIONS = [
 # the live 2026-09-21 livelock actually ran through.
 OBTAIN_ITEM_TURNIN_RESERVE_MUTATIONS = [
     ("obtain_item: re-equip a currency under a live turn-in claim",
-     "            if ctx.turn_in is not None and ctx.turn_in.currency == self.step.code:\n"
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n"
+     "                    and ctx.turn_in.currency == self.step.code):\n"
      "                return None",
      "            if False:\n"
      "                return None"),
+    # Review I1: a not-ready claim (the shortfall's farmer) reserves nothing.
+    ("obtain_item: a farmer's not-ready claim reserves the currency",
+     "            if (ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            if (ctx.turn_in is not None\n"),
 ]
 
 PLANNER_STATE_KEY_MUTATIONS = [
@@ -4388,14 +4405,14 @@ OBTAIN_MODEL_GATE_MUTATIONS = [
 # drop_obtainability). Split by the test file that kills each.
 OBTAIN_MODEL_DROP_MUTATIONS = [
     ("drop_routes: ignore winnability",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = True or drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = True or rested.winnable("),
     ("drop_routes: every monster has a routable spawn",
      "Gate(GateKind.SPAWN_KNOWN, monster, known, doors=doors)",
      "Gate(GateKind.SPAWN_KNOWN, monster, True, doors=doors)"),
     ("drop_routes: ask winnability only for a live monster",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = live and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = live and rested.winnable("),
     ("drop_routes: a monster that pays no gold is a gold route",
      "        if top <= 0 or game_data.monster_level(monster) > ceiling:\n            continue",
      "        if top < 0 or game_data.monster_level(monster) > ceiling:\n            continue"),
@@ -4408,16 +4425,16 @@ OBTAIN_MODEL_DROP_MUTATIONS = [
 # tests/test_ai/test_obtain_model_fighter.py.
 OBTAIN_MODEL_FIGHTER_DROP_MUTATIONS = [
     ("drop_routes: the fighter is ignored",
-     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter)",
-     "    shared = _Rested(state)"),
+     "    shared = _Rested(state if fighter is None or callable(fighter) else fighter, memo)",
+     "    shared = _Rested(state, memo)"),
     ("drop_routes: a per-monster fighter is ignored for the real state",
-     "        return _Rested(fighter(monster)) if callable(fighter) else shared",
+     "        return _Rested(fighter(monster), memo) if callable(fighter) else shared",
      "        return shared"),
 ]
 OBTAIN_MODEL_FIGHTER_MUTATIONS = [
     ("obtain_model: the fighter never reaches the drop gates",
-     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter)",
-     "        return drop_routes(item, self._state, self._gd, self._crossing)"),
+     "        return drop_routes(item, self._state, self._gd, self._crossing, self._fighter,\n",
+     "        return drop_routes(item, self._state, self._gd, self._crossing, None,\n"),
     ("obtain_model: the fighter's inventory is stock",
      "        bag: dict[str, int] = dict(self._state.inventory)",
      "        bag: dict[str, int] = dict(self._state.inventory) | "
@@ -4538,10 +4555,11 @@ SERVED_BY_ITS_ROUTE_CORE_MUTATIONS = [
      "    per_unit = (cost / max(1, route.yield_per) if isinstance(cost, Fraction)\n",
      "    per_unit = (-(-cost // max(1, route.yield_per)) if isinstance(cost, Fraction)\n"),
     ("acquisition_cost_core: each application rounded up on its own",
-     "        actions[0] += ceil(applications * route.actions_per_application)\n",
-     "        actions[0] += applications * ceil(route.actions_per_application)\n"),
+     "        actions[0] += ceil(applications * route.actions_per_application + take * route.spent)\n",
+     "        actions[0] += applications * ceil(route.actions_per_application)"
+     " + ceil(take * route.spent)\n"),
     ("acquisition_cost_core: the priced route is not the walk's argmin",
-     "            _cheapest_route(item, options, memo, frozenset(), free)[1])\n",
+     "            _cheapest_route(item, options, memo, frozenset(), free, charges)[1])\n",
      "            next(iter(options.get(item, [])), None))\n"),
 ]
 # Ruling T14a-B': a capped route prices only its capacity, the remainder the
@@ -4557,8 +4575,8 @@ CAPACITY_FILL_MUTATIONS = [
      "        if take <= 0:\n            continue\n",
      "        if take < 0:\n            continue\n"),
     ("capacity fill: the routes fill in catalogue order, not unit cost",
-     "                   key=lambda index: (_route_unit(routes[index], options, memo, inner, free),\n",
-     "                   key=lambda index: (0,\n"),
+     "    return sorted(units, key=lambda pair: (pair[1], pair[0]))\n",
+     "    return sorted(units, key=lambda pair: (0, pair[0]))\n"),
     ("capacity fill: a remainder no route serves is free",
      "            return\n    actions[0] += UNOBTAINABLE_PER_UNIT * remaining\n",
      "            return\n    actions[0] += 0 * remaining\n"),
@@ -4568,13 +4586,13 @@ CAPACITY_FILL_MUTATIONS = [
 ]
 SERVED_BY_ITS_ROUTE_PRICER_MUTATIONS = [
     ("acquisition_cost: the pocket's gold is not free to the choice (T2k)",
-     "    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}))\n",
-     "    price, route = priced_route(item, qty, options, owned)\n"),
+     "    price, route = priced_route(item, qty, options, owned, frozenset({GOLD_CODE}), charge)\n",
+     "    price, route = priced_route(item, qty, options, owned, frozenset(), charge)\n"),
     ("acquisition_cost: each win for gold rounded up on its own (M1)",
      "            actions_per_application=_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records),\n",
+     "                source.code, state, game_data, ctx, ctx.fight_records),\n",
      "            actions_per_application=ceil(_kill_actions(\n"
-     "                source.code, state, game_data, ctx.timing(), ctx.fight_records)),\n"),
+     "                source.code, state, game_data, ctx, ctx.fight_records)),\n"),
     ("acquisition_cost: an unpriced climb has no route",
      "    for kind in _SKILL_GATE:\n        if _skill_gated(item, model, kind, policy) is not None:\n",
      "    for kind in ():\n        if _skill_gated(item, model, kind, policy) is not None:\n"),
@@ -4627,9 +4645,9 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
 PIECE_GE_ROUTING_MUTATIONS = [
     ("piece GE: a piece's currency step is walked without the piece's routes",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=piece, now=ctx.now)",
+     "                                           fight_gold=piece, farmed_for=code, now=ctx.now)",
      "                                           needed={currency: held + want},\n"
-     "                                           fight_gold=False, now=ctx.now)"),
+     "                                           fight_gold=False, farmed_for=code, now=ctx.now)"),
 ]
 PIECE_GE_DECOMPOSE_MUTATIONS = [
     ("piece GE: a piece's walk has no GE fill (D-E kept)",
@@ -4754,9 +4772,10 @@ LEGACY_GATHER_SKILL_MUTATIONS = [
 # tests/test_ai/test_acquisition_cost_wrapper.py.
 GATED_GATHER_MUTATIONS = [
     ("acquisition_cost: a climb's gather ignores the observations",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data, evidence),",
-     "            actions_per_application=_gather_actions(item, route.via, state, game_data,\n"
-     "                                                    LearnedDrops.empty()),"),
+     "            actions_per_application=_gather_cost(item, route.via, state, game_data, ctx),",
+     "            actions_per_application=_gather_cost(\n"
+     "                item, route.via, state, game_data,\n"
+     "                replace(ctx, learned_drops=LearnedDrops.empty())),"),
     ("acquisition_cost: no gated gather route",
      "        for kind in (SourceKind.CRAFT, SourceKind.GATHER):",
      "        for kind in (SourceKind.CRAFT,):"),
@@ -4914,10 +4933,10 @@ DROP_WALL_WORN_ARM_MUTATIONS = [
     # Plan C Task 8 (Task 7 re-review): killed by
     # test_the_unattributed_residual_can_fire_behind_the_objective.
     ("drop wall: worn walls that cross only together read as no wall",
-     "            attributed = _attribute(candidate, state, game_data, behind, base)\n"
+     "            attributed = _attribute(candidate, state, game_data, behind, base, ctx)\n"
      "            if attributed is None:\n"
      "                return (DropGap.DROP_WALL_UNATTRIBUTED.value, base, collective, gate_price,\n",
-     "            attributed = _attribute(candidate, state, game_data, behind, base)\n"
+     "            attributed = _attribute(candidate, state, game_data, behind, base, ctx)\n"
      "            if attributed is None:\n"
      "                return (DropGap.NOT_DROP_WALLED.value, base, collective, gate_price,\n"),
 ]
@@ -5279,8 +5298,15 @@ COMMITTED_PLAN_MUTATIONS = [
      "            if action.is_applicable(sim, game_data):\n"
      "                sim = action.apply(sim, game_data)\n        if legs:"),
     ("craft_plan_gen: a drop fight carries no drop target",
-     "        return None if fight is None else dataclasses.replace(fight, drop_target=(step.item, step.amount))",
-     "        return fight"),
+     "        return dataclasses.replace(fight, drop_target=(step.item, step.amount))\n",
+     "        return fight\n"),
+    # Review I4: a walked dropper the oracle refuses is a named defect.
+    ("craft_plan_gen: a pool without the dropper's fight raises",
+     "        if not droppers:\n            return None\n        fight = select_drop_fight(",
+     "        fight = select_drop_fight("),
+    ("craft_plan_gen: an unservable drop route plans nothing",
+     "        if fight is None:\n            raise UnservableDropRouteError(step.item, route.via)\n",
+     "        if fight is None:\n            return None\n"),
 ]
 # A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
 # Ruling T8b (Task 8b fix round 1): a cached plan's goal and steps are judged at
@@ -5370,12 +5396,344 @@ UPGRADE_DECOMPOSE_MUTATIONS = [
      "    return [*legs, equip] if equip.is_applicable(landed, game_data) else legs\n\n\ndef _decompose_grind",
      "    return [*legs, equip]\n\n\ndef _decompose_grind"),
     ("craft_plan_gen: an upgrade the GE sells is made instead (the venue choice lost)",
-     "    if game_data.ge_best_sell_order(item) is not None:\n        # The book sells it",
-     "    if False:\n        # The book sells it"),
+     "    if goal.ge_fill:\n        # The book sells it and",
+     "    if False:\n        # The book sells it and"),
     ("craft_plan_gen: an upgrade is never decomposed (A* only)",
      "        return _decompose_upgrade(goal, state, game_data, actions, ctx, declined, subtasks,\n"
      "                                  store=store)",
      "        return None"),
+]
+# The ticket farm (live 2026-10-31): the walk serves the route that priced the
+# item, not the fixed kind order. Killed by
+# tests/test_ai/test_priced_route_served.py.
+PRICED_ROUTE_WALK_MUTATIONS = [
+    ("priced walk: a choice among minting routes keeps the kind order",
+     "            if sum(1 for route, _gates in candidates if route.kind not in _ORDER_STOCK) > 1:\n",
+     "            if False:\n"),
+    ("priced walk: the ranking ignores the grey-farm directive the walk admitted by",
+     "                priced = prefer(code, item_policy)\n",
+     "                priced = prefer(code, policy)\n"),
+    ("priced walk: stock is priced like any route that makes copies",
+     "    tier = _ORDER_STOCK.get(route.kind, 1)\n",
+     "    tier = 1\n"),
+    ("priced walk: a route the pricer does not list goes first",
+     "    return tier, (priced.get((route.kind, route.via), inf) if tier == 1 else 0)\n",
+     "    return tier, (priced.get((route.kind, route.via), 0) if tier == 1 else 0)\n"),
+    ("priced walk: a sale is tried with the stock",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 2}\n",
+     "_ORDER_STOCK = {SourceKind.WITHDRAW: 0, SourceKind.RECYCLE: 0, SourceKind.SELL: 0}\n"),
+]
+PRICED_ROUTE_FIGHT_MUTATIONS = [
+    ("priced walk: the drop leg fights whichever dropper kills fewest",
+     "                                  if isinstance(a, FightAction) and a.monster_code == route.via]\n",
+     "                                  if isinstance(a, FightAction)]\n"),
+]
+# Ruling "seconds inside" (2026-10-31): every route option is priced at its
+# actions' measured seconds and converted to planner actions once. Killed by
+# tests/test_ai/test_acquisition_cost_wrapper.py and
+# tests/test_ai/test_priced_route_served.py.
+SECONDS_INSIDE_PRICE_MUTATIONS = [
+    ("seconds inside: the seconds are never converted to actions",
+     "    return seconds / ctx.action_seconds_of()\n",
+     "    return seconds\n"),
+    ("seconds inside: every kind's action is one planner action",
+     "    return _in_actions(ctx.seconds_of(kind), ctx)\n",
+     "    return _in_actions(ctx.action_seconds_of(), ctx)\n"),
+    ("seconds inside: a win is fight-equivalents, not its seconds",
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return (per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"),
+    ("seconds inside: a craft is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity,\n"
+     "                           inputs=dict(recipe))\n"),
+    ("seconds inside: a recycle is priced as a craft",
+     "                           actions_per_application=_kind_actions(LogType.RECYCLING, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.CRAFTING, ctx),\n"),
+    ("seconds inside: an item withdraw is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.WITHDRAW_ITEM, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"
+     "                           yield_per=source.yield_per, capacity=source.capacity)\n"),
+    ("seconds inside: a GE fill is priced as a gather",
+     "                           actions_per_application=_kind_actions(LogType.BUY_GE, ctx),\n",
+     "                           actions_per_application=_kind_actions(LogType.GATHERING, ctx),\n"),
+    ("seconds inside: a gather is one action whatever its seconds",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops()) * _kind_actions(\n"
+     "        LogType.GATHERING, ctx)\n",
+     "    return _gather_actions(item, resource, state, game_data, ctx.drops())\n"),
+]
+SECONDS_INSIDE_KIND_MUTATIONS = [
+    ("seconds inside: a zero cooldown is timed",
+     "        if cooldown > 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n",
+     "        if cooldown >= 0:\n            seconds, runs = seen.get(kind, (Fraction(0), Fraction(0)))\n"),
+]
+# The user's I2 ruling (2026-10-31, "learning DB, then raise") and review I3:
+# each priced kind is timed by the store's recorded cooldowns per action run.
+# Killed by tests/test_ai/test_fight_seconds_model.py.
+STORE_KIND_SECONDS_MUTATIONS = [
+    ("store kinds: a craft is filed as a recycle",
+     "    \"CraftAction\": LogType.CRAFTING,\n",
+     "    \"CraftAction\": LogType.RECYCLING,\n"),
+    ("store kinds: a craft's repr quantity is ignored",
+     "    if kind not in (LogType.CRAFTING, LogType.RECYCLING):\n        return 1\n",
+     "    if True:\n        return 1\n"),
+    ("store kinds: a recorded cycle is one run whatever its quantity",
+     "        out[kind.value] = (total + seconds, runs + cycles * _store_runs(kind, action_repr))\n",
+     "        out[kind.value] = (total + seconds, runs + cycles)\n"),
+    ("store kinds: the store is never read",
+     "        timed.update(stored)\n",
+     "        pass\n"),
+    # Fix round 3 (re-review N1): the kinds merge per kind; a whole-store
+    # cutover dropped every kind the logs timed once the store held any row.
+    ("store kinds: the store's kinds replace the logs' whole",
+     "        timed.update(stored)\n",
+     "        timed = stored or timed\n"),
+    ("store kinds: the held sums are dropped on every new cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (held[1], {}) if held is not None else (0, {})\n"),
+    ("store kinds: the held sums are read again from the first cycle",
+     "    seen, sums = (held[1], held[2]) if held is not None else (0, {})\n",
+     "    seen, sums = (0, held[2]) if held is not None else (0, {})\n"),
+    ("store kinds: a replaced table keeps its stale sums",
+     "_KIND_SUMS[0][0] is store and _KIND_SUMS[0][1] <= last else None\n",
+     "_KIND_SUMS[0][0] is store else None\n"),
+    ("log kinds: a logged craft is one run per unit made",
+     "        return Fraction(quantity, craft_yield(item))\n",
+     "        return Fraction(quantity)\n"),
+    ("log kinds: a logged recycle is one run",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(quantity)\n",
+     "    if kind == LogType.RECYCLING.value:\n        return Fraction(1)\n"),
+    ("log kinds: a batched entry's quantity is not read",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), int(entry.content[\"quantity\"])\n",
+     "        return kind, entry.cooldown, str(entry.content[\"item\"]), 1\n"),
+]
+STORE_COOLDOWNS_QUERY_MUTATIONS = [
+    ("store kinds: a failed cycle times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n"),
+    ("store kinds: a zero cooldown times its kind",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) > 0,\n",
+     "                       Cycle.outcome == \"ok\",\n"
+     "                       col(Cycle.actual_cooldown_seconds) >= 0,\n"),
+    ("store kinds: the read ignores the id window",
+     "                       col(Cycle.id) > after_id, col(Cycle.id) <= through_id)\n",
+     "                       col(Cycle.id) >= 0)\n"),
+]
+UNTIMED_KIND_MUTATIONS = [
+    ("untimed kind: an untimed kind is the mean action",
+     "        if measured is None:\n            raise UntimedActionKindError(kind.value)\n        return measured\n",
+     "        if measured is None:\n            return self.action_seconds_of()\n        return measured\n"),
+]
+# Review I5: the WINNABLE verdict is memoised across one decision. Killed by
+# tests/test_ai/test_obtain_model_fighter.py.
+WINNABLE_MEMO_MUTATIONS = [
+    ("winnable memo: a store never memoises",
+     "        store = self._store\n        if store is None:\n            return None\n",
+     "        store = self._store\n        if True:\n            return None\n"),
+    ("winnable memo: every fighter shares one verdict",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster, id(fighter)),\n",
+     "            pinned = store.cached((\"drop_fight_winnable\", monster),\n"),
+]
+WINNABLE_MEMO_ROUTES_MUTATIONS = [
+    ("winnable memo: the memo is never asked",
+     "        return compute() if self.memo is None else self.memo(self.state, monster, compute)\n",
+     "        return compute()\n"),
+]
+PRICED_ROUTE_KEY_MUTATIONS = [
+    ("priced walk: a sibling's craft is keyed as this character's craft",
+     "    kind = _served_by(option)\n    if kind in",
+     "    kind = SourceKind(option.kind)\n    if kind in"),
+    ("priced walk: a withdraw or a craft is keyed on its venue",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, item\n",
+     "    if kind in (SourceKind.WITHDRAW, SourceKind.CRAFT):\n        return kind, option.venue\n"),
+    ("priced walk: a recycle or a sale is keyed on its venue",
+     "        (via,) = option.inputs\n        return kind, via\n",
+     "        return kind, option.venue\n"),
+    ("priced walk: the dearer of two options for one route is kept",
+     "        ranks.setdefault(route_key(item, option), unit)\n",
+     "        ranks[route_key(item, option)] = unit\n"),
+]
+PRICED_ROUTE_CORE_MUTATIONS = [
+    ("priced walk: the ranking carries no unit cost",
+     "    return tuple((routes[index], unit)\n",
+     "    return tuple((routes[index], 0)\n"),
+    ("priced walk: the ranking is the options order",
+     "                 for index, unit in _ranked(item, options, memo, free, charges))\n",
+     "                 for index, unit in sorted(_ranked(item, options, memo, free, charges)))\n"),
+]
+# The ticket farm (live 2026-10-31): a leg whose planned drop did not land is
+# no progress, so a dry drop farm reaches the stall exit. Killed by
+# tests/test_ai/test_intention_progress.py and, at the run loop's call site,
+# tests/test_ai/test_player_run.py.
+STEP_DELIVERED_MUTATIONS = [
+    ("stall: an action planned for no drop never delivers",
+     "    if output is None:\n        return True\n",
+     "    if output is None:\n        return False\n"),
+    ("stall: a drop that did not land is delivered",
+     "    return cache_holdings(after).get(item, 0) > cache_holdings(before).get(item, 0)\n",
+     "    return cache_holdings(after).get(item, 0) >= cache_holdings(before).get(item, 0)\n"),
+]
+# The E ruling (2026-10-31): a dry drop leg is no progress only past its
+# drop's 99th-percentile dry streak. Killed by
+# tests/test_ai/test_intention_progress.py.
+DRY_STREAK_MUTATIONS = [
+    ("dry streak: a sure drop forgives any dry attempt",
+     "    if chance >= 1:\n        return streak <= 0\n",
+     "    if chance >= 1:\n        return True\n"),
+    ("dry streak: an action planned for no drop is always dry",
+     "    if chance is None:\n        return True\n",
+     "    if chance is None:\n        return False\n"),
+    ("dry streak: a rare drop is forgiven forever",
+     "    return streak <= ceil(log(DRY_STREAK_TAIL) / log(1 - float(chance)))\n",
+     "    return True\n"),
+    ("dry streak: the gather's chance is the fight's",
+     "    if isinstance(action, GatherAction):\n        rate, _low, _high = game_data.gather_drop_row(",
+     "    if False:\n        rate, _low, _high = game_data.gather_drop_row("),
+]
+# Review C1/M1 (fix round 1): the streak is kept per `(source, item)`, only a
+# successful leg planned for a drop moves it, and a zero chance is named.
+# Killed by tests/test_ai/test_intention_progress.py.
+DRY_STREAK_KEY_MUTATIONS = [
+    ("dry streak: a zero chance divides by zero",
+     "    if chance <= 0:\n        raise ImpossibleDropError(",
+     "    if chance < 0:\n        raise ImpossibleDropError("),
+    ("dry streak: a failed leg is progress",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if not ok:\n        return True\n    key = drop_key("),
+    ("dry streak: a failed leg adds to the streak",
+     "    if not ok:\n        return False\n    key = drop_key(",
+     "    if False:\n        return False\n    key = drop_key("),
+    ("dry streak: a leg planned for no drop is no progress",
+     "    if key is None:\n        return True\n    if step_delivered(",
+     "    if key is None:\n        return False\n    if step_delivered(",),
+    ("dry streak: a landed drop leaves its streak",
+     "        streaks[key] = 0\n        return True\n",
+     "        return True\n"),
+    ("dry streak: a dry attempt adds nothing",
+     "    streaks[key] = streaks.get(key, 0) + 1\n",
+     "    streaks[key] = streaks.get(key, 0)\n"),
+    ("dry streak: one streak for every source",
+     "    if isinstance(action, GatherAction):\n        return action.resource_code, output[0]\n",
+     "    if isinstance(action, GatherAction):\n        return \"\", output[0]\n"),
+    ("dry streak: a fight's streak is keyed on no monster",
+     "    return action.monster_code, output[0]\n",
+     "    return \"\", output[0]\n"),
+]
+DRY_STREAK_PLAYER_MUTATIONS = [
+    ("dry streak: the run loop reads every leg as delivered",
+     "                                                     outcome == \"ok\", game_data))\n",
+     "                                                     outcome == \"ok\", game_data) or True)\n"),
+    ("dry streak: the run loop keeps a fresh streak per leg",
+     "                                      leg_progressed(self._dry_streaks, executed_action,\n",
+     "                                      leg_progressed({}, executed_action,\n"),
+]
+# The ticket farm (live 2026-10-31): the fleet's pooled medals are credited in
+# the price, one character farms a shortfall the fleet cannot pay, and its
+# claim asks no buy, no surrender and no reservation.
+FLEET_FARM_PRICE_MUTATIONS = [
+    ("fleet farm: the price credits no pooled medal",
+     "    owned = _fleet_pooled(item, _owned_with_gold(state, pocket), state, game_data, ctx)\n",
+     "    owned = _owned_with_gold(state, pocket)\n"),
+    ("fleet farm: a medal priced to wear is credited with the pool",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings) if code != item else 0\n",
+     "        pooled = fleet_pooled(code, state, game_data, ctx.sibling_holdings)\n"),
+    ("fleet farm: the drop work credits no pooled medal",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "    legs = route_legs(item, qty, options,\n"
+     "                      _owned_with_gold(state, state.gold),"),
+    ("fleet farm: the pool is counted and not added",
+     "            out[code] = out.get(code, 0) + pooled\n",
+     "            out[code] = out.get(code, 0)\n"),
+]
+FLEET_FARM_PLAYER_MUTATIONS = [
+    ("fleet farm: no sibling's farm claim is reported",
+     "        if self._turn_in is None:\n            self._turn_in = self._shortfall_farmer(",
+     "        if False:\n            self._turn_in = self._shortfall_farmer("),
+    ("fleet farm: a payable sink is reported as a farm",
+     "                if turn_in_ready_pure(fleet_total, price):\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n",
+     "                if False:\n                    continue\n"
+     "                holder = coordination.turn_in_holder(item_code, now)\n"),
+    ("fleet farm: this character's own farm claim is a stand-down",
+     "                if holder is None or holder == self.character:\n                    continue\n"
+     "                farmed.append(",
+     "                if holder is None:\n                    continue\n"
+     "                farmed.append("),
+    ("fleet farm: a holder surrenders to a claim the fleet cannot pay",
+     "                if not turn_in_ready_pure(fleet_total, price):\n"
+     "                    # A claim the fleet cannot pay yet",
+     "                if False:\n"
+     "                    # A claim the fleet cannot pay yet"),
+    ("fleet farm: a running farm takes no election",
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n",
+     "            if False:\n"
+     "                self._coordination.claim_turn_in(item_code, now)\n"),
+    # Review M3: only the farmed piece's sink is claimed.
+    ("fleet farm: a farm claims every unpaid sink of its currency",
+     "            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):\n",
+     "            if not turn_in_ready_pure(fleet_total, price):\n"),
+    # Review M4: a farmer that cannot buy releases the election once ready.
+    ("fleet farm: a farmer that cannot buy keeps the election",
+     "                    if self._coordination.turn_in_holder(item_code, now) == self.character:\n"
+     "                        self._coordination.release_turn_in(item_code)\n",
+     "                    if False:\n"
+     "                        self._coordination.release_turn_in(item_code)\n"),
+    # Review M2: equal prices go to the sink the fleet is nearest paying.
+    ("fleet farm: equal-price farms tie on the vendor order alone",
+     "        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None\n",
+     "        return max(farmed, key=lambda t: t.price) if farmed else None\n"),
+    ("fleet farm: any goal's run takes the election",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)\n"
+     "                or not is_dual_role(goal.target_item, game_data)):\n",
+     "        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)):\n"),
+]
+# Review I5: a gear unlock's full-hp deficit is computed once per decision.
+# Killed by tests/test_ai/test_key_door_route.py.
+RESTED_DEFICIT_MUTATIONS = [
+    ("rested deficit: the memo keys on no state",
+     "    pinned = store.cached((\"rested_deficit\", monster, *price_key(rested)),\n",
+     "    pinned = store.cached((\"rested_deficit\", monster),\n"),
+    ("rested deficit: the deficit is asked at the live hp",
+     "    rested = replace(state, hp=state.max_hp)\n    if store is None:\n",
+     "    rested = state\n    if store is None:\n"),
+]
+# Review M6: the trace says whether the claim can buy now. Killed by
+# tests/test_ai/test_trace_coordination_fields.py.
+FLEET_FARM_TRACE_MUTATIONS = [
+    ("fleet farm: the trace drops the claim's readiness",
+     "            \"ready\": self._turn_in.ready,\n",
+     "            \"ready\": True,\n"),
+]
+# Review M3: a currency farm names the sink it buys, through `for_piece`.
+# Killed by tests/test_ai/test_dual_role_currency.py.
+FARMED_FOR_ROUTING_MUTATIONS = [
+    ("fleet farm: a piece's currency farm names no sink",
+     "                                           fight_gold=piece, farmed_for=code, now=ctx.now)",
+     "                                           fight_gold=piece, now=ctx.now)"),
+]
+FARMED_FOR_GOAL_MUTATIONS = [
+    ("fleet farm: for_piece forgets the sink the farm buys",
+     "                                   farmed_for=self.farmed_for, now=self._now)\n",
+     "                                   farmed_for=None, now=self._now)\n"),
+]
+FLEET_FARM_RESERVE_MUTATIONS = [
+    ("fleet farm: a claim short of the price reserves the medal",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None and ctx.turn_in.ready\n",
+     "            {ctx.turn_in.currency} if ctx.turn_in is not None\n"),
+]
+FLEET_FARM_TURNIN_MUTATIONS = [
+    ("fleet farm: a claim short of the price is a turn-in due",
+     "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+     "    return ctx.turn_in is not None or ctx.recall is not None"),
 ]
 # The walk adapter (`ObtainModel.walk_graph`). Killed by
 # tests/test_ai/test_craft_plan_gen.py.
@@ -6951,8 +7309,9 @@ DROP_TOOL_WORK_MUTATIONS = [
      "                 for code, route, units in legs if route.kind in _DROP_WORK)",
      "                 for code, route, units in legs)"),
     ("drop work: the bag is not credited",
-     "    legs = route_legs(item, qty, options, _owned_with_gold(state, state.gold),",
-     "    legs = route_legs(item, qty, options, {},"),
+     "                      _fleet_pooled(item, _owned_with_gold(state, state.gold), state, game_data,\n"
+     "                                    ctx),",
+     "                      {},"),
     ("drop work: a farm leg is priced as a gather",
      "        if leg.kind is SourceKind.DROP:\n            rate, min_q",
      "        if False:\n            rate, min_q"),
@@ -7068,8 +7427,8 @@ DROP_TOOL_CORE_MUTATIONS = [
     ("route legs: a leg records the demand, not what holdings leave",
      "            legs.append((item, route, take))", "            legs.append((item, route, qty))"),
     ("route legs: the inputs' legs are not collected",
-     "                        owned, paid, actions, fuel - 1, free, drawn, legs)",
-     "                        owned, paid, actions, fuel - 1, free, drawn)"),
+     "                        owned, paid, actions, fuel - 1, free, charge, drawn, legs)",
+     "                        owned, paid, actions, fuel - 1, free, charge, drawn)"),
 ]
 TOOL_OBJECTIVE_ROOT_MUTATIONS = [
     ("root: a gear target's skill climb ignores the tool",
@@ -8037,11 +8396,14 @@ SKILL_CREDIT_PRICE_MUTATIONS = [
 ]
 LOSS_RISK_ACQUISITION_MUTATIONS = [
     ("loss risk: the drop price ignores the learned losses",
-     "    return per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight)\n",
-     "    return per_kill\n"),
+     "    return _in_actions((per_kill + _loss_surcharge(monster_code, state.max_hp, records, fight))\n"
+     "                       * fight, ctx)\n",
+     "    return _in_actions(per_kill * fight, ctx)\n"),
     ("loss risk: the routes drop the context's records",
-     "                                                  ctx.drops(), ctx.fight_records),\n",
-     "                                                  ctx.drops(), ()),\n"),
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ctx.fight_records),\n",
+     "                                                  max_q, state, game_data, ctx,\n"
+     "                                                  ()),\n"),
     ("loss risk: the surcharge reads any monster's record",
      "        if monster == monster_code:\n",
      "        if True:\n"),
@@ -8066,8 +8428,8 @@ GRIND_MEMO_SECONDS_MUTATIONS = [
      "        learned_drops,\n        seconds,\n",
      "        learned_drops,\n        (None, None),\n"),
     ("grind memo: the builder keys no seconds",
-     "                     (ctx.fight_seconds, ctx.action_seconds))\n",
-     "                     (None, None))\n"),
+     "                     (ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds))\n",
+     "                     (None, None, None))\n"),
 ]
 GRIND_TIEBREAK_MUTATIONS = [
     ("grind tiebreak: candidates meet the core in catalogue order",
@@ -8698,11 +9060,22 @@ PARTY_LOADOUT_PLAYER_MUTATIONS = [
 # levelling. Killed by tests/test_ai/test_dual_role_currency.py.
 PIECE_PASSIVE_CURRENCY_MUTATIONS = [
     ("passive currency: an L* piece's medals are capped by the tickets held",
-     "                if funded is not None and not piece:\n",
+     "                if funded is not None and not farmed:\n",
      "                if funded is not None:\n"),
     ("passive currency: an L* medal worn for itself waits on the tickets held",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if _passively_funded(code, state, game_data) == 0:\n"),
+    # The ticket farm (live 2026-10-31): a piece's currency is farmed only
+    # while the piece leads the objective's own order.
+    ("passive currency: a piece behind a better one farms its tickets",
+     "        farmed = piece and _piece_leads(code, state, ctx)\n",
+     "        farmed = piece\n"),
+    ("passive currency: a piece awaiting delivery holds the farm back",
+     "    return all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n",
+     "    return all(False for piece in objective.missing[:at])\n"),
+    ("passive currency: the leading piece is never recognised",
+     "    return all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n",
+     "    return False and all(piece.awaits_delivery(state) for piece in objective.missing[:at])\n"),
     ("passive currency: every equippable is an L* piece",
      "        piece = is_missing_piece(code, ctx)\n",
      "        piece = True\n"),
@@ -8726,8 +9099,8 @@ PIECE_GREY_GOAL_MUTATIONS = [
      "                            or (self.piece_material and serves_a_demand(item, game_data))\n",
      "                            or self.piece_material\n"),
     ("piece grey: for_piece leaves the goal unmarked",
-     "                                   fight_gold=self.fight_gold, piece_material=True, now=self._now)",
-     "                                   fight_gold=self.fight_gold, piece_material=False, now=self._now)"),
+     "                                   fight_gold=self.fight_gold, piece_material=True,\n",
+     "                                   fight_gold=self.fight_gold, piece_material=False,\n"),
 ]
 PIECE_GREY_SEAM_MUTATIONS = [
     ("piece grey: a piece's gather is never marked",
@@ -8940,8 +9313,9 @@ FEE_SHORTFALL_MUTATIONS = [
 KEY_DOOR_CROSSING_MUTATIONS = [
     ("door: the walk's crossings are asked of its spendable pocket",
      "        model = ObtainModel(state, game_data, ctx, ctx.now, crossing=state,\n"
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "        model = ObtainModel(walked, game_data, ctx, ctx.now)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n"
+     "                            store=store)\n",
+     "        model = ObtainModel(walked, game_data, ctx, ctx.now, store=store)\n"),
     ("door: the model's reach is its pocket's",
      "        self._crossing = state if crossing is None else crossing\n",
      "        self._crossing = state\n"),
@@ -8950,8 +9324,8 @@ KEY_DOOR_CROSSING_MUTATIONS = [
      "    bag = (state.gold if code == GOLD_CODE\n"),
     # Round 5 (b): the walk's pocket is the spendable pocket of its account.
     ("door: the walk's pocket is the whole account",
-     "                            spend=frozenset(goal.needed) if policy.fight_gold else None)\n",
-     "                            spend=None)\n"),
+     "                            spend=frozenset(goal.needed) if policy.fight_gold else None,\n",
+     "                            spend=None,\n"),
 ]
 KEY_DOOR_FEE_GUARD_MUTATIONS = [
     ("door: a fee is paid past the reserve",
@@ -9031,10 +9405,14 @@ KEY_DOOR_RANK_PLAN_MUTATIONS = [
 # Final review I-2: `door_route` prices with the store it is handed.
 KEY_DOOR_ROUTE_STORE_MUTATIONS = [
     ("door route: the options are priced without the store (final review I-2)",
-     "    options = acquisition_options(item, state, game_data, ctx, store, policy=policy)\n"
-     "    _price, route = priced_route(",
-     "    options = acquisition_options(item, state, game_data, ctx, None, policy=policy)\n"
-     "    _price, route = priced_route("),
+     "    options, charge = _gold_priced(\n"
+     "        acquisition_options(item, state, game_data, ctx, store, policy=policy),\n"
+     "        state, game_data, ctx)\n"
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n",
+     "    options, charge = _gold_priced(\n"
+     "        acquisition_options(item, state, game_data, ctx, None, policy=policy),\n"
+     "        state, game_data, ctx)\n"
+     "    ranks: dict[tuple[SourceKind, str], int | Fraction] = {}\n"),
 ]
 # Final review I-2: both production callers hand the walk the cycle's store.
 KEY_DOOR_STORE_ARBITER_MUTATIONS = [
@@ -9052,9 +9430,9 @@ KEY_DOOR_STORE_PLAYER_MUTATIONS = [
 # window). `ctx.now.now(...)` is the wall clock, reached without an import.
 CYCLE_CLOCK_SOURCES_MUTATIONS = [
     ("cycle clock: the sources read the wall clock",
-     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing),",
+     "    return _sources(ObtainModel(state, game_data, ctx, ctx.now, crossing=crossing,\n",
      "    return _sources(ObtainModel(state, game_data, ctx, ctx.now.now(ctx.now.tzinfo),"
-     " crossing=crossing),"),
+     " crossing=crossing,\n"),
 ]
 CYCLE_CLOCK_WALK_MUTATIONS = [
     ("cycle clock: the walk reads the wall clock",
@@ -9108,12 +9486,13 @@ KEY_DOOR_CHAIN_PRICE_MUTATIONS = [
      "                                crossing=cross)\n            for code, units in leg)\n",
      "                                crossing=at)\n            for code, units in leg)\n"),
     ("chain: a priced route's model crosses from its pocket",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross)\n",
-     "    model = ObtainModel(state, game_data, ctx, ctx.now)\n"),
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, crossing=cross, store=store)\n",
+     "    model = ObtainModel(state, game_data, ctx, ctx.now, store=store)\n"),
     ("chain: a priced route's sources cross from its pocket",
      "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
-     "                                      crossing=cross)\n",
-     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy)\n"),
+     "                                      crossing=cross, store=store)\n",
+     "              for s in obtain_sources(item, state, game_data, ctx, policy=policy,\n"
+     "                                      store=store)\n"),
 ]
 KEY_DOOR_CHAIN_WALK_MUTATIONS = [
     ("chain: every leg is walked by the origin's model",
@@ -9125,8 +9504,8 @@ KEY_DOOR_CHAIN_WALK_MUTATIONS = [
      "                        for at, cross in leg_states(self._account, self._crossing, door,\n",
      "                        for at, cross in leg_states(self._state, self._crossing, door,\n"),
     ("chain: a later leg's pocket is its whole account",
-     "                                    crossing=cross, spend=self._spend)\n",
-     "                                    crossing=cross, spend=None)\n"),
+     "                                    crossing=cross, spend=self._spend, store=self._store)\n",
+     "                                    crossing=cross, spend=None, store=self._store)\n"),
 ]
 KEY_DOOR_CHAIN_EXECUTOR_MUTATIONS = [
     ("chain: the executor opens the merged door's first code",
@@ -9168,8 +9547,8 @@ KEY_DOOR_GATE_MUTATIONS = [
      "    doors = () if known else monster_doors(monster, crossing, game_data)\n",
      "    doors = ()\n"),
     ("door: winnability is not asked past a door",
-     "    winnable = (live or known or bool(doors)) and drop_fight_winnable(",
-     "    winnable = (live or known) and drop_fight_winnable("),
+     "    winnable = (live or known or bool(doors)) and rested.winnable(",
+     "    winnable = (live or known) and rested.winnable("),
 ]
 KEY_DOOR_WALK_MUTATIONS = [
     ("door: a gather past a door names no door",
@@ -9218,9 +9597,6 @@ KEY_DOOR_PRICE_MUTATIONS = [
     ("door price: a climb is rated without a store",
      "    climb = _climb_actions(gate.subject, gate.level, state, store) if store is not None else None\n",
      "    climb = _climb_actions(gate.subject, gate.level, state, store)  # type: ignore[arg-type]\n"),
-    ("door price: every priced route is a door route",
-     "    if route is None or not route.unlock.startswith(\"door:\"):\n",
-     "    if route is None:\n"),
     ("door price: the gear chain re-prices the door",
      "                            gated_drop=False, policy=policy, opening=opening,\n"
      "                            crossing=crossing)\n",
@@ -9232,8 +9608,8 @@ KEY_DOOR_COMPANION_MUTATIONS = [
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN or gate.kind in companions\n",
      "                    and all(gate.kind is GateKind.SPAWN_KNOWN\n"),
     ("door: the walk ignores the priced route",
-     "                candidates.sort(key=lambda pair: (pair[0].kind, pair[0].via) != first)\n",
-     "                candidates.sort(key=lambda pair: True)\n"),
+     "                candidates.sort(key=lambda pair: _walk_order(pair[0], priced))\n",
+     "                candidates.sort(key=lambda pair: 0)\n"),
 ]
 KEY_DOOR_EXECUTOR_MUTATIONS = [
     ("door executor: a door gate is ground as a skill gate",
@@ -9339,7 +9715,7 @@ FLEET_CURRENCY_STEP_MUTATIONS += [
      "    held = state.inventory.get(pay, 0) + (state.bank_items or {}).get(pay, 0)\n    return held // price\n",
      "    held = state.inventory.get(pay, 0)\n    return held // price\n"),
     ("passive: an item bought with tickets farms them",
-     "        if _passively_funded(code, state, game_data) == 0 and not piece:\n",
+     "        if _passively_funded(code, state, game_data) == 0 and not farmed:\n",
      "        if False:\n"),
 ]
 SERVER_LAG_MUTATIONS = [
@@ -9940,6 +10316,8 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
+    GE_FILL_SELL_SRC, GE_POST_BUY_SRC, WITHDRAW_GOLD_SRC, POST_BUY_BID_GOAL_SRC, GOLD_RATE_SRC,
+    GOAL_SERIALIZATION_SRC,
     LIVENESS_CENSUS_SRC, ATTEMPT_PROSPECTING_SRC, GATHER_ARMOUR_SRC, GATHER_REQUIREMENT_SRC,
     RECIPE_CATALOG_SRC,
     LOADOUT_CALIBRATION_SRC,
@@ -11742,13 +12120,13 @@ FLEET_WORK_MUTATIONS = [
     ),
     (
         "fleet_work/turn_in_due: the buyer's turn_in field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
         "    return ctx.recall is not None",
     ),
     (
         "fleet_work/turn_in_due: the holder's recall field ignored",
-        "    return ctx.turn_in is not None or ctx.recall is not None",
-        "    return ctx.turn_in is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready) or ctx.recall is not None",
+        "    return (ctx.turn_in is not None and ctx.turn_in.ready)",
     ),
 ]
 
@@ -13710,6 +14088,219 @@ def main() -> int:
         MUTATION_LOCKFILE.unlink(missing_ok=True)
 
 
+# HTTP 492 hotfix (2026-10-30). HAL planned a bare GeBuy from a 6,516 pocket
+# against a 6,550 order: `can_spend` asks the ACCOUNT, the server takes the
+# pocket. Each branch below is one half of the fix; the kill-test is
+# tests/test_ai/test_pocket_gold_buys.py.
+POCKET_GOLD_FILL_MUTATIONS = [
+    ("ge_fill_sell: the fill no longer asks the pocket (the 492 bug itself)",
+     "        if state.gold < cost:\n            return False\n",
+     "        if False:\n            return False\n"),
+]
+
+POCKET_GOLD_POST_BUY_MUTATIONS = [
+    ("ge_post_buy: the bid no longer asks the pocket",
+     "        return state.gold >= cost and can_spend(state, game_data, self.item_code, cost)\n",
+     "        return can_spend(state, game_data, self.item_code, cost)\n"),
+    ("ge_post_buy: apply no longer asserts the pocket",
+     "        if state.gold < cost or not can_spend(state, game_data, self.item_code, cost):\n",
+     "        if not can_spend(state, game_data, self.item_code, cost):\n"),
+]
+
+POCKET_GOLD_FERRY_MUTATIONS = [
+    ("gold_ferry: a covered pocket still ferries",
+     "    if deficit <= 0 or state.bank_gold is None or state.bank_gold <= 0:\n",
+     "    if state.bank_gold is None or state.bank_gold <= 0:\n"),
+    ("gold_ferry: an empty bank still ferries",
+     "    if deficit <= 0 or state.bank_gold is None or state.bank_gold <= 0:\n",
+     "    if deficit <= 0 or state.bank_gold is None:\n"),
+    ("gold_ferry: the ferry is not capped at the bank",
+     "    return dataclasses.replace(template, quantity=min(deficit, state.bank_gold))\n",
+     "    return dataclasses.replace(template, quantity=deficit)\n"),
+]
+
+POCKET_GOLD_UPGRADE_MUTATIONS = [
+    ("progression: the upgrade's GE fill admits no ferry",
+     "                ferry = gold_ferry(actions, state, ge_price - state.gold)\n",
+     "                ferry = None\n"),
+    ("progression: the upgrade's ferry is the whole price, not the shortfall",
+     "                ferry = gold_ferry(actions, state, ge_price - state.gold)\n",
+     "                ferry = gold_ferry(actions, state, ge_price)\n"),
+]
+
+POCKET_GOLD_BID_MUTATIONS = [
+    ("post_buy_bid: the bids admit no ferry",
+     "        return [*bids] if ferry is None else [*bids, ferry]\n",
+     "        return [*bids]\n"),
+    ("post_buy_bid: the ferry ignores the pocket",
+     "        ferry = gold_ferry(actions, state, escrow - state.gold)\n",
+     "        ferry = gold_ferry(actions, state, escrow)\n"),
+]
+
+POCKET_GOLD_ROUTE_MUTATIONS = [
+    ("obtain_model: banked gold is no WITHDRAW route",
+     "        if item == GOLD_CODE:\n            stock = self._bank_gold()\n",
+     "        if False:\n            stock = self._bank_gold()\n"),
+    ("obtain_model: one gold withdraw moves one gold piece",
+     "            per = stock\n",
+     "            per = 1\n"),
+    ("obtain_model: an unread bank reads as empty-but-known (crash on None)",
+     "        if banked is None:\n            return 0\n",
+     "        if False:\n            return 0\n"),
+    ("obtain_model: the bank's gold ignores the walk's named buys",
+     "        floor = reserve_floor_multi(self._account, self._gd, self._spend or frozenset())\n",
+     "        floor = reserve_floor_multi(self._account, self._gd, frozenset())\n"),
+    ("obtain_model: the bank's gold counts the walk's pocket twice",
+     "        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))\n",
+     "        return max(0, min(banked, account_gold(self._account) - floor))\n"),
+    ("obtain_model: the bank's gold ignores the reserve floor",
+     "        return max(0, min(banked, account_gold(self._account) - floor - self._state.gold))\n",
+     "        return max(0, min(banked, account_gold(self._account) - self._state.gold))\n"),
+]
+
+POCKET_GOLD_PRICE_MUTATIONS = [
+    ("acquisition_cost: a gold withdraw rounds each gold piece up to an action",
+     "                               actions_per_application=_kind_actions(LogType.WITHDRAW_GOLD, ctx),\n",
+     "                               actions_per_application=ceil(_kind_actions(LogType.WITHDRAW_GOLD, ctx)),\n"),
+    # S-046: spent gold costs the time to earn it again.
+    ("acquisition_cost: banked gold is free to spend (S-046)",
+     "    banked = [replace(route, spent=charge) if route.kind == SourceKind.WITHDRAW.value else route\n",
+     "    banked = [route if route.kind == SourceKind.WITHDRAW.value else route\n"),
+    ("acquisition_cost: a closure without gold still reads the gold rate",
+     "    if gold_routes is None:\n        return options, {}\n",
+     "    if False:\n        return options, {}\n"),
+    ("acquisition_cost: held gold is free to spend (S-046)",
+     "    return {**options, GOLD_CODE: banked}, {GOLD_CODE: charge}\n",
+     "    return {**options, GOLD_CODE: banked}, {}\n"),
+    ("acquisition_cost: a gold fight the closure offers is not a way to earn gold",
+     "    charge = min([*fights, gold_spend_actions(state, game_data, ctx)])\n",
+     "    charge = gold_spend_actions(state, game_data, ctx)\n"),
+    ("acquisition_cost: the grind target's rate is not a way to earn gold",
+     "    charge = min([*fights, gold_spend_actions(state, game_data, ctx)])\n",
+     "    charge = min([*fights, Fraction(UNOBTAINABLE_PER_UNIT)])\n"),
+]
+
+POCKET_GOLD_CORE_MUTATIONS = [
+    ("acquisition_cost_core: the choice spends held gold for nothing",
+     "        per_unit += charge.get(material, 0) * (per_application - short)\n",
+     "        per_unit += 0 * (per_application - short)\n"),
+    ("acquisition_cost_core: the price spends held gold for nothing",
+     "    actions[0] += ceil(used * charge.get(item, 0))\n",
+     "    actions[0] += 0\n"),
+    ("acquisition_cost_core: the choice ignores what a route's unit spends",
+     "    return per_unit + route.spent\n",
+     "    return per_unit\n"),
+]
+
+POCKET_GOLD_RATE_MUTATIONS = [
+    ("gold_rate: no grind target prices gold at a division by zero",
+     "    if rate <= 0:\n        return Fraction(UNOBTAINABLE_PER_UNIT)\n",
+     "    if rate < 0:\n        return Fraction(UNOBTAINABLE_PER_UNIT)\n"),
+    ("gold_rate: a gold piece costs a second, not an action",
+     "    return 1 / (rate * ctx.action_seconds_of())\n",
+     "    return 1 / rate\n"),
+]
+
+# Review I-2: bank GOLD is claimed across the fleet like bank items. Killed by
+# tests/test_ai/test_player_coordination.py.
+POCKET_GOLD_CLAIM_MUTATIONS = [
+    ("player: a gold withdraw publishes no claim",
+     "            if isinstance(action, WithdrawItemAction | WithdrawGoldAction):\n"
+     "                self._claim_bank_stock(action)\n",
+     "            if isinstance(action, WithdrawItemAction):\n"
+     "                self._claim_bank_stock(action)\n"),
+    ("player: a failed gold withdraw keeps its claim",
+     "                action, WithdrawItemAction | WithdrawGoldAction):\n"
+     "            self._coordination.release_bank_stock()\n",
+     "                action, WithdrawItemAction):\n"
+     "            self._coordination.release_bank_stock()\n"),
+    ("player: a sibling's gold claim is not netted from the plan's bank",
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold)\n"),
+    ("player: a claim past the bank leaves negative gold",
+     "                     else max(0, state.bank_gold - gold))\n",
+     "                     else state.bank_gold - gold)\n"),
+    # The ticket farm (live 2026-10-31): a sibling's ITEM claim is netted too.
+    ("player: a sibling's item claim is not netted from the plan's bank",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held) > 0})\n"),
+    ("player: a code claimed whole stays in the bank at nothing",
+     "                  if (left := held - max(0, claims.get(code, 0))) > 0})\n",
+     "                  if (left := held - max(0, claims.get(code, 0))) >= 0})\n"),
+    ("player: an unread bank's items are invented",
+     "        items = (None if state.bank_items is None else\n",
+     "        items = ({} if state.bank_items is None else\n"),
+    ("player: the decision plans against the bank as read",
+     "            decision = self._strategy.decide(\n"
+     "                planned, game_data,\n"
+     "                step_decline=step_decline,\n",
+     "            decision = self._strategy.decide(\n"
+     "                state, game_data,\n"
+     "                step_decline=step_decline,\n"),
+]
+
+# Round 3 of the 492 hotfix: an UpgradeEquipment goal admits a GE fill only
+# when the item's PRICE took it (S-046). Killed by
+# tests/test_ai/test_pocket_gold_buys.py unless noted.
+UPGRADE_FILL_GOAL_MUTATIONS = [
+    ("progression: the goal admits any standing order, priced or not",
+     "            if self._ge_fill and ge_location is not None and ge_order is not None \\\n",
+     "            if ge_location is not None and ge_order is not None \\\n"),
+    ("progression: a resumed goal forgets its priced fill",
+     "                \"ge_fill\": self._ge_fill}\n",
+     "                \"ge_fill\": False}\n"),
+]
+UPGRADE_FILL_ROUTING_MUTATIONS = [
+    ("obtain_item_routing: a piece is bought whatever route priced it",
+     "        return piece.route is SourceKind.GE_FILL and piece.price < UNOBTAINABLE_PER_UNIT\n",
+     "        return piece.price < UNOBTAINABLE_PER_UNIT\n"),
+    ("obtain_item_routing: a piece at the no-route sentinel is bought",
+     "        return piece.route is SourceKind.GE_FILL and piece.price < UNOBTAINABLE_PER_UNIT\n",
+     "        return piece.route is SourceKind.GE_FILL\n"),
+    ("obtain_item_routing: a vanished order is still bought",
+     "    if game_data.ge_best_sell_order(code) is None:\n        return False\n"
+     "    objective = ctx.gear_objective\n",
+     "    if False:\n        return False\n"
+     "    objective = ctx.gear_objective\n"),
+    ("obtain_item_routing: a non-piece target is bought whatever its price took",
+     "    return route is SourceKind.GE_FILL and price < UNOBTAINABLE_PER_UNIT\n",
+     "    return price >= 0\n"),
+    ("obtain_item_routing: the equippable step's upgrade buys unpriced",
+     "                                   ge_fill=ge_fill_priced(code, state, game_data, ctx))\n",
+     "                                   ge_fill=True)\n"),
+]
+UPGRADE_FILL_DECISION_MUTATIONS = [
+    ("decisions/obtain_item: the craft-chain root's upgrade buys unpriced",
+     "                                       ge_fill=ge_fill_priced(self.root.code, state,\n"
+     "                                                              game_data, ctx))\n",
+     "                                       ge_fill=True)\n"),
+]
+UPGRADE_FILL_SERIALIZATION_MUTATIONS = [
+    ("goal_serialization: a resumed upgrade always buys",
+     "            committed, ge_fill=data.get(\"ge_fill\") is True)\n",
+     "            committed, ge_fill=True)\n"),
+]
+# Killed by tests/test_ai/test_craft_plan_gen.py.
+UPGRADE_FILL_WALK_MUTATIONS = [
+    ("craft_plan_gen: any standing order hands the upgrade to the search",
+     "    if goal.ge_fill:\n        # The book sells it and the price took the fill",
+     "    if game_data.ge_best_sell_order(item) is not None:\n"
+     "        # The book sells it and the price took the fill"),
+]
+
+POCKET_GOLD_OBJECTIVE_MUTATIONS = [
+    ("gear_objective: a candidate's pieces are priced with no m* on the context",
+     "    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))\n",
+     "    return ctx\n"),
+]
+
+POCKET_GOLD_WALK_MUTATIONS = [
+    ("craft_plan_gen: the walk's gold withdraw becomes an item withdraw of 'gold'",
+     "    if route.kind is SourceKind.WITHDRAW and step.item == GOLD_CODE:\n",
+     "    if False:\n"),
+]
+
+
 def _collect_all_groups() -> None:
     """Register every mutation group into _UNITS. Collection only — execution is
     _execute's job, so the anchor check can reuse this without running pytest.
@@ -13825,6 +14416,8 @@ def _collect_all_groups() -> None:
     run_group(PLAYER_SRC, PLAYER_TIMING_MUTATIONS,
               "tests/test_ai/test_player_timing.py", survivors)
     run_group(CONSUMABLE_PRICE_SRC, CONSUMABLE_PRICE_READER_MUTATIONS,
+              "tests/test_ai/test_consumable_price.py", survivors)
+    run_group(GOLD_RATE_SRC, GOLD_RATE_READER_MUTATIONS,
               "tests/test_ai/test_consumable_price.py", survivors)
     run_group(SKILL_CREDIT_SRC, SKILL_CREDIT_MUTATIONS,
               "tests/test_ai/test_skill_credit.py", survivors)
@@ -14430,6 +15023,44 @@ def _collect_all_groups() -> None:
               "tests/test_audit/test_grind_cycle_census.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_ADAPTER_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(ACQUISITION_COST_SRC, FLEET_FARM_PRICE_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(ACQUISITION_COST_SRC, RESTED_DEFICIT_MUTATIONS,
+              "tests/test_ai/test_key_door_route.py", survivors)
+    run_group(PLAYER_SRC, FLEET_FARM_TRACE_MUTATIONS,
+              "tests/test_ai/test_trace_coordination_fields.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, FARMED_FOR_ROUTING_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(GATHERING_GOAL_SRC, FARMED_FOR_GOAL_MUTATIONS,
+              "tests/test_ai/test_dual_role_currency.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, FLEET_FARM_RESERVE_MUTATIONS,
+              "tests/test_ai/test_turn_in_no_livelock.py", survivors)
+    run_group(FLEET_WORK_SRC, FLEET_FARM_TURNIN_MUTATIONS,
+              "tests/test_ai/test_player_turn_in.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, PRICED_ROUTE_WALK_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, PRICED_ROUTE_FIGHT_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_SRC, SECONDS_INSIDE_PRICE_MUTATIONS,
+              "tests/test_ai/test_acquisition_cost_wrapper.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, SECONDS_INSIDE_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(FIGHT_SECONDS_MODEL_SRC, STORE_KIND_SECONDS_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(LEARNING_STORE_SRC, STORE_COOLDOWNS_QUERY_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(SELECTION_CONTEXT_SRC, UNTIMED_KIND_MUTATIONS,
+              "tests/test_ai/test_fight_seconds_model.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, WINNABLE_MEMO_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(OBTAIN_MODEL_DROP_SRC, WINNABLE_MEMO_ROUTES_MUTATIONS,
+              "tests/test_ai/test_obtain_model_fighter.py", survivors)
+    run_group(ACQUISITION_COST_SRC, PRICED_ROUTE_KEY_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, PRICED_ROUTE_CORE_MUTATIONS,
+              "tests/test_ai/test_priced_route_served.py", survivors)
     run_group(OBTAIN_MODEL_SRC, WALK_GATHER_RANK_MUTATIONS,
               "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(POTION_SUPPLY_SRC, POTION_BATCH_MUTATIONS,
@@ -14792,6 +15423,14 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_equip_loop_closure.py", survivors)
     run_group(PLAYER_SRC, INTENTION_BUDGET_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(PLAYER_SRC, DRY_STREAK_PLAYER_MUTATIONS,
+              "tests/test_ai/test_player_run.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, STEP_DELIVERED_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
+    run_group(INTENTION_PROGRESS_SRC, DRY_STREAK_KEY_MUTATIONS,
+              "tests/test_ai/test_intention_progress.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, INTENTION_YIELD_MUTATIONS,
               "tests/test_ai/test_intention_budget.py", survivors)
     run_group(INTENTION_PROGRESS_SRC, TURN_ROTATION_DIFF_MUTATIONS,
@@ -15076,6 +15715,40 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_tiers_means.py", survivors)
     run_group(TASK_CANCEL_GOAL_SRC, TASK_CANCEL_GOAL_COIN_MUTATIONS,
               "tests/test_ai/test_goals.py", survivors)
+    run_group(GE_FILL_SELL_SRC, POCKET_GOLD_FILL_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GE_POST_BUY_SRC, POCKET_GOLD_POST_BUY_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(WITHDRAW_GOLD_SRC, POCKET_GOLD_FERRY_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, POCKET_GOLD_UPGRADE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(POST_BUY_BID_GOAL_SRC, POCKET_GOLD_BID_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_MODEL_SRC, POCKET_GOLD_ROUTE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(ACQUISITION_COST_SRC, POCKET_GOLD_PRICE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(ACQUISITION_COST_CORE_SRC, POCKET_GOLD_CORE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GOLD_RATE_SRC, POCKET_GOLD_RATE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GEAR_OBJECTIVE_SRC, POCKET_GOLD_OBJECTIVE_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(PLAYER_SRC, POCKET_GOLD_CLAIM_MUTATIONS,
+              "tests/test_ai/test_player_coordination.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, UPGRADE_FILL_GOAL_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_ITEM_ROUTING_SRC, UPGRADE_FILL_ROUTING_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(OBTAIN_ITEM_DECISION_SRC, UPGRADE_FILL_DECISION_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(GOAL_SERIALIZATION_SRC, UPGRADE_FILL_SERIALIZATION_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_FILL_WALK_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, POCKET_GOLD_WALK_MUTATIONS,
+              "tests/test_ai/test_pocket_gold_buys.py", survivors)
 def _run_all_groups() -> int:
     survivors: list[str] = []
     _UNITS.clear()

@@ -2,7 +2,7 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import _RUNE_ABILITY_CARVEOUTS, GameData
+from artifactsmmo_cli.ai.game_data import _CRAFTING_TIME_EFFECTS, _RUNE_ABILITY_CARVEOUTS, GameData
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 
 
@@ -74,3 +74,36 @@ def test_unknown_effect_on_CONSUMABLE_now_raises():
     with pytest.raises(GameDataCoverageError) as exc:
         gd._build_items([_item("weird_potion", "consumable", ["totally_new_code"])])
     assert "weird_potion" in str(exc.value) and "totally_new_code" in str(exc.value)
+
+
+@pytest.mark.parametrize("skill", ["alchemy", "fishing", "mining", "woodcutting"])
+def test_season9_gathering_effect_keys_the_tool_bonus_by_its_skill(skill):
+    # Season 9 renamed `woodcutting` -> `woodcutting_gathering`; the tool bonus
+    # stays keyed by the gathering skill, which scoring and kit selection read.
+    gd = GameData()
+    gd._build_items([_item("tool", "weapon", [f"{skill}_gathering"])])
+    assert gd.item_stats("tool").skill_effects == {skill: 1}
+
+
+def test_season8_bare_gathering_effect_still_keys_by_its_skill():
+    gd = GameData()
+    gd._build_items([_item("copper_axe", "weapon", ["woodcutting"])])
+    assert gd.item_stats("copper_axe").skill_effects == {"woodcutting": 1}
+
+
+def test_crafting_time_effects_are_one_per_craft_skill():
+    assert {
+        "alchemy_crafting", "cooking_crafting", "gearcrafting_crafting",
+        "jewelrycrafting_crafting", "mining_crafting", "weaponcrafting_crafting",
+        "woodcutting_crafting"} == _CRAFTING_TIME_EFFECTS
+
+
+def test_crafting_time_effect_is_carved_and_uncredited():
+    # Season 9's crafting-time reduction is not modeled yet: it must not raise,
+    # and it must not leak into the gathering-tool bonus.
+    gd = GameData()
+    gd._build_items([_item("iron_knife", "weapon", ["cooking_crafting", "attack_fire"]),
+                     _item("apprentice_gloves", "weapon",
+                           ["alchemy_gathering", "alchemy_crafting"])])
+    assert gd.item_stats("iron_knife").skill_effects == {}
+    assert gd.item_stats("apprentice_gloves").skill_effects == {"alchemy": 1}

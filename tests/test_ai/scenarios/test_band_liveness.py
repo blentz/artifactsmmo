@@ -171,11 +171,15 @@ def test_l48_band_adequate_is_the_honest_wall() -> None:
     objective = CharacterObjective.from_game_data(gd)
     decision = decide_tree(state, gd, objective,
                            ctx=attached(state, gd, TIMED_NO_PROFILE_CONTEXT, None))
-    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
-    assert decision.chosen_root == shield
-    assert decision.chosen_step == shield
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
+    assert decision.chosen_root == rune
+    assert decision.chosen_step == rune
     assert decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=36)]
 
 
@@ -204,11 +208,11 @@ def test_l48_band_adequate_plans_the_first_missing_piece() -> None:
     assert player._last_ctx.gear_objective.monster == "hellhound"
     assert not player._last_ctx.gear_objective.held
     assert player._last_ctx.combat_monster is None
-    # Pin the EXACT outcome, not just any non-empty plan.
-    shield = ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)"
-    assert [repr(a) for a in report.plan] == [
-        "Transition((5,-3,overworld)->(5,-3,underground))", "Fight(goblin_guard)",
-        "Equip(goblin_guard_shield->shield_slot)"]
-    assert report.decision.chosen_root == shield
-    assert report.decision.chosen_step == shield
+    # Pin the EXACT outcome, not just any non-empty plan. RE-DERIVED ruling
+    # "seconds inside" (2026-10-31): the rune heads the pieces (its gold at
+    # the fastest gold fight's seconds), and its plan is one fight for gold.
+    rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})"
+    assert [repr(a) for a in report.plan] == ["Fight(highwayman)"]
+    assert report.decision.chosen_root == rune
+    assert report.decision.chosen_step == rune

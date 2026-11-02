@@ -765,7 +765,7 @@ def test_a_bag_cap_below_its_worn_bag_raises(gd: GameData) -> None:
         gear_objective(state, gd, CTX, None)
 
 
-_L48_MISSING = [("shield_slot", "goblin_guard_shield"), ("rune_slot", "lifesteal_rune"),
+_L48_MISSING = [("rune_slot", "lifesteal_rune"), ("shield_slot", "goblin_guard_shield"),
                 ("ring2_slot", "mithril_ring")]
 
 
@@ -829,7 +829,15 @@ def test_a_sheet_with_its_gear_s_totals_has_an_objective(gd: GameData, name: str
     (0.070 -> 0.144 per 500) leads and the shield (0.145 -> 0.030 per 323)
     falls to fourth. The level-10 sheet's `iron_shield` joins layer 0 (was 1):
     its `wool` drops off `sheep` (initiative 50), which the held copper fighter
-    beat at 0.58 from initiative 0 and beats at 0.92 from 100."""
+    beat at 0.58 from initiative 0 and beats at 0.92 from 100.
+
+    RE-DERIVED ruling "seconds inside" (2026-10-31): every route is priced at
+    its actions' measured seconds. On origin/main the level-40 pants (gain
+    0.218 for 357) moved ahead of the shield (0.145 for 264); merged with plan
+    C Task 7 the level-40 order stays Task 7's above. At level 48 the rune's
+    20000 gold, earned at the fastest gold fight's seconds, prices it at 1224
+    (gain 0.056) against the shield's 2473 drop farm (gain 0.058), so the
+    rune heads the pieces."""
     objective = _objective(scenario_state(SCENARIOS[name], gd), gd)
     assert objective.monster == monster
     assert [(piece.slot, piece.code) for piece in objective.missing] == missing

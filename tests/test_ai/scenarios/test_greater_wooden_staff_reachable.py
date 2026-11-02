@@ -55,6 +55,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.learning.fight_seconds_model import offline_context
 from artifactsmmo_cli.ai.progression.guards import SelectionContext
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -125,9 +126,10 @@ def _build_actions(state: WorldState, gd: GameData) -> list[Action]:
                          now=cycle_now())
 
 
-_CTX = SelectionContext(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                        initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
-                            learned_drops=LearnedDrops.empty())
+_CTX = offline_context(SelectionContext(
+    bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+    initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
+    learned_drops=LearnedDrops.empty()))
 
 
 def _decomposed(state: WorldState) -> list[Action]:

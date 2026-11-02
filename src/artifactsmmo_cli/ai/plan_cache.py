@@ -77,14 +77,14 @@ class PlanCache:
         """Snapshot the current step's completion target. Call on every advance
         and on every plan install (fresh decide or resumed commitment).
         `holdings` is `cache_holdings(state)`: the bag, and the pocket's gold."""
-        output = _output(self.current(), game_data)
+        output = step_output(self.current(), game_data)
         self.step_target = None if output is None else holdings.get(output[0], 0) + output[1]
 
     def batch_satisfied(self, holdings: Mapping[str, int], game_data: GameData) -> bool:
         """True when the armed step's target holding has been reached. Always
         True for a step with no target (step_target is None), so such an
         advance behaves exactly as it did before batching existed."""
-        output = _output(self.current(), game_data)
+        output = step_output(self.current(), game_data)
         if self.step_target is None or output is None:
             return True
         return holdings.get(output[0], 0) >= self.step_target
@@ -96,7 +96,7 @@ def cache_holdings(state: WorldState) -> dict[str, int]:
     return {**state.inventory, GOLD_CODE: state.gold}
 
 
-def _output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
+def step_output(action: Action | None, game_data: GameData) -> tuple[str, int] | None:
     """The (item, units) a step must add before the cursor moves on: a gather's
     drop, or a planned fight's drop; None for any other step. A single gather
     is armed too: a secondary drop (algae from a gudgeon spot) can come up

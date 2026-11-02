@@ -335,19 +335,21 @@ def test_l48_event_active_pursues_event_gear() -> None:
     assert objective is not None
     assert objective.loadout["artifact1_slot"] == "corrupted_skull"
     assert objective.loadout["helmet_slot"] == "corrupted_crown"
-    assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
     # RE-DERIVED plan B Task 2 (`PIECE_POLICY`, ruling T2a): the 20000-gold
     # rune is priced through gold earned by fighting, so it orders between the
     # event's two pieces. RE-DERIVED plan B Task 3 (ruling T2m M1): its gold
     # is farmed at the monster whose exact win cost per gold is least, and its
     # wins are rounded up once, so it prices at 4142 and heads the
-    # event's two pieces (7054, 20684).
+    # event's two pieces (7054, 20684). RE-DERIVED ruling "seconds inside"
+    # (2026-10-31): priced at its actions' measured seconds the rune is 1224,
+    # ahead of the shield's 2473-action drop farm too, so it is the root.
+    assert report.decision.chosen_root == ObtainItem(
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert report.decision.fallback_roots == [
-        ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
+        ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot"),
         ObtainItem(code="corrupted_skull", quantity=1, slot="artifact1_slot"),
         ObtainItem(code="corrupted_crown", quantity=1, slot="helmet_slot")]
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
 
 
@@ -390,10 +392,14 @@ def test_l48_no_event_witness_pursues_no_event_gear() -> None:
     the same first piece as the event pole (`goblin_guard_shield`) heads the
     walk, and no `corrupted_*` row is offered at all."""
     report = _run("l48_band_adequate")
-    assert repr(report.selected_goal) == "UpgradeEquipment(goblin_guard_shield->shield_slot)", (
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at its actions'
+    # measured seconds, the rune's 20000 gold (the fastest gold fight's)
+    # costs 1224 against the shield's 2473-action drop farm at a like gain,
+    # so the rune heads the pieces and its plan is one fight for its gold.
+    assert repr(report.selected_goal) == "GatherMaterials(lifesteal_rune, {lifesteal_rune:1})", (
         repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ObtainItem(
-        code="goblin_guard_shield", quantity=1, slot="shield_slot")
+        code="lifesteal_rune", quantity=1, slot="rune_slot")
     assert not [r.root_repr for r in report.decision.ranking if "corrupted" in r.root_repr]
 
 
@@ -827,17 +833,23 @@ def test_l35_artifact_fill_pearl_route_is_on_the_sheet_and_plans() -> None:
     # unit of price (0.3015 / 2316) fell below the `steel_boots`' (0.0402 /
     # 297), which head the objective now; the sword is the first alternative.
     # The cycle plans the boots' first gather.
+    #
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): priced at their actions'
+    # measured seconds (a craft 13 s, a withdraw 3 s, against one 36-second
+    # planner action each before), the crafted hat (gain 0.024 for 125) and
+    # boots (0.040 for 272) order ahead of the death_knight sword's drop farm
+    # (0.324 for 2267); the hat's plan starts at its cowhide.
     report = _run("l35_artifact_fill")
     pearl = ObtainItem(code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert report.decision.chosen_root == ObtainItem(
-        code="steel_boots", quantity=1, slot="boots_slot")
+        code="mushmush_wizard_hat", quantity=1, slot="helmet_slot")
     assert report.decision.fallback_roots == [
+        ObtainItem(code="steel_boots", quantity=1, slot="boots_slot"),
         ObtainItem(code="death_knight_sword", quantity=1, slot="weapon_slot"),
-        ObtainItem(code="mushmush_wizard_hat", quantity=1, slot="helmet_slot"),
         ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot"),
         ReachSkillLevel(skill="jewelrycrafting", level=21),
         ObtainItem(code="goblin_guard_shield", quantity=1, slot="shield_slot")]
-    assert [repr(a) for a in report.plan] == ["Gather(ash_tree×4)"]
+    assert [repr(a) for a in report.plan] == ["Fight(cow)"]
     goal, plan, _declined = _plan_root("l35_artifact_fill", pearl)
     assert goal.startswith("GatherMaterials(small_pearls"), goal
     assert len(plan) == 1 and plan[0].startswith("Gather(bass_spot->small_pearls"), plan
@@ -924,13 +936,18 @@ def test_l30_rune_gold_buy_chain_plans() -> None:
     RE-DERIVED spec 2026-10-18 §2.8: each gain is now `R` over the owned item
     for the slot. The rune (gain 0.041 at a price of 3) out-gains the sword
     (0.838 at 2059) per unit of price, so it heads the walk and the cycle
-    plans its buy."""
+    plans its buy.
+
+    RE-DERIVED S-046 (USER 2026-10-30): spent gold costs the time to earn it
+    again, so the rune's price is no longer 3 but 3 plus its 20,000 gold in
+    `m*`'s fight time. Per unit of price the sword out-gains it and heads the
+    walk; the rune stays an alternative, and on its turn its route is still the
+    one-step gold buy."""
     report = _run("l30_rune_fill")
     rune = ObtainItem(code="lifesteal_rune", quantity=1, slot="rune_slot")
-    assert report.decision.chosen_root == rune
-    assert report.decision.fallback_roots[0] == ObtainItem(
+    assert report.decision.chosen_root == ObtainItem(
         code="death_knight_sword", quantity=1, slot="weapon_slot")
-    assert [repr(a) for a in report.plan] == ["NpcBuy(lifesteal_rune×1@rune_vendor)"]
+    assert rune in report.decision.fallback_roots
     goal, plan, _declined = _plan_root("l30_rune_fill", rune)
     assert goal.startswith("GatherMaterials(lifesteal_rune"), goal
     assert any(a.startswith("NpcBuy(lifesteal_rune") for a in plan), plan

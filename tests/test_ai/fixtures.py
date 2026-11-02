@@ -16,8 +16,8 @@ from artifactsmmo_api_client.models.status_schema import StatusSchema
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_objective_result import GearObjective, GearPiece
 from artifactsmmo_cli.ai.item_catalog import ItemStats
-from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
+    ACTION_LOGS,
     FIGHT_LOGS,
     FleetBootstrap,
     log_fights,
@@ -33,9 +33,12 @@ _ROBBY = json.loads(FIGHT_LOGS.read_text())["characters"]["Robby"]
 BOOTSTRAP = FleetBootstrap(
     fights=tuple(log_fights(_ROBBY["haste"], [(kind, cooldown, turns) for kind, cooldown, turns
                                               in _ROBBY["entries"][:100]])),
-    cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]))
-"""Robby's newest 100 `/my/logs` entries in the committed live capture, at his
-captured haste: the account-log bootstrap a player driven through
+    cooldowns=tuple(cooldown for _, cooldown, _ in _ROBBY["entries"][:100]),
+    kinds=tuple((kind, cooldown, item, quantity) for kind, cooldown, item, quantity
+                in json.loads(ACTION_LOGS.read_text())["entries"]))
+"""Robby's newest 100 `/my/logs` fights in the committed live capture, at his
+captured haste, and the account's action-log capture's entries for the
+per-kind seconds: the account-log bootstrap a player driven through
 `_initialize` against a mocked client is handed (ruling ZD)."""
 
 def patched_logs() -> Any:
@@ -45,10 +48,12 @@ def patched_logs() -> Any:
                  return_value=BOOTSTRAP)
 
 
-NO_DROPS_CONTEXT = replace(NO_PROFILE_CONTEXT, learned_drops=LearnedDrops.empty())
+NO_DROPS_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
 """`NO_PROFILE_CONTEXT` with nothing observed passed explicitly: every drop at
 its API prior (ruling T16b). `NO_PROFILE_CONTEXT` itself carries no evidence
-and refuses to price a drop."""
+and refuses to price a drop. It carries the committed capture's seconds too
+(`offline_context`): every route is priced in measured seconds (ruling
+"seconds inside", 2026-10-31), so a price with none to read refuses."""
 
 TIMED_NO_PROFILE_CONTEXT = offline_context(NO_PROFILE_CONTEXT)
 """`NO_PROFILE_CONTEXT` carrying the committed live capture's fight and action

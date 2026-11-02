@@ -166,7 +166,8 @@ _CacheKey = tuple[str, int, tuple[tuple[str, str | None], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int], ...],
                   tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...],
                   tuple[tuple[str, Fraction], ...], tuple[int, int], LearnedDrops,
-                  tuple[FightSecondsModel | None, Fraction | None],
+                  tuple[FightSecondsModel | None, Fraction | None,
+                        tuple[tuple[str, Fraction], ...] | None],
                   tuple[object, ...], frozenset[str]]
 
 CACHE_MAX_ENTRIES = 4096
@@ -191,7 +192,8 @@ def _open_event_vendors(state: WorldState, game_data: GameData, now: datetime) -
 def _cache_key(skill: str, state: WorldState, game_data: GameData,
                fight_records: tuple[tuple[str, int, int], ...],
                learned_drops: LearnedDrops, now: datetime,
-               seconds: tuple[FightSecondsModel | None, Fraction | None]) -> "_CacheKey":
+               seconds: tuple[FightSecondsModel | None, Fraction | None,
+                              tuple[tuple[str, Fraction], ...] | None]) -> "_CacheKey":
     """The determinants of a candidate list, and nothing else.
 
     `level` and `equipment` drive `is_winnable` (hence obtainability and the DROP
@@ -227,10 +229,12 @@ def _cache_key(skill: str, state: WorldState, game_data: GameData,
     and dropped materials at the learned chance, so a new observation reprices
     them; the value itself is the key (it is hashable), never its `id()`.
 
-    `seconds` is `(ctx.fight_seconds, ctx.action_seconds)`, the two timing
-    inputs `_pricing_context` hands every rung's price: a fight's seconds and
-    an action's seconds turn a fight leg and its forced Rest into actions
-    (`cycles_per_kill`). They change without any new fight resolving (a refit,
+    `seconds` is `(ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds)`,
+    the three timing inputs `_pricing_context` hands every rung's price: a
+    fight's seconds and an action's seconds turn a fight leg and its forced
+    Rest into actions (`cycles_per_kill`), and the measured seconds of each
+    priced kind time every route before it is converted to actions once
+    (`acquisition_cost._in_actions`). They change without any new fight resolving (a refit,
     a learned action time), so `fight_records` does not stand in for them
     (Task 8 review M3: a context with no timing was served the timed list).
 
@@ -354,7 +358,7 @@ def build_selectable_grind_candidates(skill: str, state: WorldState,
     added cost is one closure walk per rung rather than one per material."""
     cache = _CACHES.cache_for(game_data)
     key = _cache_key(skill, state, game_data, ctx.fight_records, ctx.drops(), ctx.now,
-                     (ctx.fight_seconds, ctx.action_seconds))
+                     (ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds))
     hit = cache.get(key)
     if hit is not None:
         cache.move_to_end(key)
@@ -459,11 +463,11 @@ def has_grind_target(skill: str, state: WorldState,
 
 def _pricing_context(ctx: SelectionContext) -> SelectionContext:
     """The context a rung is priced under: context-free but for the clock and
-    the learned fight records, fight and action seconds and drops (USER
+    the learned fight records, fight, action and per-kind seconds and drops (USER
     2026-10-08, "Price the loss risk")."""
     return replace(NO_PROFILE_CONTEXT, now=ctx.now, fight_records=ctx.fight_records,
                    fight_seconds=ctx.fight_seconds, action_seconds=ctx.action_seconds,
-                   learned_drops=ctx.drops())
+                   kind_seconds=ctx.kind_seconds, learned_drops=ctx.drops())
 
 
 def objective_gain(code: str, ctx: SelectionContext) -> Fraction:
@@ -510,8 +514,9 @@ def semantic_order(skill: str, current_level: int, candidates: list[GrindCandida
     first of two equal rungs in candidate order wins, and candidate order was
     `game_data.all_item_stats`' — the API catalogue's. Live witness (plan C
     Task 7 review M1): at gearcrafting 5 `copper_legs_armor` and
-    `feather_coat` both price 82 actions on the l10 scenarios, and the pinned
-    plan was "the legs, listed first". A catalogue order is no reason, the
+    `feather_coat` both price 82 actions on the l10 scenarios (73 on the
+    combat-blocked one since every route is priced in measured seconds), and
+    the pinned plan was "the legs, listed first". A catalogue order is no reason, the
     same defect as an alphabetical tiebreak. Sorting here, in the wrapper,
     leaves the Lean-extracted `_beats` and its proofs untouched; it is
     `_beats` itself, the core's own comparator, that finds the tie.

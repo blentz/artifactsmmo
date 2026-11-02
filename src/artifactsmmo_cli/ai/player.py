@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.actions.ge_post_buy import GePostBuyOrderAction
 from artifactsmmo_cli.ai.actions.ge_post_sell import GePostSellOrderAction
 from artifactsmmo_cli.ai.actions.hold_for_party import HoldForPartyAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bag_clear import (
     BAG_FULL_OUTCOME,
@@ -95,7 +96,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 )
 from artifactsmmo_cli.ai.decision_event_log import DecisionEventLog
 from artifactsmmo_cli.ai.decision_mechanism import Mechanism
-from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings
+from artifactsmmo_cli.ai.dual_role_currency import dual_role_holdings, is_dual_role
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.failure_recovery_core import (
     STATE,
@@ -124,12 +125,15 @@ from artifactsmmo_cli.ai.global_reads_cache import GlobalReadsCache
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import closure_gold_demand
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.held_task_pays import held_task_pays
 from artifactsmmo_cli.ai.intention_progress import (
     BUDGET_CYCLES,
     EXIT_CYCLES,
     STALL_CYCLES,
+    DropKey,
+    leg_progressed,
     progress_measure,
     progressed,
     record_turn,
@@ -140,8 +144,10 @@ from artifactsmmo_cli.ai.learning.coordination_store import CoordinationStore
 from artifactsmmo_cli.ai.learning.drop_observations import learned_drops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import (
     FleetBootstrap,
+    committed_kind_seconds,
     committed_timing,
     fetch_fleet_bootstrap,
+    learned_kind_seconds,
     timing_of,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -220,7 +226,7 @@ from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.task_worth import pool_draw
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.win_threshold_core import THRESHOLD_WINDOW_DAYS, win_thresholds_from_rows
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import GOLD_CODE, TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.rate_limited_error import RateLimitedError
@@ -473,6 +479,9 @@ class GamePlayer:
         # and the offline worlds' fit from the committed live capture, set by
         # `seed_offline`, which replaces the live fit entirely.
         self._bootstrap: FleetBootstrap | None = fight_bootstrap
+        # Per planned drop `(source, item)`, the consecutive successful legs
+        # whose drop did not land (`intention_progress.leg_progressed`).
+        self._dry_streaks: dict[DropKey, int] = {}
         self._offline_timing: tuple[FightSecondsModel, Fraction] | None = None
         # The cycle's drop evidence (ruling T16a), refreshed once per cycle by
         # `_refresh_learned_drops` before the actions and the context are
@@ -757,7 +766,10 @@ class GamePlayer:
         refused = refused_fight(ctx)
         if refused is not None:
             print(f"[{self._now()}] {refusal_line(refused)}")
-        step_decline = self._step_decline(state, game_data, ctx, actions)
+        # The decision plans against the bank less the gold siblings have
+        # claimed (`_net_sibling_gold`); `self.state` keeps the bank as read.
+        planned = self._net_sibling_gold(state)
+        step_decline = self._step_decline(planned, game_data, ctx, actions)
         self._notify_planning(True)
         # The search cache spans the WHOLE decision, not just the planner search
         # inside it: the decision's walks ask `is_winnable` about many monsters,
@@ -768,7 +780,7 @@ class GamePlayer:
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
-                state, game_data,
+                planned, game_data,
                 step_decline=step_decline,
                 ctx=ctx,
                 history=self.history,
@@ -783,7 +795,7 @@ class GamePlayer:
         crafting_target = self._record_decision_targets(decision)
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            decision, replace(planned, crafting_target=crafting_target), game_data, actions, ctx,
             objective=self._objective,
             turns=self._turns,
         )
@@ -1082,11 +1094,12 @@ class GamePlayer:
         # production would decide, and a decide site that silently omits an
         # argument production passes is the two-plan-producers trap. It must
         # keep mirroring `_decide_and_select` argument for argument.
+        planned = self._net_sibling_gold(state)
         with (self.history.search_cache() if self.history is not None
               else nullcontext()):
             decision = self._strategy.decide(
-                state, game_data,
-                step_decline=self._step_decline(state, game_data, ctx, actions),
+                planned, game_data,
+                step_decline=self._step_decline(planned, game_data, ctx, actions),
                 ctx=ctx,
                 history=self.history)
         self._last_decision = decision
@@ -1098,7 +1111,7 @@ class GamePlayer:
         if committed is not None:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            decision, replace(planned, crafting_target=crafting_target), game_data, actions, ctx,
             objective=self._objective,
             turns=self._turns)
         # For the chosen objective's recipe, report each monster-drop input's live
@@ -1190,6 +1203,10 @@ class GamePlayer:
                 assert self._strategy is not None
                 selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
                     state, game_data, actions)
+                # A fleet currency's shortfall is farmed by one character: the
+                # farm this cycle runs holds the election (ticket farm,
+                # 2026-10-31).
+                self._claim_currency_farm(selected_goal, state, game_data)
                 # Whether the arbiter could actually plan this cycle's supply
                 # goal is the evidence `decide_role`'s release-on-unservable
                 # rule runs on, and this is the only point it exists.
@@ -1405,8 +1422,14 @@ class GamePlayer:
                     outcome == "ok" or outcome == "error:cooldown"
                     or outcome == self.RATE_LIMITED_OUTCOME
                 )
-                self._track_intention(selected_goal, prev_state_for_learning,
-                                      new_state, outcome == "ok")
+                # A successful leg planned for a drop that did not land moved
+                # nothing once that drop's `(source, item)` dry streak is past
+                # luck (`intention_progress.leg_progressed`: the ticket farm,
+                # live 2026-10-31).
+                self._track_intention(selected_goal, prev_state_for_learning, new_state,
+                                      leg_progressed(self._dry_streaks, executed_action,
+                                                     prev_state_for_learning, new_state,
+                                                     outcome == "ok", game_data))
                 self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action=action,
@@ -1448,20 +1471,50 @@ class GamePlayer:
         finally:
             self.tracer.close()
 
-    def _claim_bank_stock(self, action: WithdrawItemAction) -> None:
+    def _claim_bank_stock(self, action: WithdrawItemAction | WithdrawGoldAction) -> None:
         """Announce to siblings that this withdraw is taking `action.quantity`
-        of `action.code` out of the shared bank. No-op without a coordination
-        store, which is every single-character run."""
+        of `action.code` (gold under `GOLD_CODE`) out of the shared bank. No-op
+        without a coordination store, which is every single-character run.
+
+        GOLD IS CLAIMED TOO (review I-2 of the HTTP 492 hotfix): the bank's gold
+        is the account's, and a WithdrawGold now feeds every pocket-short buy,
+        so two characters planning against one `bank_gold` snapshot would each
+        withdraw the same gold. Siblings plan against the bank less the live
+        claims (`_net_sibling_gold`)."""
         if self._coordination is not None:
+            code = GOLD_CODE if isinstance(action, WithdrawGoldAction) else action.code
             self._coordination.claim_bank_stock(
-                {action.code: action.quantity}, datetime.now(tz=timezone.utc))
+                {code: action.quantity}, datetime.now(tz=timezone.utc))
 
     def _release_bank_stock(self, action: Action) -> None:
         """Drop this character's bank-stock claim after a withdraw that
         provably did not happen. No-op for a non-withdraw action and without a
         coordination store."""
-        if self._coordination is not None and isinstance(action, WithdrawItemAction):
+        if self._coordination is not None and isinstance(
+                action, WithdrawItemAction | WithdrawGoldAction):
             self._coordination.release_bank_stock()
+
+    def _net_sibling_gold(self, state: WorldState) -> WorldState:
+        """`state` with the bank less what siblings have claimed to withdraw
+        (`CoordinationStore.sibling_bank_claims`): its gold less the claim
+        under `GOLD_CODE`, the gold this character may plan to spend, and
+        each banked item less its claim, the stock it may plan to withdraw
+        (the ticket farm, live 2026-10-31: two characters planned
+        `Withdraw(event_ticket)` against one bank and one drew HTTP 404). A
+        VIEW for the decision, never stored on `self.state`: the bank is
+        re-read only every `BANK_REFRESH_INTERVAL` actions, so netting the
+        held state would subtract the same claim again every cycle. An unread
+        bank (None) stays unknown."""
+        claims = self._sibling_bank_claims
+        if not any(quantity > 0 for quantity in claims.values()):
+            return state
+        gold = claims.get(GOLD_CODE, 0)
+        bank_gold = (state.bank_gold if state.bank_gold is None or gold <= 0
+                     else max(0, state.bank_gold - gold))
+        items = (None if state.bank_items is None else
+                 {code: left for code, held in state.bank_items.items()
+                  if (left := held - max(0, claims.get(code, 0))) > 0})
+        return replace(state, bank_gold=bank_gold, bank_items=items)
 
     def _claim_ge_order(self, action: GeCancelOrderAction) -> None:
         """Announce to siblings that this character is cancelling
@@ -1529,7 +1582,7 @@ class GamePlayer:
             # WithdrawItemAction, whoever emitted it — so a supply or
             # currency-ferry withdraw is announced too. No-op without a
             # coordination store.
-            if isinstance(action, WithdrawItemAction):
+            if isinstance(action, WithdrawItemAction | WithdrawGoldAction):
                 self._claim_bank_stock(action)
             # Same seam, same reason, for the ACCOUNT-shared Grand Exchange:
             # publish the cancel BEFORE the request so a sibling deriving its
@@ -2349,6 +2402,9 @@ class GamePlayer:
             "fleet_total": self._turn_in.fleet_total,
             "buyer": self._turn_in.buyer,
             "role": "buyer" if self._turn_in.buyer == self.character else "holder",
+            # A not-ready claim names the shortfall's farmer, who buys only
+            # once the fleet can pay (`TurnIn.ready`, review M6).
+            "ready": self._turn_in.ready,
         }
 
     def _emit_trace(self, action_name: str, goal_name: str, outcome: str,
@@ -2870,7 +2926,7 @@ class GamePlayer:
         `NO_PROFILE_CONTEXT` on a live path passes here."""
         fight_seconds, action_seconds = self._timing()
         return replace(ctx, now=self._cycle_now, fight_seconds=fight_seconds,
-                       action_seconds=action_seconds)
+                       action_seconds=action_seconds, kind_seconds=self._kind_seconds())
 
     def _is_winnable(self, monster_code: str) -> bool:
         """Target-selection beatability: can the bot beat this monster AFTER
@@ -4013,6 +4069,12 @@ class GamePlayer:
                 if not turn_in_ready_pure(fleet_total, price):  # rule 2
                     continue
                 if not self._may_be_buyer(item_code, state, game_data):  # rules 3-4
+                    # A farmer that held the shortfall's election
+                    # (`_claim_currency_farm`) but cannot wear the item lets
+                    # it go the moment the fleet can pay, so the real buyer
+                    # takes it this cycle, not after `DEMAND_TTL` (review M4).
+                    if self._coordination.turn_in_holder(item_code, now) == self.character:
+                        self._coordination.release_turn_in(item_code)
                     continue
                 candidates.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                          price=price, currency=code,
@@ -4053,6 +4115,69 @@ class GamePlayer:
         if remaining_own:
             self._adopt_sibling_claim(self._coordination, remaining_own, siblings,
                                       bank, now, game_data)
+        if self._turn_in is None:
+            self._turn_in = self._shortfall_farmer(self._coordination, own, siblings, bank,
+                                                   now, game_data)
+
+    def _shortfall_farmer(self, coordination: CoordinationStore, own: dict[str, int],
+                          siblings: dict[str, int], bank: dict[str, int],
+                          now: datetime, game_data: GameData) -> TurnIn | None:
+        """The SIBLING elected to farm a turn-in the fleet cannot yet pay
+        for, as a not-ready `TurnIn` naming it the buyer, or None.
+
+        The ticket farm (live 2026-10-31): Robby (`{medal: 5}`) and C3P0
+        (`{medal: 4}`) farmed the same 3-medal fleet shortfall and raced for
+        the bank's tickets (one drew HTTP 404 on `Withdraw(event_ticket)`). The
+        shortfall's farmer holds the SAME `claim_turn_in` election the
+        purchase does (`_claim_currency_farm` takes it when the farm runs), so
+        the farmer is the buyer once the fleet can pay. A non-buyer's piece
+        step stands down on it (`obtain_item_routing._equippable_goal`); being
+        not ready, it asks no buy and no surrender (`TurnIn.ready`). This
+        character's own claim is no stand-down, and is not reported. Highest
+        price first, as rule 5 elects; of equal price the one the fleet is
+        nearest paying (the larger fleet total), and of those the first in
+        the catalogue's vendor order (review M2: never the currency's name).
+        Every dual-role currency a vendor takes is asked, held or not: a
+        character holding none still stands down."""
+        farmed: list[TurnIn] = []
+        pooled = dict.fromkeys(currency for per_item in game_data.world.npc_buy_currency.values()
+                               for currency in per_item.values()
+                               if is_dual_role(currency, game_data))
+        for code in pooled:
+            fleet_total = fleet_total_pure(own, siblings, bank, code)
+            for item_code, npc_code, price in game_data.currency_sinks(code):
+                if turn_in_ready_pure(fleet_total, price):
+                    continue
+                holder = coordination.turn_in_holder(item_code, now)
+                if holder is None or holder == self.character:
+                    continue
+                farmed.append(TurnIn(item_code=item_code, npc_code=npc_code, price=price,
+                                     currency=code, buyer=holder, fleet_total=fleet_total))
+        return max(farmed, key=lambda t: (t.price, t.fleet_total)) if farmed else None
+
+    def _claim_currency_farm(self, goal: Goal | None, state: WorldState,
+                             game_data: GameData) -> None:
+        """Take (or renew) the turn-in election for the sink the fleet cannot
+        yet pay for that `goal` farms its dual-role currency for: the goal
+        this cycle runs is a `GatherMaterialsGoal` for a currency pooled across
+        the fleet (`is_dual_role`), farmed for the item `goal.farmed_for`. The
+        one character farming the fleet's shortfall holds the claim, and every
+        sibling's piece step stands down on it (`_shortfall_farmer`). Only that
+        piece's sink is claimed (review M3): the currency's other sinks stay
+        open to siblings. Renewed only while the farm runs, so a farmer that
+        stops lets the claim lapse to a sibling. No-op without a coordination
+        store, and for a farm for no sink of the currency."""
+        if (self._coordination is None or not isinstance(goal, GatherMaterialsGoal)
+                or not is_dual_role(goal.target_item, game_data)):
+            return
+        now = datetime.now(tz=timezone.utc)
+        code = goal.target_item
+        fleet_total = fleet_total_pure(dual_role_holdings(state, game_data),
+                                       self._coordination.sibling_holdings(now),
+                                       state.bank_items or {}, code)
+        for item_code, _npc_code, price in game_data.currency_sinks(code):
+            if item_code == goal.farmed_for and not turn_in_ready_pure(fleet_total, price):
+                self._coordination.claim_turn_in(item_code, now)
 
     def _may_be_buyer(self, item_code: str, state: "WorldState",
                       game_data: GameData) -> bool:
@@ -4105,6 +4230,11 @@ class GamePlayer:
                 holder = coordination.turn_in_holder(item_code, now)
                 if holder is None or holder == self.character:
                     continue
+                if not turn_in_ready_pure(fleet_total, price):
+                    # A claim the fleet cannot pay yet elects the shortfall's
+                    # farmer (`_claim_currency_farm`): worn medals stay worn,
+                    # the fleet's storage, until there is a buy to spend them.
+                    continue
                 claimed.append(TurnIn(item_code=item_code, npc_code=npc_code,
                                       price=price, currency=code, buyer=holder,
                                       fleet_total=fleet_total))
@@ -4156,6 +4286,17 @@ class GamePlayer:
             return self._offline_timing
         assert self._bootstrap is not None
         return timing_of(self.history, self._bootstrap)
+
+    def _kind_seconds(self) -> tuple[tuple[str, Fraction], ...]:
+        """The measured seconds of one action of each priced kind: the learning
+        store's recorded server cooldowns, the account-log bootstrap's on a
+        fresh install (`learned_kind_seconds`), or the committed store
+        capture's offline, as `_timing` reads its fights."""
+        if self._offline_timing is not None:
+            return committed_kind_seconds()
+        assert self._bootstrap is not None
+        assert self.game_data is not None
+        return learned_kind_seconds(self.history, self._bootstrap, self.game_data.craft_yield)
 
     def _fetch_bootstrap(self, api: APIWrapper) -> FleetBootstrap:
         """The account-log bootstrap (ruling ZD), each fight at its
@@ -4251,6 +4392,7 @@ class GamePlayer:
                            if self.history is not None else ()),
             fight_seconds=fight_seconds,
             action_seconds=action_seconds,
+            kind_seconds=self._kind_seconds(),
             # The server refused the last action for want of bag room: the
             # arbiter clears the bag before the next plan (Task 13e).
             bag_refused=self._last_outcome == BAG_FULL_OUTCOME,

@@ -497,6 +497,14 @@ def _gain(state: WorldState, target: WorldState, game_data: GameData, monster: s
                         loop, per)
 
 
+def _candidate_ctx(ctx: SelectionContext, monster: str, loadout: dict[str, str],
+                   rate: Fraction, fighter: WorldState) -> SelectionContext:
+    """`ctx` carrying `monster`'s provisional objective (no pieces yet): what
+    the pricer reads `m*` and its fighter from while the objective is still
+    being chosen (`attach_gear_objective` prices before it attaches one)."""
+    return replace(ctx, gear_objective=GearObjective(monster, loadout, rate, (), fighter=fighter))
+
+
 def _price(state: WorldState, game_data: GameData, ctx: SelectionContext,
            history: LearningStore | None, code: str) -> tuple[Fraction, SourceKind | None]:
     """`(price, route)` of wearing `code`: its `cheapest_route` under
@@ -707,8 +715,13 @@ def gear_objective(state: WorldState, game_data: GameData, ctx: SelectionContext
     if not rated or max(rate for _, rate in rated) <= 0:
         return None
     best = max((rate, game_data.monster_levels[code]) for code, rate in rated)
-    tied = [_objective(state, game_data, ctx, history, code, targets[code], best[0],
-                       depth, food, loop, xp_rate)
+    # Each candidate's pieces are priced with ITS objective on the context, so
+    # the gold they spend is charged at what a second of fighting it in its
+    # `L*` earns (`gold_rate.gold_per_second`, ruling AL's `m*` fallback,
+    # S-046): the rate the cycle prices gold at once that candidate is `m*`.
+    tied = [_objective(state, game_data,
+                       _candidate_ctx(ctx, code, targets[code][1], best[0], targets[code][0]),
+                       history, code, targets[code], best[0], depth, food, loop, xp_rate)
             for code, rate in rated if (rate, game_data.monster_levels[code]) == best]
     # `min` keeps the first of equal totals: catalogue order, as `_candidates` lists.
     return min(tied, key=lambda objective: sum((piece.price for piece in objective.missing),

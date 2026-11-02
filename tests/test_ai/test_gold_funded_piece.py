@@ -58,13 +58,17 @@ COVERED = 20100
 safety floor (the rune is itself the reserved target, so its own price is
 credited back)."""
 
-GOLD_MONSTER = "highwayman"
-"""The cheapest gold per action a level-20 character would fight: level 15,
-4 gold a win."""
+GOLD_MONSTER = "yellow_slime"
+"""The cheapest gold per action a level-20 character would fight: level 2,
+2 gold a win in a 5-second fight. Priced in seconds (ruling "seconds inside",
+2026-10-31) its short fights earn gold fastest; it was the highwayman (level
+15, 4 gold a win, a fight several times as long) while a win counted as one
+fight-equivalent whatever its length. Grey at level 20, so its gold fight is
+the drop_farm variant."""
 
 CAPPED = "imp"
-"""Cheaper gold per action than the highwayman, and level 28: above the
-level-20 character's fight ceiling, so no price counts its gold."""
+"""A gold payer at level 28: above the level-20 character's fight ceiling, so
+no price counts its gold."""
 
 SOLD = "sap"
 SELLER = "timber_merchant"
@@ -109,8 +113,8 @@ def test_a_gold_funded_buy_is_served() -> None:
     assert [repr(a) for a in report.plan] == [f"Fight({GOLD_MONSTER})"]
     fight = report.plan[0]
     assert isinstance(fight, FightAction)
-    assert fight.gold_target == win_gold(GOLD_MONSTER, world) == 4
-    assert fight.drop_farm is False
+    assert fight.gold_target == win_gold(GOLD_MONSTER, world) == 2
+    assert fight.drop_farm is True
 
 
 def test_the_buy_follows_once_the_pocket_covers_it() -> None:
@@ -234,9 +238,9 @@ def test_each_gold_fight_cycle_re_decides() -> None:
 
 
 def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
-    """At level 39 the imp is still the cheapest gold, and pays no XP: the gold
-    fight is the drop_farm variant, which the zero-XP gate lets through, as
-    `select_drop_fight` hunts a grey dropper."""
+    """At level 39 the yellow slime is still the cheapest gold, and pays no
+    XP: the gold fight is the drop_farm variant, which the zero-XP gate lets
+    through, as `select_drop_fight` hunts a grey dropper."""
     world = _world()
     seeded = _player(world)
     assert seeded.state is not None
@@ -247,14 +251,14 @@ def test_a_grey_gold_monster_is_fought_as_a_drop_farm() -> None:
     state = player.state
     assert state is not None
     ctx = attached(state, world, TIMED_NO_PROFILE_CONTEXT, None)
-    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == CAPPED
-    assert world.xp_per_kill(CAPPED, state.level) == 0
+    assert fight_gold_monster(state, world, ctx, policy=PIECE_POLICY) == GOLD_MONSTER
+    assert world.xp_per_kill(GOLD_MONSTER, state.level) == 0
     piece = GatherMaterialsGoal(RUNE.code, {RUNE.code: 1}, fight_gold=True, now=cycle_now())
     plan = decompose(piece, state, world, player._build_actions(), ctx)
     assert plan is not None
     fights = [a for a in plan if isinstance(a, FightAction)]
     assert [(repr(a), a.drop_farm, a.gold_target) for a in fights] == [
-        (f"Fight({CAPPED})", True, win_gold(CAPPED, world))]
+        (f"Fight({GOLD_MONSTER})", True, win_gold(GOLD_MONSTER, world))]
     assert plan[-1] is fights[0]
 
 
@@ -334,10 +338,15 @@ def _busy() -> tuple[GameData, WorldState, list[object]]:
 
 
 def _crystal_ctx():  # type: ignore[no-untyped-def]
+    """The piece's objective carries its fighter, as every production one does
+    (`gear_objective`): pricing a choice among the walk's minting routes
+    (`acquisition_cost.route_order`) charges spent gold at the fight gold
+    `m*` earns in that fighter's loadout."""
     piece = GearPiece("artifact3_slot", "malefic_crystal", 0, Fraction(1), Fraction(10),
                       SourceKind.BUY)
     return replace(TIMED_NO_PROFILE_CONTEXT, gear_objective=GearObjective(
-        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,)))
+        "wolf", {"artifact3_slot": "malefic_crystal"}, Fraction(1), (piece,),
+        fighter=_busy()[1]))
 
 
 def test_an_l_star_piece_s_currency_step_is_served_by_its_priced_route() -> None:

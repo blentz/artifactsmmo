@@ -20,15 +20,18 @@ import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
+from math import ceil
 from pathlib import Path
 
 import pytest
+from artifactsmmo_api_client.models.log_type import LogType
 
 from artifactsmmo_cli.ai.acquisition_cost import (
     BANK_VENUE,
     _drop_actions,
     _drop_table,
     _kill_actions,
+    _kind_actions,
     _priced,
     _workshop_venue,
     acquisition_actions,
@@ -48,10 +51,14 @@ from artifactsmmo_cli.ai.acquisition_cost_core import (
     acquisition_cost,
 )
 from artifactsmmo_cli.ai.drop_leg import DropLeg
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.fight_walk import walk_seconds
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_objective import _price
+from artifactsmmo_cli.ai.gold_rate import gold_spend_actions
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.drop_observations import fleet_k, learned_drops
+from artifactsmmo_cli.ai.learning.fight_loop_cost import cycles_per_kill
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
@@ -65,6 +72,12 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import GRIND_PRICING
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT
 from tests.test_ai.shared_world import shared_world
+
+GATHER = _kind_actions(LogType.GATHERING, TIMED_NO_PROFILE_CONTEXT)
+"""One gather in planner actions: a measured gather's seconds over a planner
+action's (ruling "seconds inside", 2026-10-31)."""
+WITHDRAW = _kind_actions(LogType.WITHDRAW_ITEM, TIMED_NO_PROFILE_CONTEXT)
+"""One item withdraw in planner actions."""
 
 _BUNDLE = (Path(__file__).resolve().parent / "scenarios" / "fixtures"
            / "gamedata_bundle.json")
@@ -88,7 +101,8 @@ def test_withdraw_is_a_bank_hop_and_one_action(state, game_data) -> None:
                   Source(SourceKind.WITHDRAW, "copper_ore", 1, 7),
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == BANK_VENUE
-    assert opt.actions_per_application == 1
+    # One withdraw, at a measured withdraw's seconds (ruling "seconds inside").
+    assert opt.actions_per_application == WITHDRAW
     assert opt.capacity == 7
     assert not opt.inputs
 
@@ -102,6 +116,8 @@ def test_craft_carries_its_recipe_as_inputs_and_a_workshop_venue(
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == _workshop_venue("weaponcrafting")
     assert opt.inputs == game_data.crafting_recipe("iron_sword")
+    # One craft, at a measured craft's seconds (ruling "seconds inside").
+    assert opt.actions_per_application == _kind_actions(LogType.CRAFTING, TIMED_NO_PROFILE_CONTEXT)
 
 
 def test_recycle_consumes_the_source_item_not_the_target(state, game_data) -> None:
@@ -112,6 +128,7 @@ def test_recycle_consumes_the_source_item_not_the_target(state, game_data) -> No
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.inputs == {"iron_sword": 1}
     assert opt.yield_per == 3
+    assert opt.actions_per_application == _kind_actions(LogType.RECYCLING, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == _workshop_venue("weaponcrafting")
 
 
@@ -122,7 +139,7 @@ def test_gather_uses_the_resource_tile_as_its_venue(state, game_data) -> None:
                   Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "copper_rocks"
-    assert (opt.actions_per_application, opt.yield_per) == (1, 1)
+    assert (opt.actions_per_application, opt.yield_per) == (GATHER, 1)
 
 
 def test_a_secondary_drop_costs_its_expected_gathers(state, game_data, monkeypatch) -> None:
@@ -136,8 +153,8 @@ def test_a_secondary_drop_costs_its_expected_gathers(state, game_data, monkeypat
                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
     wood = _priced("ash_wood", Source(SourceKind.GATHER, "ash_tree", 1, UNBOUNDED_CAPACITY),
                    state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert (apple.actions_per_application, apple.yield_per) == (20, 1)
-    assert (wood.actions_per_application, wood.yield_per) == (1, 1)
+    assert (apple.actions_per_application, apple.yield_per) == (20 * GATHER, 1)
+    assert (wood.actions_per_application, wood.yield_per) == (GATHER, 1)
 
 
 def test_a_multi_unit_drop_is_priced_in_lowest_terms(state, game_data, monkeypatch) -> None:
@@ -149,8 +166,8 @@ def test_a_multi_unit_drop_is_priced_in_lowest_terms(state, game_data, monkeypat
         "copper_rocks": [("copper_ore", 1, 1, 2)]})
     opt = _priced("copper_ore", Source(SourceKind.GATHER, "copper_rocks", 1, UNBOUNDED_CAPACITY),
                   state, game_data, TIMED_NO_PROFILE_CONTEXT)
-    assert (opt.actions_per_application, opt.yield_per) == (Fraction(2, 3), 1)
-    assert acquisition_cost("copper_ore", 3, {"copper_ore": [opt]}, {}) == 2 + 1
+    assert (opt.actions_per_application, opt.yield_per) == (Fraction(2, 3) * GATHER, 1)
+    assert acquisition_cost("copper_ore", 3, {"copper_ore": [opt]}, {}) == ceil(2 * GATHER) + 1
 
 
 def _ctx_with_siblings(**skills):  # type: ignore[no-untyped-def]
@@ -172,6 +189,10 @@ class _SupplyStore:
 
     def fleet_skill_grind_rate(self, skill):  # type: ignore[no-untyped-def]
         return None
+
+    def cached(self, key, compute):  # type: ignore[no-untyped-def]
+        """`LearningStore.cached` outside a decision episode: computed afresh."""
+        return compute()
 
 
 def test_sibling_route_opens_a_skill_gate_the_character_cannot_meet(
@@ -369,7 +390,7 @@ def test_ge_fill_is_priced_in_gold_at_the_standing_order(state, game_data) -> No
                   Source(SourceKind.GE_FILL, "ord-x", 1, 4),
                   state, gd, TIMED_NO_PROFILE_CONTEXT)
     assert opt.venue == "ord-x"
-    assert opt.actions_per_application == 1
+    assert opt.actions_per_application == _kind_actions(LogType.BUY_GE, TIMED_NO_PROFILE_CONTEXT)
     assert opt.capacity == 4, "a standing order is FINITE, unlike a vendor"
     assert opt.inputs == {"gold": 137}, "the realizable cost is the order's price"
 
@@ -460,9 +481,10 @@ def test_a_rare_drop_is_priced_by_its_chance(state, game_data) -> None:
     With nothing observed the chance is the API prior alone: 300 gathers a
     pearl, so 20 pearls are 6,000 gathers and one walk to the spot, not 20."""
     pearls = _pearl_gather(state, game_data)
-    assert pearls.actions_per_application == 300
+    assert pearls.actions_per_application == 300 * GATHER
     assert pearls.yield_per == 1
-    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == 20 * 300 + 1
+    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == ceil(
+        20 * 300 * GATHER) + 1
 
 
 def test_observations_reprice_the_drop(tmp_path, state, game_data) -> None:
@@ -471,8 +493,9 @@ def test_observations_reprice_the_drop(tmp_path, state, game_data) -> None:
     for the route (the walk's exact arm), plus the walk to the spot."""
     store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     pearls = _pearl_gather(state, game_data, store)
-    assert pearls.actions_per_application == Fraction(683, 3)
-    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == 4554 + 1
+    assert pearls.actions_per_application == Fraction(683, 3) * GATHER
+    assert acquisition_cost("small_pearls", 20, {"small_pearls": [pearls]}, {}) == ceil(
+        20 * Fraction(683, 3) * GATHER) + 1
 
 
 def test_a_sure_primary_drop_still_costs_one_gather(tmp_path, state, game_data) -> None:
@@ -482,7 +505,7 @@ def test_a_sure_primary_drop_still_costs_one_gather(tmp_path, state, game_data) 
     store = _fleet(tmp_path / "learn.db", _PEARLS_383_FOR_2)
     trout = _priced("trout", Source(SourceKind.GATHER, "trout_spot", 1, UNBOUNDED_CAPACITY),
                     state, game_data, _learned(game_data, store))
-    assert trout.actions_per_application == 1
+    assert trout.actions_per_application == GATHER
 
 
 def test_a_unit_is_the_chance_times_the_mean_quantity() -> None:
@@ -499,7 +522,7 @@ def test_an_observed_monster_drop_reprices_the_farm(tmp_path, state, game_data) 
                     ("Fight(chicken)", "FightAction", '{"raw_chicken": 1}', None, 50)])
     learned = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
                       state, game_data, _learned(game_data, store))
-    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
+    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT, ())
     assert learned.actions_per_application == Fraction(108, 51) * win
     prior = _priced("feather", Source(SourceKind.DROP, "chicken", 1, UNBOUNDED_CAPACITY),
                     state, game_data, TIMED_NO_PROFILE_CONTEXT)
@@ -527,8 +550,8 @@ def test_prospecting_lowers_the_price_once_k_is_learned(tmp_path, state, game_da
     assert fleet_k(store, game_data) == Fraction(1, 10)
     plain = _pearl_gather(replace(state, prospecting=0), game_data, store)
     lucky = _pearl_gather(replace(state, prospecting=100), game_data, store)
-    assert plain.actions_per_application == 200
-    assert lucky.actions_per_application == Fraction(200, 11)
+    assert plain.actions_per_application == 200 * GATHER
+    assert lucky.actions_per_application == Fraction(200, 11) * GATHER
 
 
 def test_the_second_copy_is_cheaper_than_the_first(tmp_path, state, game_data) -> None:
@@ -655,17 +678,37 @@ def test_equip_adds_exactly_one_action(state, game_data) -> None:
     assert with_equip == without + 1
 
 
+EARNER = "highwayman"
+"""A gold-paying monster the scenario character can be given as its grind
+target: what a second of fighting it earns is what a spent gold piece costs
+(S-046, `gold_rate.gold_spend_actions`)."""
+
+
+def _earning(state):  # type: ignore[no-untyped-def]
+    """The timed context with a grind target, and the actions one spent gold
+    piece costs in it."""
+    ctx = replace(TIMED_NO_PROFILE_CONTEXT, combat_monster=EARNER)
+    return ctx, gold_spend_actions(state, load_bundle_game_data(_BUNDLE), ctx)
+
+
 def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
         -> None:
     """THE WALL. A BUY route carries `inputs={"gold": price}`, nothing in the
     game obtains gold, and the walk charges an unobtainable input
     `UNOBTAINABLE_PER_UNIT` PER UNIT — so a 10,000-gold rune was priced at ten
     BILLION actions and no gold-priced vendor item in the game could ever be
-    chosen. Crediting the pocket is what pays it down."""
+    chosen. Crediting the pocket is what pays it down.
+
+    S-046: the pocket's gold is credited at what it takes to EARN it again
+    (the grind target's gold per second over the learned action seconds), so
+    the rune costs the hop, the purchase and its 10,000 gold's fights. With no
+    grind target the rate is unknown and the gold unpriceable."""
     rich = replace(state, inventory={}, gold=50_000)
-    cost = acquisition_actions("healing_rune", 1, rich, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False)
-    assert cost == 2      # hop to the vendor, one purchase
+    earning, per_gold = _earning(rich)
+    cost = acquisition_actions("healing_rune", 1, rich, game_data, earning, equip=False)
+    assert cost == 2 + ceil(10_000 * per_gold)
+    assert acquisition_actions("healing_rune", 1, rich, game_data,
+                               TIMED_NO_PROFILE_CONTEXT, equip=False) == UNOBTAINABLE_PER_UNIT
 
     # ...and the shortfall beyond the pocket is charged a million per gold piece,
     # which used to price this route at 10,000 * UNOBTAINABLE_PER_UNIT — ABOVE
@@ -675,7 +718,7 @@ def test_a_gold_priced_vendor_route_is_paid_for_with_gold(state, game_data)\
     # prices at exactly what a missing one does, and never worse.
     broke = replace(state, inventory={}, gold=0)
     unaffordable = acquisition_actions("healing_rune", 1, broke, game_data,
-                                       TIMED_NO_PROFILE_CONTEXT, equip=False)
+                                       earning, equip=False)
     assert unaffordable == UNOBTAINABLE_PER_UNIT, unaffordable
 
 
@@ -702,10 +745,12 @@ def test_gold_is_obtained_by_selling_what_the_authority_licenses(
     for being a tenth short. With diamonds in the bag at 5,000 apiece from a
     buyer whose window is open, the shortfall is one sale."""
     short = replace(_selling(state, game_data, diamond=4), gold=9_000)
-    cost = acquisition_actions("healing_rune", 1, short, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False)
+    earning, per_gold = _earning(short)
+    cost = acquisition_actions("healing_rune", 1, short, game_data, earning, equip=False)
     assert cost < UNOBTAINABLE_PER_UNIT, cost
-    assert cost == 4, cost     # hop + sale to raise the 1,000, then hop + buy
+    # hop + sale to raise the 1,000, then hop + buy, and the 9,000 held gold
+    # spent at its earning time (S-046); the sold gold was earned by the sale.
+    assert cost == 4 + ceil(9_000 * per_gold), cost
 
 
 def test_the_sale_consumes_the_copy_it_sells(state, game_data) -> None:
@@ -761,20 +806,37 @@ def test_gold_is_consumed_by_the_route_that_spends_it(state, game_data) -> None:
     """Gold is credited as a holding, so it is also SPENT like one: two runes at
     10,000 each are not affordable out of 15,000."""
     one = replace(state, inventory={}, gold=15_000)
+    earning, per_gold = _earning(one)
     assert acquisition_actions("healing_rune", 1, one, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) == 2
+                               earning, equip=False) == 2 + ceil(10_000 * per_gold)
     assert acquisition_actions("healing_rune", 2, one, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
+                               earning, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
-def test_banked_gold_is_not_credited_to_the_pocket(state, game_data) -> None:
+def test_banked_gold_is_a_priced_withdraw_not_a_holding(state, game_data) -> None:
     """Same rule as every other holding in this module: the bag counts, the bank
-    is a priced route. Banked gold is therefore NOT spendable here — conservative,
-    and it under-credits rather than pricing the trip to the bank at nothing."""
+    is a priced route. Banked gold is not credited to the pocket; it is the gold
+    WITHDRAW route, priced at the one withdraw and the bank hop on top of the
+    buy the pocket would have paid (2): what the walk serves, WithdrawGold then
+    the buy, since a vendor is paid from the pocket (the HTTP 492 hotfix). The
+    withdraw is its recorded 2.9 s, under one planner action, so the bank adds
+    one action with the hop (it was the mean action, 1, while the logs never
+    timed a gold withdraw: the user's I2 ruling)."""
     banked_only = replace(state, inventory={}, gold=0, bank_gold=50_000)
+    in_pocket = replace(state, inventory={}, gold=50_000, bank_gold=0)
+    earning, per_gold = _earning(in_pocket)
+    spent = ceil(10_000 * per_gold)
+    # ONE RULE (S-046): the same 10,000 gold costs the same to spend from the
+    # pocket or the bank; the bank adds only its withdraw and hop.
+    assert acquisition_actions("healing_rune", 1, in_pocket, game_data,
+                               earning, equip=False) == 2 + spent
     assert acquisition_actions("healing_rune", 1, banked_only, game_data,
-                               TIMED_NO_PROFILE_CONTEXT, equip=False) \
+                               earning, equip=False) == 2 + 1 + spent
+    # An unread bank is UNKNOWN, not rich: it withdraws nothing.
+    unread = replace(banked_only, bank_gold=None)
+    assert acquisition_actions("healing_rune", 1, unread, game_data,
+                               earning, equip=False) \
         >= UNOBTAINABLE_PER_UNIT
 
 
@@ -1610,7 +1672,7 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
         [gated] = [r for r in route_options(item, gated_state, game_data, TIMED_NO_PROFILE_CONTEXT, store)
                    if r.kind == "gather" and r.venue == resource]
         assert gated.unlock == f"skill:{skill}:{level}" and gated.unlock_actions > 0
-        assert gated.actions_per_application == 1
+        assert gated.actions_per_application == GATHER
         # The climb's gather is priced at the learned chance too (the
         # context's drop evidence, ruling T16a): three recorded gathers that
         # missed the item make it 1 in 4 (`(1 + 0) / (1 + 3)`), so a unit is 4
@@ -1623,7 +1685,7 @@ def test_an_under_skill_gather_is_priced_by_its_grind_not_offered_as_ready(
         [learned] = [r for r in route_options(item, gated_state, game_data,
                                               _learned(game_data, store), store)
                      if r.kind == "gather" and r.venue == resource]
-        assert learned.actions_per_application == 4
+        assert learned.actions_per_application == 4 * GATHER
     finally:
         store.end_session(exit_reason="normal")
         store.close()
@@ -1664,11 +1726,11 @@ def test_drop_work_is_the_walks_gathers_and_farms_priced_by_their_route(
     assert drop_work("copper_helmet", 2, state, game_data, TIMED_NO_PROFILE_CONTEXT, None,
                      policy=LEGACY) == (
         DropLeg(SourceKind.GATHER, "copper_rocks", "copper_ore", 119, True),)
-    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT.timing(), ())
+    win = _kill_actions("chicken", state, game_data, TIMED_NO_PROFILE_CONTEXT, ())
     assert drop_work_actions((DropLeg(SourceKind.DROP, "chicken", "feather", 3, True),), state,
                              game_data, TIMED_NO_PROFILE_CONTEXT) == 3 * 8 * win
     assert drop_work_actions((DropLeg(SourceKind.GATHER, "copper_rocks", "copper_ore", 119, True),),
-                             state, game_data, TIMED_NO_PROFILE_CONTEXT) == 119
+                             state, game_data, TIMED_NO_PROFILE_CONTEXT) == 119 * GATHER
 
 
 def test_a_farm_behind_gear_is_drop_work_without_the_loss_surcharge(
@@ -1686,9 +1748,8 @@ def test_a_farm_behind_gear_is_drop_work_without_the_loss_surcharge(
                      policy=LEGACY) == (DropLeg(SourceKind.DROP, "chicken", "feather", 2, False),)
     records = (("chicken", 20, 10),)
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, fight_records=records)
-    timing = ctx.timing()
-    lossy = _kill_actions("chicken", state, game_data, timing, records)
-    clean = _kill_actions("chicken", state, game_data, timing, ())
+    lossy = _kill_actions("chicken", state, game_data, ctx, records)
+    clean = _kill_actions("chicken", state, game_data, ctx, ())
     assert lossy > clean
     assert drop_work_actions((DropLeg(SourceKind.DROP, "chicken", "feather", 3, True),), state,
                              game_data, ctx) == 3 * 8 * lossy
@@ -1729,9 +1790,28 @@ def test_a_farm_is_priced_at_the_prospecting_its_fight_loadout_wears(
         "vest": ItemStats(code="vest", level=1, type_="body_armor", prospecting=200)})
     ctx = replace(TIMED_NO_PROFILE_CONTEXT, learned_drops=LearnedDrops((), (), Fraction(1, 100)))
     owning = replace(state, inventory={**state.inventory, "vest": 1})
-    win = _kill_actions("chicken", owning, game_data, ctx.timing(), ())
+    win = _kill_actions("chicken", owning, game_data, ctx, ())
     rate, low, high = _drop_table("feather", "chicken", game_data)
     assert _drop_actions("feather", "chicken", rate, low, high, owning, game_data,
-                         ctx.timing(), ctx.drops()) == Fraction(8, 3) * win
+                         ctx) == Fraction(8, 3) * win
     assert _drop_actions("feather", "chicken", rate, low, high, state, game_data,
-                         ctx.timing(), ctx.drops()) == 8 * win
+                         ctx) == 8 * win
+
+
+def test_every_action_is_priced_at_its_kinds_measured_seconds(state, game_data) -> None:
+    """Ruling "seconds inside" (2026-10-31): a withdraw is its recorded 2.5
+    seconds and a gather its 34 (the committed store capture, the user's I2
+    ruling), each over a planner action's measured seconds, not one planner
+    action each; a win is its fight and the rest it forces at the fight's own
+    learned seconds, not one fight-equivalent."""
+    ctx = TIMED_NO_PROFILE_CONTEXT
+    assert round(float(ctx.seconds_of(LogType.WITHDRAW_ITEM)), 1) == 2.5
+    assert round(float(ctx.seconds_of(LogType.GATHERING))) == 34
+    assert ctx.seconds_of(LogType.WITHDRAW_ITEM) / ctx.action_seconds_of() == WITHDRAW
+    assert ctx.seconds_of(LogType.GATHERING) / ctx.action_seconds_of() == GATHER
+    assert WITHDRAW < GATHER
+    fight = walk_seconds(state, game_data, "chicken", (), ctx.timing())
+    per_kill = cycles_per_kill(expected_damage_per_fight(state, game_data, "chicken"),
+                               state.max_hp, fight)
+    assert _kill_actions("chicken", state, game_data, ctx, ()) == per_kill * fight / \
+        ctx.action_seconds_of()

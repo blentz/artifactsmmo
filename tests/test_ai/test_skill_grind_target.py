@@ -93,9 +93,9 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     Bank stock used to be added straight into `owned`, so a banked material cost
     NOTHING and this test asserted `copper_dagger` won outright on that basis.
     Under the route model only the BAG is free; the bank is a WITHDRAW route —
-    one hop plus one action per unit — which here costs exactly what gathering
-    the same bars costs, so a banked rung ties an unstocked one rather than
-    beating it.
+    one hop plus a withdraw's measured seconds per code — which here costs
+    less than gathering and smelting the same bars, so a banked rung beats an
+    unstocked one, though not a bagged one.
 
     That is why `wooden_staff` (4 `ash_plank`) now wins where `copper_dagger`
     (6 bars) used to: six withdraws are dearer than four gathers. The old model
@@ -111,9 +111,11 @@ def test_the_BAG_is_free_but_the_BANK_is_a_priced_withdraw():
     in_bag = steps(make_state(skills={"weaponcrafting": 3},
                               inventory={"copper_bar": 6}))
     assert in_bag < banked, "the bag must be free where the bank is not"
-    assert banked == empty, (
-        "here a withdraw and a gather are both one action per unit, so stocking "
-        "the bank buys nothing over gathering — the model saying so is correct")
+    # RE-DERIVED ruling "seconds inside" (2026-10-31): a withdraw costs its
+    # measured 3 seconds and a gather its 34, no longer one planner action
+    # each, so stocking the bank now beats gathering (and smelting) the bars.
+    assert banked < empty, (
+        "a 3-second withdraw is cheaper than a 34-second gather and its smelt")
 
 
 def test_none_when_nothing_craftable_at_level():
@@ -284,8 +286,8 @@ def test_the_memo_key_notices_a_changed_threshold():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3})
     cheap = make_state(skills={"weaponcrafting": 3}, win_thresholds={"mob": Fraction(1, 2)})
-    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None))
-            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW, (None, None)))
+    assert (_cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None, None))
+            != _cache_key("weaponcrafting", cheap, gd, (), LearnedDrops.empty(), _NOW, (None, None, None)))
 
 
 def test_the_memo_key_notices_a_changed_worn_stock():
@@ -295,13 +297,13 @@ def test_the_memo_key_notices_a_changed_worn_stock():
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 3}, utility1_slot_quantity=40,
                        utility2_slot_quantity=40)
-    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None))
+    key = _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), _NOW, (None, None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility1_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW, (None, None))
+                             LearnedDrops.empty(), _NOW, (None, None, None))
     assert key != _cache_key("weaponcrafting",
                              dataclasses.replace(state, utility2_slot_quantity=0), gd, (),
-                             LearnedDrops.empty(), _NOW, (None, None))
+                             LearnedDrops.empty(), _NOW, (None, None, None))
 
 def test_the_memo_misses_across_the_sandwhisper_crossing():
     """Final review I-1. `GRIND_POLICY` asks `SPAWN_KNOWN`, which reads the
@@ -341,7 +343,7 @@ def test_the_memo_key_notices_an_event_window_closing():
                                 active_events={"fair": opens + timedelta(hours=1)})
 
     def key(at: datetime) -> object:
-        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at, (None, None))
+        return _cache_key("weaponcrafting", state, gd, (), LearnedDrops.empty(), at, (None, None, None))
 
     assert key(opens) == key(opens + timedelta(minutes=5))
     assert key(opens) != key(opens + timedelta(hours=2))
@@ -851,14 +853,17 @@ def test_objective_gain_reads_the_missing_piece() -> None:
 @pytest.mark.parametrize("reverse", [False, True])
 def test_a_full_tie_goes_to_fewer_fights_in_either_catalogue_order(reverse: bool) -> None:
     """The live tie (plan C Task 7 review M1): at gearcrafting 5,
-    `copper_legs_armor` and `feather_coat` both price 82 actions, unwanted, at
+    `copper_legs_armor` and `feather_coat` both price 73 actions, unwanted, at
     one craft level, so `_beats` ties them and the API's catalogue order used
     to pick. The legs need two chicken feathers, the coat five: fewer fight
-    actions in the chain wins, in the catalogue's order and reversed."""
+    actions in the chain wins, in the catalogue's order and reversed. (82 on
+    `l10_gearcrafting_gap` before the ticket-farm fix priced every route in
+    measured seconds; there the legs now price 60 and the coat 41, no tie, so
+    the tie is read on its combat-blocked sibling, which still ties.)"""
     gd = load_bundle_game_data(BUNDLE)
     if reverse:
         gd = _reversed_catalogue(gd)
-    state = scenario_state(SCENARIOS["l10_gearcrafting_gap"], gd)
+    state = scenario_state(SCENARIOS["l10_gearcrafting_gap_combat_blocked"], gd)
     by_code = {c.code: c for c in build_selectable_grind_candidates(
         "gearcrafting", state, gd, TIMED_NO_PROFILE_CONTEXT)}
     legs, coat = by_code["copper_legs_armor"], by_code["feather_coat"]
@@ -876,13 +881,13 @@ def test_a_gather_only_chain_has_no_fight_actions() -> None:
                                _gd(), TIMED_NO_PROFILE_CONTEXT) == 0
 
 
-@pytest.mark.parametrize(("scenario", "walks"), [("l10_gearcrafting_gap", 2),
+@pytest.mark.parametrize(("scenario", "walks"), [("l10_gearcrafting_gap_combat_blocked", 2),
                                                  ("l30_band_entry", 0)])
 def test_only_the_tied_top_class_pays_a_fight_walk(
         monkeypatch: pytest.MonkeyPatch, scenario: str, walks: int) -> None:
     """Review I1: the fight count is a `drop_work` walk, so it is paid only by
-    the eligible rungs tied at the top. At l10 gearcrafting that is the legs and
-    the coat; at l30 the top class is one rung and nothing is walked, although
+    the eligible rungs tied at the top. At l10 gearcrafting (combat-blocked)
+    that is the legs and the coat; at l30 the top class is one rung and nothing is walked, although
     many lower or ineligible rungs tie each other."""
     gd = shared_world(BUNDLE)
     state = scenario_state(SCENARIOS[scenario], gd)
@@ -911,6 +916,9 @@ def test_the_memo_key_notices_changed_fight_and_action_seconds() -> None:
     slower = dataclasses.replace(timed, fight_seconds=dataclasses.replace(
         timed.fight_seconds, floor=timed.fight_seconds.floor * 10))
     quicker = dataclasses.replace(timed, action_seconds=timed.action_seconds / 10)
+    # A kind's measured seconds time every route before its one conversion to
+    # actions (`acquisition_cost._in_actions`), so they key the memo too.
+    measured = dataclasses.replace(timed, kind_seconds=(("crafting", Fraction(99)),))
 
     def steps(ctx: SelectionContext) -> int:
         by_code = {c.code: c for c in build_selectable_grind_candidates(
@@ -923,6 +931,6 @@ def test_the_memo_key_notices_changed_fight_and_action_seconds() -> None:
     # An action's seconds price a bought consumable (`consumable_price`), which
     # no rung here reaches, so it is held to the key itself.
     keys = {_cache_key("gearcrafting", state, gd, (), LearnedDrops.empty(), _NOW,
-                       (ctx.fight_seconds, ctx.action_seconds))
-            for ctx in (timed, slower, quicker)}
-    assert len(keys) == 3
+                       (ctx.fight_seconds, ctx.action_seconds, ctx.kind_seconds))
+            for ctx in (timed, slower, quicker, measured)}
+    assert len(keys) == 4
