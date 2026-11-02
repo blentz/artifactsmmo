@@ -133,6 +133,26 @@ def test_the_verdict_reads_the_objectives_own_fighter_and_missing_pieces(
         secure_win(fighter, gd, monster) and bool(objective.missing))
 
 
+def test_a_held_l_star_that_secures_the_fight_is_no_gear_to_build(gd: GameData) -> None:
+    """`L*(cow)` secures the fight at the gear cell, with eight pieces unheld.
+    Hand the character every piece of it, in the bag: the fighter still
+    secures the fight, but no piece is missing, so gear does not close it,
+    because there is nothing left to build."""
+    state = _with_task(_state(GEAR_CELL, gd), "cow")
+    fighter = gear_fighter_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    assert gear_closes_for("cow", state, gd, TIMED_NO_PROFILE_CONTEXT, None)
+    inventory = dict(state.inventory)
+    for code in fighter.equipment.values():
+        if code:
+            inventory[code] = inventory.get(code, 0) + 1
+    holding = dataclasses.replace(state, inventory=inventory)
+    assert secure_win(gear_fighter_for("cow", holding, gd, TIMED_NO_PROFILE_CONTEXT, None),
+                      gd, "cow")
+    assert not gear_objective_for("cow", holding, gd, TIMED_NO_PROFILE_CONTEXT, None,
+                                  task_rate).missing
+    assert not gear_closes_for("cow", holding, gd, TIMED_NO_PROFILE_CONTEXT, None)
+
+
 def test_a_missing_l_star_that_still_loses_is_no_gear_verdict(gd: GameData) -> None:
     """`L*(pig)` has nine missing pieces at `l10_copper_adequate`, and the
     fighter wearing all of them is still below the secure bar: gear the
