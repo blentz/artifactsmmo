@@ -3,7 +3,7 @@
   "info": {
     "title": "Artifacts API",
     "description": "Artifacts is an API-based MMO game where you can manage 5 characters to explore, fight, gather resources, craft items and much more.\n\nWebsite: https://artifactsmmo.com/\n\nDocumentation: https://docs.artifactsmmo.com/\n\nOpenAPI Spec: https://api.artifactsmmo.com/openapi.json",
-    "version": "8.0.0"
+    "version": "9.0.0"
   },
   "paths": {
     "/": {
@@ -100,7 +100,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 100,
+              "maximum": 1000,
               "minimum": 1,
               "description": "Page size",
               "default": 50,
@@ -115,7 +115,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataPage_SimpleItemSchema_"
+                  "$ref": "#/components/schemas/BankDataPage_SimpleItemSchema_"
                 }
               }
             }
@@ -655,6 +655,22 @@
                   "error": {
                     "code": 565,
                     "message": "You already have an active subscription."
+                  }
+                }
+              }
+            }
+          },
+          "573": {
+            "description": "An active Stripe subscription cannot be extended with gems or member tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 573,
+                    "message": "An active Stripe subscription cannot be extended with gems or member tokens."
                   }
                 }
               }
@@ -1951,6 +1967,22 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UseItemResponseSchema"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Commercial features are disabled on sandbox and beta servers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 403,
+                    "message": "Commercial features are disabled on sandbox and beta servers."
+                  }
                 }
               }
             }
@@ -3867,8 +3899,8 @@
               }
             }
           },
-          "442": {
-            "description": "This item cannot be sold.",
+          "441": {
+            "description": "This item is not available to be sold.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3876,8 +3908,8 @@
                 },
                 "example": {
                   "error": {
-                    "code": 442,
-                    "message": "This item cannot be sold."
+                    "code": 441,
+                    "message": "This item is not available to be sold."
                   }
                 }
               }
@@ -6749,6 +6781,615 @@
         }
       }
     },
+    "/my/{name}/action/rename": {
+      "post": {
+        "tags": [
+          "My characters"
+        ],
+        "summary": "Action Rename",
+        "description": "Rename a character. An active membership is required.",
+        "operationId": "action_rename_my__name__action_rename_post",
+        "security": [
+          {
+            "JWTBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Character name",
+              "description": "Current name of your character."
+            },
+            "description": "Current name of your character."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameCharacterSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Character successfully renamed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameResponseSchema"
+                }
+              }
+            }
+          },
+          "451": {
+            "description": "Access denied, you must be a member to do that.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 451,
+                    "message": "Access denied, you must be a member to do that."
+                  }
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The character is in cooldown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 499,
+                    "message": "The character is in cooldown."
+                  }
+                }
+              }
+            }
+          },
+          "486": {
+            "description": "An action is already in progress for this character.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 486,
+                    "message": "An action is already in progress for this character."
+                  }
+                }
+              }
+            }
+          },
+          "494": {
+            "description": "This name is already in use.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 494,
+                    "message": "This name is already in use."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Character not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 404,
+                    "message": "Character not found."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request could not be processed due to an invalid payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 422,
+                    "message": "Request could not be processed due to an invalid payload.",
+                    "data": {
+                      "field_name": [
+                        "Field required"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/{name}/offerings": {
+      "get": {
+        "tags": [
+          "My characters"
+        ],
+        "summary": "Get Character Seasonal Offerings",
+        "description": "Return today's offerings and completion state for one character.",
+        "operationId": "get_character_seasonal_offerings_my__name__offerings_get",
+        "security": [
+          {
+            "JWTBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Character name",
+              "description": "Name of your character."
+            },
+            "description": "Name of your character."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CharacterSeasonalOfferingsResponseSchema"
+                }
+              }
+            }
+          },
+          "498": {
+            "description": "Character not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 498,
+                    "message": "Character not found."
+                  }
+                }
+              }
+            }
+          },
+          "575": {
+            "description": "This seasonal offering is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 575,
+                    "message": "This seasonal offering is not available."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/{name}/action/offering/accept": {
+      "post": {
+        "tags": [
+          "My characters"
+        ],
+        "summary": "Action Accept Seasonal Offering",
+        "description": "Accept one offering in a daily category and activate its favor.",
+        "operationId": "action_accept_seasonal_offering_my__name__action_offering_accept_post",
+        "security": [
+          {
+            "JWTBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Character name",
+              "description": "Name of your character."
+            },
+            "description": "Name of your character."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptOfferingRequestSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptOfferingResponseSchema"
+                }
+              }
+            }
+          },
+          "498": {
+            "description": "Character not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 498,
+                    "message": "Character not found."
+                  }
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The character is in cooldown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 499,
+                    "message": "The character is in cooldown."
+                  }
+                }
+              }
+            }
+          },
+          "486": {
+            "description": "An action is already in progress for this character.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 486,
+                    "message": "An action is already in progress for this character."
+                  }
+                }
+              }
+            }
+          },
+          "598": {
+            "description": "Seasonal Altar not found on this map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 598,
+                    "message": "Seasonal Altar not found on this map."
+                  }
+                }
+              }
+            }
+          },
+          "574": {
+            "description": "The character has already completed an offering in this category today.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 574,
+                    "message": "The character has already completed an offering in this category today."
+                  }
+                }
+              }
+            }
+          },
+          "576": {
+            "description": "The character has already selected an offering in this category today.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 576,
+                    "message": "The character has already selected an offering in this category today."
+                  }
+                }
+              }
+            }
+          },
+          "575": {
+            "description": "This seasonal offering is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 575,
+                    "message": "This seasonal offering is not available."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request could not be processed due to an invalid payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 422,
+                    "message": "Request could not be processed due to an invalid payload.",
+                    "data": {
+                      "field_name": [
+                        "Field required"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/my/{name}/action/offering": {
+      "post": {
+        "tags": [
+          "My characters"
+        ],
+        "summary": "Action Complete Seasonal Offering",
+        "description": "Complete a previously accepted offering and receive its XP reward.",
+        "operationId": "action_complete_seasonal_offering_my__name__action_offering_post",
+        "security": [
+          {
+            "JWTBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "title": "Character name",
+              "description": "Name of your character."
+            },
+            "description": "Name of your character."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteOfferingRequestSchema"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteOfferingResponseSchema"
+                }
+              }
+            }
+          },
+          "498": {
+            "description": "Character not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 498,
+                    "message": "Character not found."
+                  }
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The character is in cooldown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 499,
+                    "message": "The character is in cooldown."
+                  }
+                }
+              }
+            }
+          },
+          "486": {
+            "description": "An action is already in progress for this character.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 486,
+                    "message": "An action is already in progress for this character."
+                  }
+                }
+              }
+            }
+          },
+          "478": {
+            "description": "Missing required item(s).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 478,
+                    "message": "Missing required item(s)."
+                  }
+                }
+              }
+            }
+          },
+          "598": {
+            "description": "Seasonal Altar not found on this map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 598,
+                    "message": "Seasonal Altar not found on this map."
+                  }
+                }
+              }
+            }
+          },
+          "574": {
+            "description": "The character has already completed an offering in this category today.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 574,
+                    "message": "The character has already completed an offering in this category today."
+                  }
+                }
+              }
+            }
+          },
+          "577": {
+            "description": "The character must accept this seasonal offering first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 577,
+                    "message": "The character must accept this seasonal offering first."
+                  }
+                }
+              }
+            }
+          },
+          "575": {
+            "description": "This seasonal offering is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 575,
+                    "message": "This seasonal offering is not available."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request could not be processed due to an invalid payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 422,
+                    "message": "Request could not be processed due to an invalid payload.",
+                    "data": {
+                      "field_name": [
+                        "Field required"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/my/logs": {
       "get": {
         "tags": [
@@ -7829,6 +8470,44 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StaticDataPage_SeasonRewardSchema_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/seasonal_offerings": {
+      "get": {
+        "tags": [
+          "Seasonal Offerings"
+        ],
+        "summary": "Get Daily Seasonal Offerings",
+        "description": "Return the worldwide seasonal offerings available for the current UTC day.",
+        "operationId": "get_daily_seasonal_offerings_seasonal_offerings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySeasonalOfferingsResponseSchema"
+                }
+              }
+            }
+          },
+          "575": {
+            "description": "This seasonal offering is not available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseSchema"
+                },
+                "example": {
+                  "error": {
+                    "code": 575,
+                    "message": "This seasonal offering is not available."
+                  }
                 }
               }
             }
@@ -11138,6 +11817,59 @@
   },
   "components": {
     "schemas": {
+      "AcceptOfferingDataSchema": {
+        "properties": {
+          "cooldown": {
+            "$ref": "#/components/schemas/CooldownSchema"
+          },
+          "offering": {
+            "$ref": "#/components/schemas/SeasonalOfferingSchema"
+          },
+          "favor_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Favor Expires At"
+          },
+          "character": {
+            "$ref": "#/components/schemas/CharacterSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cooldown",
+          "offering",
+          "favor_expires_at",
+          "character"
+        ],
+        "title": "AcceptOfferingDataSchema"
+      },
+      "AcceptOfferingRequestSchema": {
+        "properties": {
+          "offering_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "title": "Offering Id",
+            "description": "Offering identifier to complete."
+          }
+        },
+        "type": "object",
+        "required": [
+          "offering_id"
+        ],
+        "title": "AcceptOfferingRequestSchema"
+      },
+      "AcceptOfferingResponseSchema": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AcceptOfferingDataSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "AcceptOfferingResponseSchema"
+      },
       "AccessSchema": {
         "properties": {
           "type": {
@@ -11499,6 +12231,7 @@
           "crafting",
           "recycling",
           "task",
+          "favor",
           "other",
           "use",
           "npc_buy",
@@ -11541,6 +12274,7 @@
           "rename",
           "transition",
           "claim_item",
+          "offering",
           "sandbox_give_gold",
           "sandbox_give_item",
           "sandbox_give_xp",
@@ -11812,6 +12546,46 @@
           "description"
         ],
         "title": "BadgeSchema"
+      },
+      "BankDataPage_SimpleItemSchema_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SimpleItemSchema"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Size"
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "total",
+          "page",
+          "size",
+          "pages"
+        ],
+        "title": "BankDataPage[SimpleItemSchema]"
       },
       "BankExtensionSchema": {
         "properties": {
@@ -12422,14 +13196,9 @@
           },
           "path": {
             "items": {
-              "prefixItems": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "integer"
-                }
-              ],
+              "items": {
+                "type": "integer"
+              },
               "type": "array",
               "maxItems": 2,
               "minItems": 2
@@ -13070,6 +13839,90 @@
         ],
         "title": "CharacterSchema"
       },
+      "CharacterSeasonalOfferingsResponseSchema": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CharacterSeasonalOfferingsSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CharacterSeasonalOfferingsResponseSchema"
+      },
+      "CharacterSeasonalOfferingsSchema": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date",
+            "description": "UTC date of this rotation."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At",
+            "description": "Next daily reset at midnight UTC."
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills",
+            "description": "Two skills selected for this rotation."
+          },
+          "xp_reward_percent": {
+            "type": "integer",
+            "title": "Xp Reward Percent",
+            "description": "Percentage of the current level XP requirement granted on completion.",
+            "default": 25
+          },
+          "offerings": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalOfferingSchema"
+            },
+            "type": "array",
+            "title": "Offerings"
+          },
+          "selected_offerings": {
+            "items": {
+              "$ref": "#/components/schemas/SelectedOfferingSchema"
+            },
+            "type": "array",
+            "title": "Selected Offerings",
+            "description": "Offerings accepted or completed by this character today."
+          },
+          "completed_categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Completed Categories",
+            "description": "Categories already completed by this character today."
+          },
+          "active_favors": {
+            "items": {
+              "$ref": "#/components/schemas/OfferingFavorSchema"
+            },
+            "type": "array",
+            "title": "Active Favors",
+            "description": "XP favors active for this character until reset."
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "expires_at",
+          "skills",
+          "offerings",
+          "selected_offerings",
+          "completed_categories",
+          "active_favors"
+        ],
+        "title": "CharacterSeasonalOfferingsSchema"
+      },
       "CharacterStatsResponseSchema": {
         "properties": {
           "data": {
@@ -13089,24 +13942,28 @@
               "type": "integer"
             },
             "type": "object",
-            "title": "Monsters Killed",
-            "default": {}
+            "title": "Monsters Killed"
           },
           "resources_gathered": {
             "additionalProperties": {
               "type": "integer"
             },
             "type": "object",
-            "title": "Resources Gathered",
-            "default": {}
+            "title": "Resources Gathered"
+          },
+          "items_crafted": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Items Crafted"
           },
           "action_counts": {
             "additionalProperties": {
               "type": "integer"
             },
             "type": "object",
-            "title": "Action Counts",
-            "default": {}
+            "title": "Action Counts"
           },
           "deaths": {
             "type": "integer",
@@ -13367,6 +14224,63 @@
         ],
         "title": "CombatSimulationResponseSchema"
       },
+      "CompleteOfferingDataSchema": {
+        "properties": {
+          "cooldown": {
+            "$ref": "#/components/schemas/CooldownSchema"
+          },
+          "offering": {
+            "$ref": "#/components/schemas/SeasonalOfferingSchema"
+          },
+          "reward": {
+            "$ref": "#/components/schemas/OfferingRewardSchema"
+          },
+          "favor_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Favor Expires At"
+          },
+          "character": {
+            "$ref": "#/components/schemas/CharacterSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cooldown",
+          "offering",
+          "reward",
+          "favor_expires_at",
+          "character"
+        ],
+        "title": "CompleteOfferingDataSchema"
+      },
+      "CompleteOfferingRequestSchema": {
+        "properties": {
+          "offering_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "title": "Offering Id",
+            "description": "Offering identifier to complete."
+          }
+        },
+        "type": "object",
+        "required": [
+          "offering_id"
+        ],
+        "title": "CompleteOfferingRequestSchema"
+      },
+      "CompleteOfferingResponseSchema": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CompleteOfferingDataSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "CompleteOfferingResponseSchema"
+      },
       "ConditionOperator": {
         "type": "string",
         "enum": [
@@ -13508,6 +14422,63 @@
           "code"
         ],
         "title": "CraftingSchema"
+      },
+      "DailySeasonalOfferingsResponseSchema": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DailySeasonalOfferingsSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DailySeasonalOfferingsResponseSchema"
+      },
+      "DailySeasonalOfferingsSchema": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date",
+            "description": "UTC date of this rotation."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At",
+            "description": "Next daily reset at midnight UTC."
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills",
+            "description": "Two skills selected for this rotation."
+          },
+          "xp_reward_percent": {
+            "type": "integer",
+            "title": "Xp Reward Percent",
+            "description": "Percentage of the current level XP requirement granted on completion.",
+            "default": 25
+          },
+          "offerings": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonalOfferingSchema"
+            },
+            "type": "array",
+            "title": "Offerings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "expires_at",
+          "skills",
+          "offerings"
+        ],
+        "title": "DailySeasonalOfferingsSchema"
       },
       "DataPage_AccountAchievementSchema_": {
         "properties": {
@@ -13868,46 +14839,6 @@
           "pages"
         ],
         "title": "DataPage[RaidLeaderboardEntrySchema]"
-      },
-      "DataPage_SimpleItemSchema_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SimpleItemSchema"
-            },
-            "type": "array",
-            "title": "Data"
-          },
-          "total": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Total"
-          },
-          "page": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Page"
-          },
-          "size": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Size"
-          },
-          "pages": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Pages"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data",
-          "total",
-          "page",
-          "size",
-          "pages"
-        ],
-        "title": "DataPage[SimpleItemSchema]"
       },
       "DeleteCharacterSchema": {
         "properties": {
@@ -14315,6 +15246,13 @@
             "description": "Cooldown in minutes before the event can be spawned with gems.",
             "default": 0
           },
+          "cooldown_expiration": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "title": "Cooldown Expiration",
+            "description": "Gems spawn cooldown expiration datetime (null if not on cooldown)."
+          },
           "price": {
             "type": "integer",
             "nullable": true,
@@ -14331,13 +15269,6 @@
               }
             ],
             "description": "Transition to add to the map when event is active."
-          },
-          "cooldown_expiration": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true,
-            "title": "Cooldown Expiration",
-            "description": "Gems spawn cooldown expiration datetime (null if not on cooldown)."
           }
         },
         "type": "object",
@@ -14536,6 +15467,7 @@
           },
           "quantity": {
             "type": "integer",
+            "maximum": 100.0,
             "minimum": 1.0,
             "title": "Quantity",
             "description": "Item quantity."
@@ -14584,6 +15516,7 @@
           },
           "quantity": {
             "type": "integer",
+            "maximum": 100.0,
             "minimum": 1.0,
             "title": "Quantity",
             "description": "Item quantity to sell."
@@ -14656,6 +15589,7 @@
           },
           "quantity": {
             "type": "integer",
+            "maximum": 100.0,
             "minimum": 1.0,
             "title": "Quantity",
             "description": "Item quantity."
@@ -15724,6 +16658,7 @@
           "rename",
           "transition",
           "claim_item",
+          "offering",
           "sandbox_give_gold",
           "sandbox_give_item",
           "sandbox_give_xp",
@@ -15771,6 +16706,7 @@
           "bank",
           "grand_exchange",
           "tasks_master",
+          "seasonal_altar",
           "npc",
           "raid"
         ],
@@ -16156,7 +17092,7 @@
           "code": {
             "type": "string",
             "title": "Code",
-            "description": "The code of the NPC. This is the NPC's unique identifier (ID)."
+            "description": "The code of the item. This is the item's unique identifier (ID)."
           },
           "npc": {
             "type": "string",
@@ -16342,6 +17278,95 @@
           "character"
         ],
         "title": "NpcMerchantTransactionSchema"
+      },
+      "OfferingFavorSchema": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "monster",
+              "resource",
+              "craft"
+            ],
+            "title": "Target Type",
+            "description": "Activity receiving the XP favor."
+          },
+          "target_code": {
+            "type": "string",
+            "title": "Target Code",
+            "description": "Exact monster, resource node, or craft receiving the XP favor."
+          },
+          "xp_multiplier": {
+            "type": "number",
+            "title": "Xp Multiplier",
+            "description": "XP multiplier active after accepting the offering.",
+            "default": 1.5
+          },
+          "drop_multiplier": {
+            "type": "number",
+            "title": "Drop Multiplier",
+            "description": "Item drop quantity multiplier. It is 1.5 for monster and resource favors, and 1.0 for craft favors.",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "target_code"
+        ],
+        "title": "OfferingFavorSchema"
+      },
+      "OfferingRequirementSchema": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "Item code required by the offering."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Quantity",
+            "description": "Required item quantity."
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "quantity"
+        ],
+        "title": "OfferingRequirementSchema"
+      },
+      "OfferingRewardSchema": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "combat",
+              "mining",
+              "woodcutting",
+              "fishing",
+              "alchemy",
+              "weaponcrafting",
+              "gearcrafting",
+              "jewelrycrafting",
+              "cooking"
+            ],
+            "title": "Category"
+          },
+          "xp": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Xp",
+            "description": "XP granted immediately."
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "xp"
+        ],
+        "title": "OfferingRewardSchema"
       },
       "PasswordResetConfirmSchema": {
         "properties": {
@@ -17020,7 +18045,7 @@
           },
           "simulation": {
             "$ref": "#/components/schemas/RateLimitScopeSchema",
-            "description": "Rate limits for the fight simulation endpoint. Only available for members."
+            "description": "Rate limit for the fight simulation endpoint. Only available for members."
           },
           "assistant": {
             "anyOf": [
@@ -17146,6 +18171,65 @@
           "code"
         ],
         "title": "RecyclingSchema"
+      },
+      "RenameCharacterDataSchema": {
+        "properties": {
+          "cooldown": {
+            "$ref": "#/components/schemas/CooldownSchema",
+            "description": "Cooldown details."
+          },
+          "old_name": {
+            "type": "string",
+            "title": "Old Name",
+            "description": "Previous character name."
+          },
+          "new_name": {
+            "type": "string",
+            "title": "New Name",
+            "description": "New character name."
+          },
+          "character": {
+            "$ref": "#/components/schemas/CharacterSchema",
+            "description": "Player details."
+          }
+        },
+        "type": "object",
+        "required": [
+          "cooldown",
+          "old_name",
+          "new_name",
+          "character"
+        ],
+        "title": "RenameCharacterDataSchema"
+      },
+      "RenameCharacterSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 12,
+            "minLength": 3,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "title": "Name",
+            "description": "Your desired character name. It's unique and all players can see it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RenameCharacterSchema"
+      },
+      "RenameResponseSchema": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RenameCharacterDataSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "RenameResponseSchema"
       },
       "ResourceResponseSchema": {
         "properties": {
@@ -17396,6 +18480,142 @@
           "rewards"
         ],
         "title": "SeasonSchema"
+      },
+      "SeasonalOfferingSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Daily offering identifier."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "combat",
+              "mining",
+              "woodcutting",
+              "fishing",
+              "alchemy",
+              "weaponcrafting",
+              "gearcrafting",
+              "jewelrycrafting",
+              "cooking"
+            ],
+            "title": "Category",
+            "description": "Combat or skill category."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "monster",
+              "resource",
+              "craft"
+            ],
+            "title": "Type",
+            "description": "Offering source type."
+          },
+          "level_min": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Level Min",
+            "description": "Minimum level of the offering bracket."
+          },
+          "level_max": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Level Max",
+            "description": "Maximum level of the offering bracket."
+          },
+          "requirement": {
+            "$ref": "#/components/schemas/OfferingRequirementSchema"
+          },
+          "favor": {
+            "$ref": "#/components/schemas/OfferingFavorSchema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "type",
+          "level_min",
+          "level_max",
+          "requirement",
+          "favor"
+        ],
+        "title": "SeasonalOfferingSchema"
+      },
+      "SelectedOfferingSchema": {
+        "properties": {
+          "offering_id": {
+            "type": "string",
+            "title": "Offering Id"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "combat",
+              "mining",
+              "woodcutting",
+              "fishing",
+              "alchemy",
+              "weaponcrafting",
+              "gearcrafting",
+              "jewelrycrafting",
+              "cooking"
+            ],
+            "title": "Category"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "completed"
+            ],
+            "title": "Status"
+          },
+          "accepted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Accepted At"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "title": "Completed At"
+          },
+          "reward_xp": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reward Xp",
+            "default": 0
+          },
+          "requirement": {
+            "$ref": "#/components/schemas/OfferingRequirementSchema"
+          },
+          "favor": {
+            "$ref": "#/components/schemas/OfferingFavorSchema"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "offering_id",
+          "category",
+          "status",
+          "accepted_at",
+          "requirement",
+          "favor",
+          "expires_at"
+        ],
+        "title": "SelectedOfferingSchema"
       },
       "SimpleEffectSchema": {
         "properties": {
@@ -18402,7 +19622,13 @@
         "properties": {
           "plan": {
             "$ref": "#/components/schemas/StripeSubscriptionPlan",
-            "description": "Recurring Stripe subscription plan to purchase."
+            "description": "Stripe membership plan to purchase."
+          },
+          "recurring": {
+            "type": "boolean",
+            "title": "Recurring",
+            "description": "Whether to create a recurring Stripe subscription. Set to false to buy membership time once.",
+            "default": true
           }
         },
         "type": "object",
