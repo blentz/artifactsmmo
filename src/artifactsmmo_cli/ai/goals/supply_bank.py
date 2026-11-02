@@ -16,6 +16,7 @@ and `grind_character_xp` use: the band ceiling sits below the survival floor of
 than by tuning.
 """
 
+import copy
 import dataclasses
 from datetime import datetime
 from fractions import Fraction
@@ -52,6 +53,13 @@ class SupplyBankGoal(Goal):
         self._now = now
         self._quantity = quantity
         self._demand = demand
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its clock rebound to `now` (ruling T8b): a cached
+        copy judges satisfaction, and mints its buys, at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._now = now
+        return rebound
 
     def __repr__(self) -> str:
         return f"SupplyBank({self._item_code}x{self._quantity})"

@@ -1,6 +1,10 @@
 """DiscardOverstockGoal: sell, recycle, bank, or delete the copies the keep authority
 licenses, for items the space-pressure gate reports as overstock."""
 
+import copy
+from dataclasses import replace
+from datetime import datetime
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData
@@ -62,6 +66,13 @@ class DiscardOverstockGoal(Goal):
         # Threaded from SelectionContext at the strategy_driver build site
         # (not a WorldState field): gates the disposal-route DEPOSIT arm.
         self._bank_accessible = bank_accessible
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

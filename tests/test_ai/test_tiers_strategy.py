@@ -26,9 +26,10 @@ from artifactsmmo_cli.ai.progression.strategy import (
     root_cost,
     unmet_closure_size,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data
+from tests.test_ai.fixtures import NO_DROPS_CONTEXT, cycle_now, make_state, served_game_data, stamped
 
 
 def _missing(slot: str, code: str):  # type: ignore[no-untyped-def]
@@ -118,7 +119,7 @@ def test_is_reachable_agrees_with_the_descent_ready_source():
     assert is_reachable(ObtainItem("trinket"), state, gd, ctx=NO_DROPS_CONTEXT) is False
     state2 = make_state(inventory={"part_source": 2})
     assert is_reachable(ObtainItem("trinket"), state2, gd, frozenset(),
-                        NO_DROPS_CONTEXT) is True
+                        ctx=NO_DROPS_CONTEXT) is True
 
 
 def test_unmet_closure_size_counts_unmet_nodes():
@@ -162,7 +163,8 @@ def test_decide_delegates_to_the_progression_tree():
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj)
     state = make_state(level=5, skills={"mining": 3})
-    assert eng.decide(state, gd) == decide_tree(state, gd, obj)
+    ctx = stamped(NO_PROFILE_CONTEXT)
+    assert eng.decide(state, gd, ctx=ctx) == decide_tree(state, gd, obj, ctx=ctx)
 
 
 def test_decide_forwards_step_decline_and_it_changes_the_answer():
@@ -211,8 +213,8 @@ def test_decide_forwards_history_into_the_root_walk(monkeypatch: pytest.MonkeyPa
     store = LearningStore(db_path=":memory:", character="probe")
     store.start_session()
     try:
-        engine.decide(state, gd, history=store)
-        engine.decide(state, gd)
+        engine.decide(state, gd, history=store, ctx=stamped(NO_PROFILE_CONTEXT))
+        engine.decide(state, gd, ctx=stamped(NO_PROFILE_CONTEXT))
     finally:
         store.close()
 

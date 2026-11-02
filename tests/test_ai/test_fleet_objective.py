@@ -40,7 +40,7 @@ from artifactsmmo_cli.ai.progression.strategy import root_category
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from tests.test_ai import test_grey_farm
-from tests.test_ai.fixtures import make_state, served_game_data
+from tests.test_ai.fixtures import make_state, served_game_data, stamped
 from tests.test_ai.test_dual_role_fixtures import medal_game_data
 
 TROPHY = TurnIn(item_code="lich_race_trophy", npc_code="archaeologist",
@@ -181,7 +181,7 @@ class TestTheNode:
         assert SUPPLY.is_satisfied(make_state(), served_game_data()) is False
 
     def test_it_has_no_prerequisites_and_is_a_fleet_root(self) -> None:
-        assert prerequisites(SUPPLY, make_state(), served_game_data()) == []
+        assert prerequisites(SUPPLY, make_state(), served_game_data(), ctx=stamped(NO_PROFILE_CONTEXT)) == []
         assert root_category(TURN_IN) == "fleet"
         assert _label(SUPPLY) == ("fleet supply copper_ore", "fleet")
 

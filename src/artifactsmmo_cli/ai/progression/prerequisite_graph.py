@@ -19,7 +19,7 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
 )
 from artifactsmmo_cli.ai.progression.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.requirement_projections import requirement_edges
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -54,7 +54,7 @@ def best_attainable_weapon(game_data: GameData) -> str | None:
 
 
 def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
-                  ctx: SelectionContext = NO_PROFILE_CONTEXT) -> list[MetaGoal]:
+                  ctx: SelectionContext) -> list[MetaGoal]:
     """Direct prerequisites of `node`, derived from game data.
 
     A craftable material with ANY READY non-craft source — a bank withdraw, a

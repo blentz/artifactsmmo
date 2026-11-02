@@ -5,6 +5,7 @@ copies first, then crafted runs sized by the supply ladder; the goal is the
 potions in the bag, then ONE equip into the utility slot `utility_slot_for`
 names. Preemptive guard-tier goal (wired in progression/guards.py)."""
 
+import copy
 from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -47,6 +48,13 @@ class CraftPotionsGoal(Goal):
         self._seed_equipped = (
             equipped_potion_qty(state, self._seed_target[0])
             if state is not None and self._seed_target is not None else 0)
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its clock rebound to `now` (ruling T8b): a cached
+        copy judges satisfaction, and mints its buys, at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._now = now
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

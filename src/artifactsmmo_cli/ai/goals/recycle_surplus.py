@@ -1,5 +1,9 @@
 """RecycleSurplusGoal: recover materials from surplus craftable gear during idle time."""
 
+import copy
+from dataclasses import replace
+from datetime import datetime
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData
@@ -51,6 +55,13 @@ class RecycleSurplusGoal(Goal):
         # the space cap, plan_len=0 — the hoist selected a goal it could never
         # plan). None keeps the strict all-clear semantics.
         self._initial_total = initial_total
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

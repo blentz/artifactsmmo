@@ -1,5 +1,9 @@
 """DrainBankJunkGoal: withdraw over-cap junk out of the bank so it can be shed."""
 
+import copy
+from dataclasses import replace
+from datetime import datetime
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.bank_drain import DrainSnapshot, bank_drain_excess, owned_total
@@ -56,6 +60,13 @@ class DrainBankJunkGoal(Goal):
         # and its shed are a complete plan and a deep pile drains one episode
         # at a time. See `is_satisfied`.
         self._snapshot = snapshot
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

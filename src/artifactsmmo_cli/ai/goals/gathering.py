@@ -1,5 +1,6 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
+import copy
 import dataclasses
 from datetime import datetime
 from fractions import Fraction
@@ -116,6 +117,13 @@ class GatherMaterialsGoal(Goal):
         # `strategy_driver._step_protection_profile`. Not part of goal identity
         # (repr/serialize) — the `needed` map already distinguishes instances.
         self.skill_grind = skill_grind
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its clock rebound to `now` (ruling T8b): a cached
+        copy judges satisfaction, and mints its buys, at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._now = now
+        return rebound
 
     def for_piece(self) -> "GatherMaterialsGoal":
         """This goal as an `L*` piece's material walk (`piece_material`)."""

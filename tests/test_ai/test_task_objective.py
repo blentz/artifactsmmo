@@ -35,6 +35,7 @@ from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.progression.strategy import root_category
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.task_horizon import (
@@ -44,7 +45,7 @@ from artifactsmmo_cli.ai.task_horizon import (
     TaskHorizon,
 )
 from artifactsmmo_cli.ai.task_worth_core import WORTHLESS, TaskWorth
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, stamped
 from tests.test_ai.test_grey_farm import _gd, make_state
 
 
@@ -108,7 +109,7 @@ class TestReachTaskOutcome:
 
     def test_every_meta_goal_dispatch_has_an_arm(self) -> None:
         node = ReachTaskOutcome("chicken")
-        assert prerequisites(node, _held(), _gd()) == []
+        assert prerequisites(node, _held(), _gd(), ctx=stamped(NO_PROFILE_CONTEXT)) == []
         assert root_category(node) == "task"
         assert _label(node) == ("task chicken", "task")
 

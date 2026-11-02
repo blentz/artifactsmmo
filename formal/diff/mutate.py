@@ -5243,6 +5243,29 @@ COMMITTED_PLAN_MUTATIONS = [
      "        return fight"),
 ]
 # A committed leg repeats until it delivers. Killed by tests/test_ai/test_plan_cache.py.
+# Ruling T8b (Task 8b fix round 1): a cached plan's goal and steps are judged at
+# the asking cycle's clock, through one seam. Killed by
+# tests/test_ai/test_plan_or_reuse.py (the player wiring) and
+# tests/test_ai/test_cycle_clock_pins.py (the cache and the goals).
+CYCLE_CLOCK_REUSE_PLAYER_MUTATIONS = [
+    ("player: a cached plan keeps its planning instant",
+     "        if cache is not None:\n"
+     "            cache.on_cycle_clock(self._cycle_now)\n",
+     ""),
+]
+CYCLE_CLOCK_REUSE_CACHE_MUTATIONS = [
+    ("plan cache: the cached goal keeps its planning instant",
+     "        self.selected_goal = self.selected_goal.on_cycle_clock(now)\n",
+     ""),
+    ("plan cache: the cached steps keep their planning instant",
+     "        self.plan = [action.on_cycle_clock(now) for action in self.plan]\n",
+     ""),
+]
+CYCLE_CLOCK_REUSE_SELL_MUTATIONS = [
+    ("sell goal: a cached copy keeps its context's instant",
+     "        rebound._ctx = replace(self._ctx, now=now)\n",
+     ""),
+]
 PLAN_CACHE_TARGET_MUTATIONS = [
     ("plan_cache: a planned fight advances after one win (its drop not awaited)",
      "        return action.drop_target\n",
@@ -14244,6 +14267,12 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(PLAN_CACHE_SRC, PLAN_CACHE_TARGET_MUTATIONS,
               "tests/test_ai/test_plan_cache.py", survivors)
+    run_group(PLAYER_SRC, CYCLE_CLOCK_REUSE_PLAYER_MUTATIONS,
+              "tests/test_ai/test_plan_or_reuse.py", survivors)
+    run_group(PLAN_CACHE_SRC, CYCLE_CLOCK_REUSE_CACHE_MUTATIONS,
+              "tests/test_ai/test_cycle_clock_pins.py", survivors)
+    run_group(SELL_INVENTORY_GOAL_SRC, CYCLE_CLOCK_REUSE_SELL_MUTATIONS,
+              "tests/test_ai/test_cycle_clock_pins.py", survivors)
     run_group(SHOULD_REPLAN_SRC, REFRESH_ONLY_MUTATIONS,
               "tests/test_ai/test_should_replan.py", survivors)
     run_group(PLAYER_SRC, PLAYER_COMMITMENT_MUTATIONS,

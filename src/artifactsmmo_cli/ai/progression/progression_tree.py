@@ -43,7 +43,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression import strategy
 from artifactsmmo_cli.ai.progression.meta_goal import StepDecline, no_decline
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # WAVE 3a deleted four private helpers from here — `_candidate_root`,
@@ -115,8 +115,8 @@ def _resolution_rows(state: WorldState, game_data: GameData,
 
 def decide_tree(state: WorldState, game_data: GameData,
                 objective: CharacterObjective,
-                step_decline: StepDecline = no_decline,
-                ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                step_decline: StepDecline = no_decline, *,
+                ctx: SelectionContext,
                 history: LearningStore | None = None,
                 ) -> "strategy.StrategyDecision":
     """THE FLIP (wave 3a, spec §5.2): the root is RESOLVED, not ranked.

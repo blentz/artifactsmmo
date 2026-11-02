@@ -1,5 +1,9 @@
 """SellInventoryGoal: sell the copies the keep authority licenses, for gold and space."""
 
+import copy
+from dataclasses import replace
+from datetime import datetime
+
 from artifactsmmo_cli.ai.accumulation_sell import (
     SEVERE_STEPS,
     bank_sellable_surplus,
@@ -89,6 +93,13 @@ class SellInventoryGoal(Goal):
             self._snapshot_codes = frozenset(
                 bank_sellable_surplus(state, game_data, ctx))
             self._initial_owned = self._owned_snapshot_total(state)
+
+    def on_cycle_clock(self, now: datetime) -> Goal:
+        """This goal with its context's clock rebound to `now` (ruling T8b):
+        a cached copy judges satisfaction at the cycle that asks."""
+        rebound = copy.copy(self)
+        rebound._ctx = replace(self._ctx, now=now)
+        return rebound
 
     def _owned_snapshot_total(self, state: WorldState) -> int:
         """Copies of the snapshot's codes the character OWNS — bag PLUS bank.

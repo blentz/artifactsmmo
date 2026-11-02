@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem
 from artifactsmmo_cli.ai.progression.objective import _permanent_vendor_purchases
 from artifactsmmo_cli.ai.progression.strategy import actionable_step
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -60,7 +60,7 @@ def _gather_step_target_is_root(tgt_code: str, root_code: str) -> bool:
 
 def _gather_goal_for_unreachable_equippable(
     code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
-    ctx: SelectionContext = NO_PROFILE_CONTEXT,
+    ctx: SelectionContext,
     step: ObtainItem | None = None,
 ) -> GatherMaterialsGoal | None:
     """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
@@ -144,7 +144,7 @@ def is_missing_piece(code: str, ctx: SelectionContext) -> bool:
 
 
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
-                     ctx: SelectionContext = NO_PROFILE_CONTEXT) -> Goal | None:
+                     ctx: SelectionContext) -> Goal | None:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
     GatherMaterials for the strategy's next achievable step toward it.
 

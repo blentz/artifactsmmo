@@ -297,7 +297,7 @@ def _with_wanted(candidates: list[GrindCandidate],
 
 def build_selectable_grind_candidates(skill: str, state: WorldState,
                                       game_data: GameData,
-                                      ctx: SelectionContext = NO_PROFILE_CONTEXT
+                                      ctx: SelectionContext
                                       ) -> list[GrindCandidate]:
     """`skill_grind_target`'s private producer: every in-skill, IN-LEVEL
     craftable as a `GrindCandidate` (whole-chain `acquire_steps` against
@@ -544,8 +544,8 @@ def semantic_order(skill: str, current_level: int, candidates: list[GrindCandida
 
 
 def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
-                       reserved: frozenset[str] = frozenset(),
-                       ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:
+                       reserved: frozenset[str] = frozenset(), *,
+                       ctx: SelectionContext) -> str | None:
     candidates = [
         c for c in build_selectable_grind_candidates(skill, state, game_data, ctx)
         if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))

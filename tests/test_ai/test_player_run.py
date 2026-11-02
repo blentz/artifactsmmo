@@ -1107,6 +1107,8 @@ def test_run_holds_plan_cursor_through_a_batched_gather():
     goal = MagicMock()
     goal.is_satisfied.return_value = False
     goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+    # A stub reads no clock: the cycle's rebind (`on_cycle_clock`) is itself.
+    goal.on_cycle_clock.return_value = goal
 
     player._strategy = MagicMock()
     player._strategy.decide.return_value = _StubDecision()

@@ -36,7 +36,9 @@ from artifactsmmo_cli.ai.progression.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from formal.diff.oracle_client import run_oracle
+from tests.test_ai.fixtures import stamped
 
 KIND_OBTAIN, KIND_CHAR = 0, 2
 
@@ -144,8 +146,8 @@ def test_reachable_implies_actionable_wellformed(seed):
 
     with MonkeyPatch.context() as mp:
         _install(graph, mp)
-        py_reach = strategy.is_reachable(root_node, state, game_data)
-        py_step = strategy.actionable_step(root_node, state, game_data)
+        py_reach = strategy.is_reachable(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
+        py_step = strategy.actionable_step(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
 
     ctx = (f"n={graph.n} root={root} cycle={allow_cycle} deep={deep} "
            f"kinds={graph.kinds} sat={graph.sat} prod={graph.prod} "
@@ -179,8 +181,8 @@ def test_two_tracker_match_oracle_arbitrary(seed):
     root_node = graph.node(root)
     with MonkeyPatch.context() as mp:
         _install(graph, mp)
-        py_reach = strategy.is_reachable(root_node, state, game_data)
-        py_step = strategy.actionable_step(root_node, state, game_data)
+        py_reach = strategy.is_reachable(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
+        py_step = strategy.actionable_step(root_node, state, game_data, ctx=stamped(NO_PROFILE_CONTEXT))
 
     args = _encode(graph, root, fuel)
     lean_reach = run_oracle("strategy_is_reachable", [args])[0]["is_reachable"]
@@ -208,8 +210,8 @@ def test_diamond_shared_leaf_reachable_has_step():
     state, gd = object(), object()
     with MonkeyPatch.context() as mp:
         _install(g, mp)
-        assert strategy.is_reachable(g.node(0), state, gd) is True
-        assert strategy.actionable_step(g.node(0), state, gd) is not None
+        assert strategy.is_reachable(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) is True
+        assert strategy.actionable_step(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) is not None
 
 
 def test_dead_sibling_then_shared_actionable():
@@ -228,5 +230,5 @@ def test_dead_sibling_then_shared_actionable():
     with MonkeyPatch.context() as mp:
         _install(g, mp)
         # node 3 non-producible leaf -> branch 1 unreachable -> root unreachable
-        assert strategy.is_reachable(g.node(0), state, gd) is False
+        assert strategy.is_reachable(g.node(0), state, gd, ctx=stamped(NO_PROFILE_CONTEXT)) is False
         # invariant vacuously holds (guard would skip); step may be None and that's fine

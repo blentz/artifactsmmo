@@ -94,6 +94,13 @@ def cycle_now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+def stamped(ctx: SelectionContext) -> SelectionContext:
+    """`ctx` stamped with the cycle clock at CALL time (`cycle_now`), for a
+    test that runs a decision outside any cycle. `NO_PROFILE_CONTEXT` itself
+    carries the module's import instant, which a test must never decide at."""
+    return replace(ctx, now=cycle_now())
+
+
 def coordination_now() -> datetime:
     """The UTC instant to stamp a coordination row with, read at CALL time.
 

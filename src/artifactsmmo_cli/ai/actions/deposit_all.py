@@ -2,6 +2,7 @@
 
 import dataclasses
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -154,6 +155,10 @@ class DepositAllAction(Action):
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return self.accessible and bool(self._deposits(state))
+
+    def on_cycle_clock(self, now: datetime) -> Action:
+        """This deposit with its keep context's clock rebound to `now`."""
+        return dataclasses.replace(self, ctx=dataclasses.replace(self.ctx, now=now))
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.bank_location

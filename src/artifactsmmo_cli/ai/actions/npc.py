@@ -97,6 +97,11 @@ class NpcBuyAction(Action):
             now=self.now,
         )
 
+    def on_cycle_clock(self, now: datetime) -> "Action":
+        """This edge judged at the cycle at `now`: the same edge, its event
+        window read at `now`."""
+        return dataclasses.replace(self, now=now)
+
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         # Defense in depth: assert the slot-floor precondition before mutating.
         # Matches Phase-3 OptimizeLoadoutAction.apply shape — any precondition

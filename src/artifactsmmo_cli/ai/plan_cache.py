@@ -2,14 +2,12 @@
 the reuse-vs-replan decision lives in ai.should_replan, not here."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
-from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.world_state import GOLD_CODE, WorldState
@@ -58,13 +56,16 @@ class PlanCache:
         return self.plan[self.cursor]
 
     def on_cycle_clock(self, now: datetime) -> None:
-        """Hand every vendor step this cycle's clock (ruling T8b). A cached
-        plan outlives the cycle that planned it, and a vendor step judges its
-        event window at the instant it carries: without this, a buy planned
-        before its window shut would still read as applicable from the old
-        instant, and the cycle would execute a sale the server refuses."""
-        self.plan = [replace(a, now=now) if isinstance(a, NpcBuyAction | NpcSellAction) else a
-                     for a in self.plan]
+        """Hand the cached goal and every step this cycle's clock (ruling T8b),
+        through their one seam (`Goal.on_cycle_clock` / `Action.on_cycle_clock`).
+        A cached plan outlives the cycle that planned it, and a vendor step or a
+        goal's satisfaction judges its event window at the instant it carries:
+        without this, a buy planned before its window shut would still read as
+        applicable from the old instant, and a goal whose last sale closed would
+        still read as unmet, so the cycle would keep executing legs toward a
+        trade the server refuses."""
+        self.selected_goal = self.selected_goal.on_cycle_clock(now)
+        self.plan = [action.on_cycle_clock(now) for action in self.plan]
 
     def advance(self) -> None:
         self.cursor += 1

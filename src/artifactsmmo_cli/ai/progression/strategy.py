@@ -73,7 +73,7 @@ def _prereq_order(node: MetaGoal) -> tuple[int, str, int]:
 
 
 def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
-                    ctx: SelectionContext = NO_PROFILE_CONTEXT) -> MetaGoal | None:
+                    ctx: SelectionContext) -> MetaGoal | None:
     """Deepest unmet node reachable from root whose DIRECT prerequisites are all
     satisfied (the 'singular loop' step). None when cyclically blocked.
 
@@ -102,7 +102,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
 
 
 def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData,
-                       ctx: SelectionContext = NO_PROFILE_CONTEXT) -> int:
+                       ctx: SelectionContext) -> int:
     """Structural cost proxy: count of unmet nodes in root's prereq closure (min 1)."""
     seen: set[MetaGoal] = set()
     stack: list[MetaGoal] = [root]
@@ -119,7 +119,7 @@ def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData,
 
 
 def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
-             ctx: SelectionContext = NO_PROFILE_CONTEXT) -> int:
+             ctx: SelectionContext) -> int:
     """Effort proxy in 'steps remaining': levels for leaf progression goals,
     craft/gather chain size for gear. Floored at 1."""
     if isinstance(root, ReachCharLevel):
@@ -162,8 +162,8 @@ def _producible(code: str, state: WorldState, game_data: GameData, now: datetime
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
-                 path: frozenset[MetaGoal] = frozenset(),
-                 ctx: SelectionContext = NO_PROFILE_CONTEXT) -> bool:
+                 path: frozenset[MetaGoal] = frozenset(), *,
+                 ctx: SelectionContext) -> bool:
     """True when `root`'s entire prerequisite chain bottoms out in obtainable
     leaves. Cycle-safe (a node on the current path can't bottom out)."""
     if root.is_satisfied(state, game_data):
@@ -174,7 +174,7 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
     if isinstance(root, ObtainItem) and not prereqs:
         return _producible(root.code, state, game_data, ctx.now)
     sub_path = path | {root}
-    return all(is_reachable(p, state, game_data, sub_path, ctx) for p in prereqs)
+    return all(is_reachable(p, state, game_data, sub_path, ctx=ctx) for p in prereqs)
 
 
 @dataclass(frozen=True)
@@ -269,8 +269,8 @@ class StrategyEngine:
     objective: CharacterObjective
 
     def decide(self, state: WorldState, game_data: GameData,
-               step_decline: StepDecline = no_decline,
-               ctx: SelectionContext = NO_PROFILE_CONTEXT,
+               step_decline: StepDecline = no_decline, *,
+               ctx: SelectionContext,
                history: LearningStore | None = None,
                ) -> StrategyDecision:
         """Thin delegate to the progression tree, which since wave 3a RESOLVES

@@ -47,7 +47,7 @@ from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
-from tests.test_ai.fixtures import make_state, served_game_data
+from tests.test_ai.fixtures import make_state, served_game_data, stamped
 from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
@@ -430,7 +430,7 @@ class TestArbiterSelection:
                                      inventory={"copper_ore": 20}, inventory_max=20,
                                      bank_items={})  # bank visited, 0 items < capacity 50
         player._blockers.clear("bank")
-        decision = player._strategy.decide(player.state, player.game_data)
+        decision = player._strategy.decide(player.state, player.game_data, ctx=stamped(NO_PROFILE_CONTEXT))
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
             decision, player.state, player.game_data, actions, player._selection_context())

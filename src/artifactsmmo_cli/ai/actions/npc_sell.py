@@ -54,6 +54,11 @@ class NpcSellAction(Action):
             now=self.now,
         )
 
+    def on_cycle_clock(self, now: datetime) -> "Action":
+        """This edge judged at the cycle at `now`: the same edge, its event
+        window read at `now`."""
+        return dataclasses.replace(self, now=now)
+
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         price = game_data.npc_buys_item(self.npc_code, self.item_code) or 0
         new_gold = state.gold + price * self.quantity

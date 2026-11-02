@@ -9,22 +9,22 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def craft_rung(skill: str, state: WorldState, game_data: GameData,
-               ctx: SelectionContext = NO_PROFILE_CONTEXT) -> str | None:
+               ctx: SelectionContext) -> str | None:
     """The craftable in-skill rung a grind of `skill` makes: one that leaves
     the committed step's materials alone when there is one
     (`ctx.step_profile`: live Robby 2026-08-05, a grind that ate the very
     hardwood the committed step had gathered), else any."""
-    return (skill_grind_target(skill, state, game_data, frozenset(ctx.step_profile), ctx)
+    return (skill_grind_target(skill, state, game_data, frozenset(ctx.step_profile), ctx=ctx)
             or skill_grind_target(skill, state, game_data, ctx=ctx))
 
 
 def grind_rung_goal(skill: str, state: WorldState, game_data: GameData,
-                    ctx: SelectionContext = NO_PROFILE_CONTEXT) -> GatherMaterialsGoal | None:
+                    ctx: SelectionContext) -> GatherMaterialsGoal | None:
     """One grind cycle of `skill` as the one walk serves it (Phase 2d-L3): make
     ANOTHER rung — the craftable in-skill rung, else the gatherable in-skill
     resource — so the cycle's committed plan ends in the leg that earns the

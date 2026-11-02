@@ -1,6 +1,7 @@
 """Goal ABC for GOAP planning."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
@@ -29,6 +30,15 @@ class Goal(ABC):
     @abstractmethod
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         """Partial world state the planner targets."""
+
+    def on_cycle_clock(self, now: datetime) -> "Goal":
+        """This goal as the cycle at `now` judges it (ruling T8b). A goal that
+        reads no clock is itself; one that carries the cycle clock (its own
+        `now`, or a context's) overrides this to return a copy rebound to
+        `now`. The ONE way a cached goal reaches a later cycle's instant
+        (`PlanCache.on_cycle_clock`): its `is_satisfied` then judges every
+        window at the cycle that asks."""
+        return self
 
     def priority(self, state: WorldState, game_data: GameData,
                  history: LearningStore | None = None) -> float:

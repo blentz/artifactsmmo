@@ -1,6 +1,7 @@
 """Action ABC for GOAP planning."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import ClassVar, TypeVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -44,6 +45,14 @@ class Action(ABC):
     @abstractmethod
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         """Return True if this action can be taken from the given state."""
+
+    def on_cycle_clock(self, now: datetime) -> "Action":
+        """This action as the cycle at `now` judges it (ruling T8b). An action
+        that reads no clock is itself; one that carries the cycle clock (a
+        vendor's event window, a context) overrides this to rebind it. The ONE
+        way a cached plan's steps reach a later cycle's instant
+        (`PlanCache.on_cycle_clock`)."""
+        return self
 
     travel_region: str = "overworld"
     """Access region this action's folded movement stays inside (P5b), or

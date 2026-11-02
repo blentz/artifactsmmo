@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.learning.fight_seconds_model import committed_timing
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -15,6 +16,7 @@ from tests.test_ai.fixtures import (
     patched_logs,
     season_8_status,
 )
+from tests.test_ai.test_cycle_clock_pins import WINDOW_END, T, _at_the_buyer, _event_buyer_world
 from tests.test_ai.test_rest_first import TILE, TIMING
 from tests.test_ai.test_rest_first import _gd as _rest_gd
 from tests.test_ai.test_rest_first import _state as _rest_state
@@ -27,6 +29,9 @@ class _Goal:
     def is_satisfied(self, state):
         return self.satisfied
 
+    def on_cycle_clock(self, now):
+        return self
+
     def __repr__(self):
         return "FakeGoal()"
 
@@ -37,6 +42,9 @@ class _Act:
 
     def is_applicable(self, state, game_data):
         return self.applicable
+
+    def on_cycle_clock(self, now):
+        return self
 
     def __repr__(self):
         return "FakeAct()"
@@ -206,3 +214,23 @@ def test_a_cached_fight_the_threshold_admits_is_unready_when_resting_pays():
     gd = _rest_gd()
     assert GamePlayer._fight_ready(fight, _rest_state(40), gd, TIMING) is False
     assert GamePlayer._fight_ready(fight, _rest_state(60), gd, TIMING) is True
+
+
+def test_a_cached_vendor_step_is_judged_at_this_cycles_clock():
+    """Ruling T8b, through the reuse seam: a buy cached while its event window
+    was open is reused while the cycle clock is inside the window, and forces a
+    replan once the cycle clock passes it, although the cached step was stamped
+    at the planning instant."""
+    gd = _event_buyer_world()
+    state = _at_the_buyer()
+    buy = NpcBuyAction(npc_code="gemstone_merchant", item_code="copper_ore",
+                       npc_location=(6, -1), now=T)
+    player, calls = _player_with_stub_plan([buy, buy], _Goal())
+    player._cycle_now = T
+    player._plan_or_reuse(state, gd, [])
+    assert calls["n"] == 1
+    player._plan_or_reuse(state, gd, [])
+    assert calls["n"] == 1, "inside the window the cached buy is reused"
+    player._cycle_now = WINDOW_END
+    *_, replanned = player._plan_or_reuse(state, gd, [])
+    assert replanned is True and calls["n"] == 2

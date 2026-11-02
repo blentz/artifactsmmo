@@ -36,9 +36,10 @@ from artifactsmmo_cli.ai.progression.guards import GuardKind, SelectionContext, 
 from artifactsmmo_cli.ai.progression.guards import _fires as guard_fires
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
 from artifactsmmo_cli.ai.progression.strategy import StrategyEngine
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data
+from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT, cycle_now, make_state, served_game_data, stamped
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -174,7 +175,7 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
     )
 
     eng = StrategyEngine(CharacterObjective.from_game_data(gd))
-    chosen_root = eng.decide(state, gd).chosen_root
+    chosen_root = eng.decide(state, gd, ctx=stamped(NO_PROFILE_CONTEXT)).chosen_root
     assert "enhanced_health_potion" not in repr(chosen_root)
 
 

@@ -17,6 +17,9 @@ Two kinds of pin:
   `now` (a store-less `NO_PROFILE_CONTEXT` derivation carries the caller's
   instant, not the module's import instant)."""
 
+import importlib
+import inspect
+import pkgutil
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -24,6 +27,7 @@ from typing import Any
 
 import pytest
 
+from artifactsmmo_cli.ai import actions as actions_package
 from artifactsmmo_cli.ai import (
     gear_objective,
     grind_heal_prep,
@@ -31,16 +35,27 @@ from artifactsmmo_cli.ai import (
     skill_grindable,
     suppliable,
 )
+from artifactsmmo_cli.ai import goals as goals_package
 from artifactsmmo_cli.ai.accumulation_sell import sellable_tradeable_now
+from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.bank_drain import DrainSnapshot
 from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals import craft_potions
+from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
+from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
+from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.post_buy_bid import PostBuyBidGoal
+from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
+from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.supply_bank import SupplyBankGoal
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
@@ -302,3 +317,125 @@ def test_a_cached_plans_vendor_steps_move_to_the_new_cycles_clock() -> None:
     cache.on_cycle_clock(WINDOW_END)
     assert cache.plan[0] is rest
     assert cache.plan[1].now == WINDOW_END and not cache.plan[1].is_applicable(state, gd)
+
+
+# ── cached goals and steps: one seam to the asking cycle's clock ─────────────
+
+
+def _clock_of(obj: Any) -> datetime:
+    """The cycle instant a goal or action carries: its own `now`, else its context's."""
+    for name in ("_now", "now"):
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return (obj._ctx if hasattr(obj, "_ctx") else obj.ctx).now
+
+
+def _clocked_objects() -> list[Any]:
+    """One of every goal and action that carries a cycle clock, built at `T`."""
+    gd = _event_buyer_world()
+    loadout = ChosenLoadout(monster="chicken", potions=(), food=(), made_food=())
+    return [
+        SellInventoryGoal(game_data=gd, ctx=AT_T, bank_accessible=True),
+        DiscardOverstockGoal(game_data=gd, ctx=AT_T),
+        DepositInventoryGoal(game_data=gd, ctx=AT_T),
+        PostBuyBidGoal(game_data=gd, ctx=AT_T),
+        DrainBankJunkGoal(gd, AT_T, True, DrainSnapshot(frozenset(), 0)),
+        RecycleSurplusGoal(game_data=gd, ctx=AT_T),
+        CraftPotionsGoal(loadout=loadout, now=T),
+        GatherMaterialsGoal("copper_ore", {"copper_ore": 1}, now=T),
+        SupplyBankGoal(item_code="copper_ore", quantity=1, demand=1, now=T),
+        NpcBuyAction(npc_code=_EVENT_BUYER, item_code="copper_ore", npc_location=(6, -1), now=T),
+        NpcSellAction(npc_code=_EVENT_BUYER, item_code="copper_ore", npc_location=(6, -1), now=T),
+        DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd, ctx=AT_T),
+    ]
+
+
+@pytest.mark.parametrize("obj", _clocked_objects(), ids=lambda obj: type(obj).__name__)
+def test_every_clocked_goal_and_action_rebinds_to_the_asking_cycle(obj: Any) -> None:
+    rebound = obj.on_cycle_clock(WINDOW_END)
+    assert _clock_of(rebound) == WINDOW_END
+    assert _clock_of(obj) == T, "the planning cycle's object is left as it was"
+    assert repr(rebound) == repr(obj)
+
+
+def _subclasses(cls: type) -> set[type]:
+    found = set(cls.__subclasses__())
+    for sub in list(found):
+        found |= _subclasses(sub)
+    return found
+
+
+def test_no_goal_or_action_carries_a_clock_without_the_seam() -> None:
+    """A goal or action whose constructor takes the cycle clock (`now`) or a
+    context (`ctx`, which carries it) overrides `on_cycle_clock`, so a cached
+    copy is never judged at its planning instant."""
+    for package in (goals_package, actions_package):
+        for module in pkgutil.walk_packages(package.__path__, package.__name__ + "."):
+            importlib.import_module(module.name)
+    missing = sorted(
+        cls.__name__ for cls in _subclasses(Goal) | _subclasses(Action)
+        if cls.__module__.startswith("artifactsmmo_cli.")
+        and {"now", "ctx"} & set(inspect.signature(cls.__init__).parameters)
+        and "on_cycle_clock" not in vars(cls))
+    assert missing == []
+    covered = {type(obj) for obj in _clocked_objects()}
+    clocked = {cls for cls in _subclasses(Goal) | _subclasses(Action)
+               if cls.__module__.startswith("artifactsmmo_cli.") and "on_cycle_clock" in vars(cls)}
+    assert clocked == covered, "every overriding class is pinned above"
+
+
+def test_a_cached_sell_goal_is_met_once_its_buyers_window_closes() -> None:
+    gd = _event_buyer_world()
+    state = _at_the_buyer()
+    goal = SellInventoryGoal(game_data=gd, ctx=AT_T, bank_accessible=True)
+    assert goal.is_satisfied(state) is False
+    assert goal.on_cycle_clock(WINDOW_END).is_satisfied(state) is True
+
+
+def test_a_cached_gather_goal_mints_its_buy_at_the_asking_cycle() -> None:
+    gd = _event_buyer_world()
+    state = _at_the_buyer(inventory={})
+    goal = GatherMaterialsGoal("copper_ore", {"copper_ore": 1}, now=T).on_cycle_clock(WINDOW_END)
+    buys = [a for a in goal.relevant_actions([], state, gd) if isinstance(a, NpcBuyAction)]
+    assert [a.now for a in buys] == [WINDOW_END] and not buys[0].is_applicable(state, gd)
+
+
+def test_a_cached_supply_goal_buys_at_the_asking_cycle() -> None:
+    gd = _event_buyer_world()
+    state = _at_the_buyer(inventory={})
+    goal = SupplyBankGoal(item_code="copper_ore", quantity=1, demand=1, now=T).on_cycle_clock(WINDOW_END)
+    buys = [a for a in goal.relevant_actions([], state, gd) if isinstance(a, NpcBuyAction)]
+    assert [a.now for a in buys] == [WINDOW_END]
+
+
+def test_a_cached_potion_goal_sizes_its_batch_at_the_asking_cycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = _record_call_clock(monkeypatch, craft_potions, "potion_batch",
+                              lambda state, game_data, loadout, now: now)
+    loadout = ChosenLoadout(monster="chicken", potions=(), food=(), made_food=())
+    goal = CraftPotionsGoal(loadout=loadout, game_data=_event_buyer_world(), now=T)
+    goal.on_cycle_clock(WINDOW_END).is_satisfied(_at_the_buyer())
+    assert seen == [WINDOW_END]
+
+
+def test_the_plan_cache_rebinds_its_goal_through_the_same_seam() -> None:
+    gd = _event_buyer_world()
+    state = _at_the_buyer()
+    cache = PlanCache(selected_goal=SellInventoryGoal(game_data=gd, ctx=AT_T, bank_accessible=True),
+                      plan=[RestAction()], crafting_target=None, plan_level=1, goal_repr="g")
+    assert cache.selected_goal.is_satisfied(state) is False
+    cache.on_cycle_clock(WINDOW_END)
+    assert cache.selected_goal.is_satisfied(state) is True
+
+
+def test_a_potion_batch_walks_its_supply_on_the_goals_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Not vacuous like an empty loadout: a chosen potion short of its carry,
+    with a recipe, so the batch actually walks its supply."""
+    gd = _event_buyer_world()
+    gd._item_stats["small_potion"] = ItemStats(code="small_potion", level=1, type_="utility",
+                                               crafting_skill="alchemy", crafting_level=1)
+    gd._crafting_recipes["small_potion"] = {"copper_ore": 1}
+    seen = _record_obtain_clock(monkeypatch, potion_supply)
+    loadout = ChosenLoadout(monster="chicken", potions=(("small_potion", 1),), food=(), made_food=())
+    goal = CraftPotionsGoal(loadout=loadout, game_data=gd, now=T)
+    goal.on_cycle_clock(WINDOW_END).is_satisfied(_at_the_buyer(skills={"alchemy": 1}))
+    assert seen and set(seen) == {(WINDOW_END, WINDOW_END)}
