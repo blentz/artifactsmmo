@@ -12,6 +12,7 @@ import pytest
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
+from artifactsmmo_cli.ai.party_win import MAX_JOINERS
 from artifactsmmo_cli.audit.craft_census import BARE, LOSES, CellResult, fight_needs, run_cell
 from artifactsmmo_cli.audit.craft_completeness import (
     ARMORY_BAG,
@@ -64,7 +65,10 @@ def test_the_ladder_grants_one_condition_per_rung() -> None:
     assert all(c.skill_level == 20 and c.geared for _, c, _ in rungs[5:])
     assert all(c.keys for _, c, _ in rungs[15:]) and not any(c.keys for _, c, _ in rungs[:15])
     assert all(c.grey for _, c, _ in rungs[26:]) and not any(c.grey for _, c, _ in rungs[:26])
-    assert all(c.party == PARTY_JOINERS for _, c, _ in rungs[37:])
+    # The party rungs bring every joiner the server admits beside the leader
+    # (a party of three, `party_win.MAX_JOINERS`), not one.
+    assert PARTY_JOINERS == MAX_JOINERS
+    assert all(c.party == MAX_JOINERS for _, c, _ in rungs[37:])
     assert not any(c.party for _, c, _ in rungs[:37])
     # an event-only leaf adds the events rung
     names = [name for name, _, _ in ladder("conjurer_cloak", gd)]

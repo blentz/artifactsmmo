@@ -4628,9 +4628,20 @@ GOLD_FUNDED_DECOMPOSE_MUTATIONS = [
      "    return (spendable_pocket(state, game_data, needed) if policy.fight_gold\n"
      "            else state.gold)\n",
      "    return state.gold\n"),
-    ("craft_plan_gen: the gold fight is the walk's monster, not the price's",
-     "        fight = fights.get(gold_monster) if gold_monster is not None else None\n",
-     "        fight = fights.get(route.via)\n"),
+    # RETIRED (plan C Task 9), equivalent since the merge of the ticket-farm fix
+    # (5416e876): "the gold fight is the walk's monster, not the price's"
+    # (`fights.get(gold_monster)` -> `fights.get(route.via)`). The walk now
+    # serves the route that priced each item (`prefer` -> `route_order`, the
+    # PRICED_ROUTE_WALK group pins it), so a GOLD_DROP leg's `route.via` is the
+    # cheapest GOLD_DROP route of gold's `acquisition_options` on the same
+    # state and ctx, ranked by the same per-gold unit cost (a fight has no
+    # inputs, so `owned`, `charge` and the store do not move it), first of
+    # equal costs in options order; `fight_gold_monster` is that same argmin
+    # (`priced_route` over the GOLD_DROP routes). The fight ceiling and reach
+    # gates are `gold_drop_routes`', shared by both, and gold's routes carry
+    # no grey gate, so the walk's grey directive does not split them. Probed:
+    # with fight records surcharging the cheapest monster and with the grey
+    # directive refused, both sides name one monster.
     ("craft_plan_gen: the plan goes on past the gold fight (no re-decide)",
      "                # committed to all of them would not see the objective move.\n"
      "                break\n",
@@ -4811,6 +4822,8 @@ GRIND_RUNG_PRODUCE_MUTATIONS = [
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset({code}))",
      "            pricing_ctx, equip=False, policy=GRIND_PRICING, produce=frozenset())"),
 ]
+# Killed by test_the_book_prices_no_grind_rung: a GE fill route hides a rung's
+# gated drop and, with no gold rate on the pricing context, walls it.
 GRIND_SERVED_PRICE_MUTATIONS = [
     ("skill_grind_target: the grind prices a GE fill its descent never takes",
      "GRIND_PRICING = replace(GRIND_POLICY, price_climbs=False, gather_skill_gate=False)",

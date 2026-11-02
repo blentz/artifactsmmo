@@ -13,6 +13,7 @@ import artifactsmmo_cli.ai.progression.skill_grind_target as sgt
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
 from artifactsmmo_cli.ai.obtain_model.policy import LEGACY
+from artifactsmmo_cli.ai.progression.skill_grind_selection import GrindCandidate
 from artifactsmmo_cli.ai.progression.skill_grind_target import (
     _CACHES,
     CACHE_MAX_ENTRIES,
@@ -24,6 +25,7 @@ from artifactsmmo_cli.ai.progression.skill_grind_target import (
     has_grind_target,
     is_obtainable,
     objective_gain,
+    semantic_order,
     skill_grind_target,
 )
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -901,6 +903,42 @@ def test_only_the_tied_top_class_pays_a_fight_walk(
     monkeypatch.setattr(sgt, "drop_work", counting)
     assert skill_grind_target("gearcrafting", state, gd, ctx=TIMED_NO_PROFILE_CONTEXT)
     assert len(calls) == walks, calls
+
+
+def _rung(code: str, steps: int, *, obtainable: bool = True) -> GrindCandidate:
+    return GrindCandidate(code=code, craft_skill="weaponcrafting", craft_level=1,
+                          acquire_steps=steps, obtainable=obtainable, wanted=False,
+                          xp_positive=True)
+
+
+def test_a_rung_the_core_cannot_choose_does_not_hide_a_tie() -> None:
+    """The tie is looked for only among the rungs the core can choose: an
+    unobtainable rung that would beat both twins is not the top class, so the
+    twins still tie at the top and meet the core by gain, the knife's `L*`
+    piece first though the dagger is listed first."""
+    dagger, knife = _rung("copper_dagger", 10), _rung("copper_knife", 10)
+    walled = _rung("iron_dagger", 1, obtainable=False)
+    order = semantic_order("weaponcrafting", 1, [walled, dagger, knife],
+                           make_state(skills={"weaponcrafting": 1}), _twin_rungs(),
+                           _two_pieces(Fraction(1), Fraction(3)))
+    assert order == [knife, dagger, walled]
+
+
+def test_the_fight_count_walks_the_rung_as_made(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rung's fight count is the work of MAKING it, as its price is
+    (`produce`, the rung itself): the walk is never asked to buy, withdraw or
+    farm a copy of the rung."""
+    asked: list[frozenset[str]] = []
+    real = sgt.drop_work
+
+    def spy(item: str, *args: object, **kwargs: object) -> object:
+        asked.append(kwargs["produce"])  # type: ignore[arg-type]
+        return real(item, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(sgt, "drop_work", spy)
+    chain_fight_actions("copper_dagger", make_state(skills={"weaponcrafting": 1}), _gd(),
+                        TIMED_NO_PROFILE_CONTEXT)
+    assert asked == [frozenset({"copper_dagger"})]
 
 
 def test_the_memo_key_notices_changed_fight_and_action_seconds() -> None:

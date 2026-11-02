@@ -21,7 +21,8 @@ from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, ChosenLoado
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learned_drops import LearnedDrops
-from artifactsmmo_cli.ai.region_edges import reachable_regions_now
+from artifactsmmo_cli.ai.obtain_model.vendor_reach import vendor_tiles
+from artifactsmmo_cli.ai.region_edges import content_reached, reachable_regions_now
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.audit import craft_completeness
 from artifactsmmo_cli.audit.craft_census import run_cell
@@ -1049,6 +1050,14 @@ def test_each_leaf_is_behind_a_crossing_only_when_no_source_is_reached(monkeypat
     monkeypatch.setattr(GameData, "npc_purchases",
                         lambda self, item: [("no_such_npc", 10, "gold")] if item == "dryad_hair" else [])
     assert gd.npc_region("no_such_npc") in reach
+    assert behind("dryad_hair", state, gd, reach) is True
+    # An event vendor whose event is not live is absent, though its catalogue
+    # spawn stands where the walk reaches: no source at all.
+    monkeypatch.setattr(GameData, "npc_purchases",
+                        lambda self, item: [("gemstone_merchant", 10, "gold")]
+                        if item == "dryad_hair" else [])
+    assert not _present_vendor("gemstone_merchant", gd)
+    assert content_reached("gemstone_merchant", vendor_tiles("gemstone_merchant", gd), gd, reach)
     assert behind("dryad_hair", state, gd, reach) is True
     # A vendor whose currency the planner cannot acquire is no source at all.
     monkeypatch.setattr(GameData, "npc_purchases",

@@ -213,6 +213,37 @@ def test_the_gold_leg_counts_the_pocket() -> None:
     assert cache.batch_satisfied(cache_holdings(replace(state, gold=state.gold + 4)), world) is True
 
 
+GE_CELL = "l12_ge_book_adequate"
+"""A level-12 character in the busy book, where `copper_dagger` has a 19-gold
+standing sell order and a gather-and-craft chain."""
+
+
+def test_the_walk_ranks_its_routes_on_the_pocket_the_reserve_lets_it_spend() -> None:
+    """A gold-fighting walk counts only the pocket its buy may spend
+    (`spendable_pocket`), in the route ranking as in the bag: from 110 gold
+    and an empty bank, the reserve's 100-gold floor leaves 10, so the
+    dagger's 19-gold fill would fight for gold the reserve keeps (every
+    fight losing in this record), and the walk crafts the dagger instead of
+    fighting toward the fill."""
+    world = shared_world(BUNDLE, with_ge_orders=True)
+    state = replace(scenario_state(SCENARIOS[GE_CELL], world), gold=110, bank_gold=0,
+                    bank_items={})
+    assert spendable_pocket(state, world, frozenset({"copper_dagger"})) == 10
+    player = GamePlayer(character=state.character, history=None)
+    player._offline_timing = committed_timing()
+    player._learned_drops = LearnedDrops.empty()
+    player.seed_offline(state, world)
+    lossy = replace(TIMED_NO_PROFILE_CONTEXT,
+                    fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+    ctx = attached(state, world, lossy, None)
+    goal = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1}, fight_gold=True,
+                               now=cycle_now())
+    plan = decompose(goal, state, world, player._build_actions(), ctx)
+    assert plan is not None
+    assert [repr(a) for a in plan][-1] == "Craft(copper_dagger×1)"
+    assert not any(isinstance(a, FightAction) for a in plan)
+
+
 def test_each_gold_fight_cycle_re_decides() -> None:
     """Ruling T15b: one fight per cycle. Two consecutive cycles each decide
     afresh: the first plans one win, the win's gold ends its plan, and the

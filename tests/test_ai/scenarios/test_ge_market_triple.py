@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pytest
 
+from artifactsmmo_cli.ai.acquisition_cost_core import UNOBTAINABLE_PER_UNIT
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.craft_plan_gen import decompose
 from artifactsmmo_cli.ai.game_data import GameData
@@ -45,7 +46,10 @@ from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.progression.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.progression.prerequisite_graph import prerequisites
-from artifactsmmo_cli.ai.progression.skill_grind_target import skill_grind_target
+from artifactsmmo_cli.ai.progression.skill_grind_target import (
+    build_selectable_grind_candidates,
+    skill_grind_target,
+)
 from artifactsmmo_cli.ai.progression.strategy import actionable_step
 from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -179,6 +183,27 @@ def test_cell4_grind_crafts_the_rung_past_the_standing_order(busy: GameData) -> 
     assert SourceKind.GE_FILL in _kinds(RUNG, state, busy)
     plan = _grind(CELL4_BUSY_GRIND, busy)
     assert not [leg for leg in plan if "Ge" in leg], plan
+
+
+def test_the_book_prices_no_grind_rung(busy: GameData, quiet: GameData) -> None:
+    """The grind prices a rung as its descent serves it (rulings T12j, T12k),
+    and the descent fills no GE order, so the book moves no rung's price, a
+    walled one included. The combat-blocked l10 character's `fire_staff` takes
+    two red slimeballs off a fight it cannot win: priced through that fight in
+    either book, not through the busy book's slimeball order, which the
+    character's empty purse could not pay and which would hide the fight."""
+    name = "l10_gearcrafting_gap_combat_blocked"
+    assert busy.ge_best_sell_order("red_slimeball") is not None
+
+    def prices(game_data: GameData) -> dict[str, tuple[int, bool]]:
+        state = scenario_state(SCENARIOS[name], game_data)
+        return {c.code: (c.acquire_steps, c.obtainable) for c in build_selectable_grind_candidates(
+            "weaponcrafting", state, game_data, TIMED_NO_PROFILE_CONTEXT)}
+
+    in_busy = prices(busy)
+    assert in_busy == prices(quiet)
+    steps, obtainable = in_busy["fire_staff"]
+    assert not obtainable and steps < UNOBTAINABLE_PER_UNIT
 
 
 def test_the_busy_book_leafs_the_plain_descent_at_the_rung(

@@ -273,6 +273,24 @@ def test_an_event_vendor_is_gated_on_the_tile_its_event_stands_on(
     assert not gate.satisfied and BOAT_DOOR in gate.doors
 
 
+def test_an_event_vendor_stands_on_every_tile_its_event_reads(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """An event vendor stands on every tile its live event reads, not only the
+    first one its actions walk to: read on the island and on a mainland tile,
+    it is reached through the mainland tile though the first read is past the
+    boat."""
+    state, world = _seeded("l48_band_adequate", gold=0)
+    event = world.npc_event_code("gemstone_merchant")
+    assert event is not None
+    monkeypatch.setattr(world.world, "active_event_maps",
+                        {event: [ISLAND_TILE, (1, 1, "overworld")]})
+    monkeypatch.setattr(world.world, "active_event_codes", {event})
+    assert world.npc_location("gemstone_merchant") == ISLAND_TILE[:2]
+    assert vendor_tiles("gemstone_merchant", world) == [ISLAND_TILE[:2], (1, 1)]
+    reach = reachable_regions_now(state, world)
+    assert vendor_gate("gemstone_merchant", world, reach, state).satisfied
+
+
 def test_an_event_vendor_with_no_spawn_has_no_tile(monkeypatch: pytest.MonkeyPatch) -> None:
     """An event NPC with no located spawn and no read stands nowhere."""
     _state, world = _seeded("l48_band_adequate")
@@ -388,6 +406,21 @@ def test_a_permanent_vendor_whose_tile_an_event_takes_stands_nowhere(
     assert (gate.satisfied, gate.doors) == (False, ())
 
 
+def test_the_census_vendor_verdict_hides_a_vendor_whose_tile_an_event_takes(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The craft census asks the vendor's tiles, not its catalogue region: a
+    live event standing on the tailor's tile hides the tailor, so its hard
+    leather (sold for cowhide) is no reached source though the tailor's region
+    is reached."""
+    state, world = _seeded("l48_band_adequate", gold=0)
+    reach = reachable_regions_now(state, world)
+    x, y = world.npc_location("tailor") or (0, 0)
+    monkeypatch.setattr(world.world, "active_event_maps", {"takeover": [(x, y, "overworld")]})
+    monkeypatch.setattr(world.world, "active_event_codes", {"takeover"})
+    assert world.npc_region("tailor") in reach
+    assert craft_completeness._vendor_sources("hard_leather", state, world, reach) == [False]
+
+
 # --- Task 8a I-4: the selection and emission sites ask the same gate ---------
 
 def _event_read(world: GameData, monkeypatch: pytest.MonkeyPatch, npc: str,
@@ -426,6 +459,22 @@ def test_an_island_vendor_raises_no_currency_demand_until_reached(gold: int) -> 
     else:
         assert leaf.item_route is None
         assert buys == []
+
+
+@pytest.mark.parametrize("gold", [0, 200_000])
+def test_an_island_vendor_s_coin_is_withdrawn_only_once_the_vendor_is_reached(gold: int) -> None:
+    """The coin demand the gather goal adds for a must-buy item comes only from
+    a vendor `vendor_reached` admits: with the boat unpaid the banked
+    sandwhisper coins are no closure material, so a pool withdraw of them is
+    not admitted; with the fee in hand it is."""
+    state, world = _seeded("l48_band_adequate", gold=gold)
+    state = replace(state, bank_items={**(state.bank_items or {}), "sandwhisper_coin": 300})
+    actions = build_actions(world, state, None, True, 0, LearnedDrops.empty(), now=cycle_now())
+    pool_withdraw = WithdrawItemAction(code="sandwhisper_coin", quantity=300,
+                                       bank_location=world.bank_location())
+    admitted = GatherMaterialsGoal(RUNE, {RUNE: 1}, now=cycle_now()).relevant_actions(
+        [*actions, pool_withdraw], state, world)
+    assert (pool_withdraw in admitted) is (gold > 0)
 
 
 def test_an_unreached_intermediate_vendor_is_not_emitted(monkeypatch: pytest.MonkeyPatch) -> None:

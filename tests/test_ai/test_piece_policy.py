@@ -72,6 +72,7 @@ from artifactsmmo_cli.ai.scenario import (
     derived_scenario_state,
     scenario_state,
 )
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.skill_grind_cost_core import skill_grind_cycles
 from artifactsmmo_cli.ai.source_kind import SourceKind
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -525,6 +526,59 @@ def test_held_gold_costs_the_time_to_earn_it_again() -> None:
     assert route_price(AMULET, short, busy, ctx, store, policy=PIECE_POLICY) == 46
     assert cheapest_route(AMULET.code, 1, short, busy, ctx, store, policy=LEGACY,
                           pocket=short.gold) == (67, SourceKind.CRAFT)
+
+
+def _lossy(world: GameData) -> SelectionContext:
+    """The bare context with a fight record that loses almost every fight: the
+    closure's gold fights are surcharged far above the gold rate `m*` earns in
+    its `L*`, so a held gold piece is cheaper to spend than one to fight for."""
+    return replace(TIMED_NO_PROFILE_CONTEXT,
+                   fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+
+
+def test_the_route_choice_spends_the_pocket_s_gold_at_its_earning_time() -> None:
+    """S-046 replaced ruling T2k's free credit, but the pocket's gold is still
+    HELD in the route choice, charged at the time to earn it again, not priced
+    as gold the closure's fights would have to earn fresh: with every fight
+    losing, a 19-gold fill of `copper_dagger` from a 5000-gold pocket is the
+    route, and from an empty one the craft is."""
+    busy = shared_world(BUNDLE, with_ge_orders=True)
+    state = replace(scenario_state(SCENARIOS[GE_CELL], busy), gold=5000, bank_gold=0,
+                    bank_items={})
+    ctx = attached(state, busy, _lossy(busy), None)
+
+    def price(pocket: int) -> tuple[int, SourceKind | None]:
+        return cheapest_route("copper_dagger", 1, replace(state, gold=pocket), busy, ctx, None,
+                              policy=PIECE_POLICY, pocket=pocket)
+
+    held, route = price(5000)
+    assert route is SourceKind.GE_FILL
+    empty, empty_route = price(0)
+    assert empty_route is SourceKind.CRAFT
+    assert held < empty
+
+
+def test_a_piece_price_fights_for_the_gold_its_buy_must_keep() -> None:
+    """Ruling T3e m3: a piece's price credits held gold only above the reserve
+    its buy keeps (`spendable_pocket`). The rune from a 20,050-gold pocket and
+    an empty bank keeps the 100-gold safety floor, so 50 of its 20,000 gold are
+    fought for at the closure's surcharged fights, not spent from the pocket at
+    `m*`'s rate."""
+    world = _world(RUNE_CELL)
+    state = replace(scenario_state(SCENARIOS[RUNE_CELL], world), gold=20_050, bank_gold=0,
+                    bank_items={})
+    spendable = progression_reserve.spendable_pocket(state, world, frozenset({"lifesteal_rune"}))
+    assert spendable == 19_950
+    ctx = attached(state, world, _lossy(world), None)
+    objective = ctx.gear_objective
+    assert objective is not None
+    piece = next(p for p in objective.missing if p.code == "lifesteal_rune")
+    kept, _route = cheapest_route("lifesteal_rune", 1, state, world, ctx, None,
+                                  policy=PIECE_POLICY, pocket=spendable)
+    whole, _route = cheapest_route("lifesteal_rune", 1, state, world, ctx, None,
+                                   policy=PIECE_POLICY, pocket=state.gold)
+    assert whole < kept
+    assert piece.price == kept + 1
 
 
 def test_an_unpriced_climb_is_served_as_its_craft() -> None:

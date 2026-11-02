@@ -508,6 +508,34 @@ def test_the_objective_prices_a_piece_at_its_own_m_star_s_rate() -> None:
     assert piece.price == price + 1
 
 
+def test_a_piece_s_spent_gold_is_charged_at_its_candidate_s_rate_when_that_is_cheaper() -> None:
+    """Where `m*`'s gold rate beats every gold fight the closure offers (here a
+    fight record that loses almost every fight surcharges the closure's
+    fights), the rune's banked gold is charged at the candidate's own rate,
+    which only a context carrying that candidate's provisional objective can
+    read: the piece price is the price under the objective's `m*`, plus the
+    equip."""
+    world = _world()
+    state = replace(_state(world), bank_gold=50_000, bank_items={})
+    lossy = replace(TIMED_NO_PROFILE_CONTEXT,
+                    fight_records=tuple((code, 100, 1) for code in world.monsters.levels))
+    ctx = attached(state, world, lossy, None)
+    objective = ctx.gear_objective
+    assert objective is not None
+    gold = acquisition_options(RUNE.code, state, world, ctx, None, policy=PIECE_POLICY)["gold"]
+    fight = min(Fraction(r.actions_per_application) / r.yield_per
+                for r in gold if r.kind == SourceKind.GOLD_DROP.value)
+    assert gold_spend_actions(state, world, ctx) < fight
+    assert gold_spend_actions(state, world, lossy) == UNOBTAINABLE_PER_UNIT
+    piece = next(p for p in objective.missing if p.code == RUNE.code)
+    price, _route = cheapest_route(RUNE.code, 1, state, world, ctx, None, policy=PIECE_POLICY,
+                                   pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    bare, _route = cheapest_route(RUNE.code, 1, state, world, lossy, None, policy=PIECE_POLICY,
+                                  pocket=spendable_pocket(state, world, frozenset({RUNE.code})))
+    assert price < bare
+    assert piece.price == price + 1
+
+
 # --------------------------------------------------------------------------
 # Round 3: an upgrade goal admits a GE fill only when its PRICE took it.
 # --------------------------------------------------------------------------
