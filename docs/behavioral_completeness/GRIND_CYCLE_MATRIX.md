@@ -82,7 +82,7 @@
 | l40_band_entry | cooking | 35 | earns | Gather(bass_spot×1) → Craft(cooked_bass×1) |
 | l40_band_entry | fishing | 35 | earns | Gather(bass_spot×1) |
 | l40_band_entry | gearcrafting | 35 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×80) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×8) → Fight(wolf) → Fight(skeleton) → Fight(wolf) → Gather(ash_tree×70) → Craft(ash_plank×7) → Craft(skeleton_pants×1) → Fight(owlbear) → Fight(vampire) → Craft(royal_skeleton_pants×1) |
-| l40_band_entry | jewelrycrafting | 25 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(green_slime) → Fight(flying_snake) → Craft(air_ring×1) |
+| l40_band_entry | jewelrycrafting | 25 | earns | Gather(iron_rocks×50) → Craft(iron_bar×5) → Fight(yellow_slime) → Fight(flying_snake) → Craft(earth_ring×1) |
 | l40_band_entry | mining | 38 | earns | Transition((5,-3,overworld)->(5,-3,underground)) → Gather(gold_rocks×10) → Transition((5,-3,underground)->(5,-3,overworld)) → Craft(gold_bar×1) |
 | l40_band_entry | weaponcrafting | 35 | declined |  |
 | l40_band_entry | woodcutting | 38 | earns | Gather(ash_tree->sap×1) |
@@ -119,7 +119,7 @@
 | l48_event_active | weaponcrafting | 42 | declined |  |
 | l48_event_active | woodcutting | 46 | earns | Gather(maple_tree->maple_sap×1) |
 | l10_bag_pursuit | alchemy | 5 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
-| l10_bag_pursuit | cooking | 1 | earns | Fight(chicken) → Craft(cooked_chicken×1) |
+| l10_bag_pursuit | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l10_bag_pursuit | fishing | 1 | earns | Gather(gudgeon_spot×1) |
 | l10_bag_pursuit | gearcrafting | 10 | earns | Withdraw(cowhide×5) → Fight(yellow_slime) → Craft(leather_hat×1) |
 | l10_bag_pursuit | jewelrycrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_ring×1) |
@@ -127,7 +127,7 @@
 | l10_bag_pursuit | weaponcrafting | 10 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Withdraw(feather×2) → Craft(iron_sword×1) |
 | l10_bag_pursuit | woodcutting | 10 | earns | Gather(spruce_tree×10) → Craft(spruce_plank×1) |
 | l12_bag_pursuit | alchemy | 5 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
-| l12_bag_pursuit | cooking | 1 | earns | Fight(chicken) → Craft(cooked_chicken×1) |
+| l12_bag_pursuit | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l12_bag_pursuit | fishing | 1 | earns | Gather(gudgeon_spot×1) |
 | l12_bag_pursuit | gearcrafting | 10 | earns | Withdraw(cowhide×5) → Fight(yellow_slime) → Craft(leather_hat×1) |
 | l12_bag_pursuit | jewelrycrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_ring×1) |
@@ -183,9 +183,9 @@
 | l13_drop_recipe_grind | weaponcrafting | 5 | earns | Recycle(copper_boots×1) → Withdraw(copper_helmet×1) → Recycle(copper_helmet×2) → Craft(copper_axe×1) |
 | l13_drop_recipe_grind | woodcutting | 10 | earns | OptimizeLoadout(gather:woodcutting) → Gather(spruce_tree×10) → Craft(spruce_plank×1) |
 | l10_gearcrafting_gap | alchemy | 1 | earns | Gather(sunflower_field×1) |
-| l10_gearcrafting_gap | cooking | 1 | earns | Fight(chicken) → Craft(cooked_chicken×1) |
+| l10_gearcrafting_gap | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l10_gearcrafting_gap | fishing | 1 | earns | Gather(gudgeon_spot×1) |
-| l10_gearcrafting_gap | gearcrafting | 5 | earns | Gather(copper_rocks×50) → Craft(copper_bar×5) → Fight(chicken) → Craft(copper_legs_armor×1) |
+| l10_gearcrafting_gap | gearcrafting | 5 | earns | Fight(chicken) → Gather(ash_tree×20) → Craft(ash_plank×2) → Craft(feather_coat×1) |
 | l10_gearcrafting_gap | jewelrycrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_ring×1) |
 | l10_gearcrafting_gap | mining | 10 | earns | Gather(iron_rocks×10) → Craft(iron_bar×1) |
 | l10_gearcrafting_gap | weaponcrafting | 5 | earns | Fight(yellow_slime) → Gather(copper_rocks×50) → Craft(copper_bar×5) → Craft(sticky_sword×1) |
@@ -193,7 +193,7 @@
 | l12_gearcrafting_gap | alchemy | 5 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
 | l12_gearcrafting_gap | cooking | 5 | earns | Fight(cow) → Craft(cooked_beef×1) |
 | l12_gearcrafting_gap | fishing | 5 | earns | Gather(gudgeon_spot×1) |
-| l12_gearcrafting_gap | gearcrafting | 5 | earns | Gather(copper_rocks×50) → Craft(copper_bar×5) → Fight(chicken) → Craft(copper_legs_armor×1) |
+| l12_gearcrafting_gap | gearcrafting | 5 | earns | Fight(chicken) → Gather(ash_tree×20) → Craft(ash_plank×2) → Craft(feather_coat×1) |
 | l12_gearcrafting_gap | jewelrycrafting | 5 | earns | Fight(chicken) → Fight(red_slime) → Craft(life_amulet×1) |
 | l12_gearcrafting_gap | mining | 10 | earns | Gather(iron_rocks×10) → Craft(iron_bar×1) |
 | l12_gearcrafting_gap | weaponcrafting | 5 | earns | Fight(yellow_slime) → Gather(copper_rocks×50) → Craft(copper_bar×5) → Craft(sticky_sword×1) |
@@ -281,7 +281,7 @@
 | l12_ge_book_grind | alchemy | 5 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
 | l12_ge_book_grind | cooking | 5 | earns | Fight(cow) → Craft(cooked_beef×1) |
 | l12_ge_book_grind | fishing | 5 | earns | Gather(gudgeon_spot×1) |
-| l12_ge_book_grind | gearcrafting | 9 | earns | Gather(copper_rocks×50) → Craft(copper_bar×5) → Fight(chicken) → Craft(copper_legs_armor×1) |
+| l12_ge_book_grind | gearcrafting | 9 | earns | Fight(chicken) → Gather(ash_tree×20) → Craft(ash_plank×2) → Craft(feather_coat×1) |
 | l12_ge_book_grind | jewelrycrafting | 5 | earns | Fight(chicken) → Fight(red_slime) → Craft(life_amulet×1) |
 | l12_ge_book_grind | mining | 10 | earns | Gather(iron_rocks×2) → Craft(iron_bar×1) |
 | l12_ge_book_grind | weaponcrafting | 10 | earns | Withdraw(iron_bar×3) → Gather(iron_rocks×22) → Craft(iron_bar×3) → Fight(chicken) → Craft(iron_sword×1) |
@@ -289,7 +289,7 @@
 | l12_quiet_book_grind | alchemy | 5 | earns | Gather(sunflower_field×3) → Craft(small_health_potion×1) |
 | l12_quiet_book_grind | cooking | 5 | earns | Fight(cow) → Craft(cooked_beef×1) |
 | l12_quiet_book_grind | fishing | 5 | earns | Gather(gudgeon_spot×1) |
-| l12_quiet_book_grind | gearcrafting | 9 | earns | Gather(copper_rocks×50) → Craft(copper_bar×5) → Fight(chicken) → Craft(copper_legs_armor×1) |
+| l12_quiet_book_grind | gearcrafting | 9 | earns | Fight(chicken) → Gather(ash_tree×20) → Craft(ash_plank×2) → Craft(feather_coat×1) |
 | l12_quiet_book_grind | jewelrycrafting | 5 | earns | Fight(chicken) → Fight(red_slime) → Craft(life_amulet×1) |
 | l12_quiet_book_grind | mining | 10 | earns | Gather(iron_rocks×2) → Craft(iron_bar×1) |
 | l12_quiet_book_grind | weaponcrafting | 10 | earns | Withdraw(iron_bar×3) → Gather(iron_rocks×22) → Craft(iron_bar×3) → Fight(chicken) → Craft(iron_sword×1) |
@@ -303,7 +303,7 @@
 | l12_ge_book_adequate | weaponcrafting | 10 | earns | Withdraw(iron_bar×3) → Gather(iron_rocks×22) → Craft(iron_bar×3) → Fight(chicken) → Craft(iron_sword×1) |
 | l12_ge_book_adequate | woodcutting | 10 | earns | Gather(spruce_tree×10) → Craft(spruce_plank×1) |
 | l47_depth3_amulet | alchemy | 20 | earns | Gather(nettle×1) → Gather(trout_spot×1) → Craft(forest_bank_potion×1) |
-| l47_depth3_amulet | cooking | 20 | earns | Fight(pig) → Craft(cooked_porkchop×1) |
+| l47_depth3_amulet | cooking | 20 | earns | Gather(trout_spot×1) → Craft(cooked_trout×1) |
 | l47_depth3_amulet | fishing | 20 | earns | Gather(trout_spot×1) |
 | l47_depth3_amulet | gearcrafting | 40 | earns | Fight(skeleton) → Fight(wolf) → Fight(pig) → Gather(iron_rocks×12) → Gather(coal_rocks×28) → Craft(steel_bar×4) → Craft(skeleton_armor×1) → Fight(imp) → Craft(royal_skeleton_armor×1) |
 | l47_depth3_amulet | jewelrycrafting | 40 | earns | Gather(ash_tree×24) → Gather(birch_tree×36) → Craft(hardwood_plank×6) → Craft(dreadful_amulet×1) → Craft(greater_dreadful_amulet×1) |
@@ -359,7 +359,7 @@
 | l20_boost_stock | weaponcrafting | 15 | earns | Gather(iron_rocks×60) → Craft(iron_bar×6) → Fight(chicken) → Craft(iron_sword×1) |
 | l20_boost_stock | woodcutting | 20 | earns | Gather(ash_tree×4) → Gather(birch_tree×6) → Craft(hardwood_plank×1) |
 | l14_wears_its_target | alchemy | 1 | earns | Gather(sunflower_field×1) |
-| l14_wears_its_target | cooking | 1 | earns | Fight(chicken) → Craft(cooked_chicken×1) |
+| l14_wears_its_target | cooking | 1 | earns | Gather(gudgeon_spot×1) → Craft(cooked_gudgeon×1) |
 | l14_wears_its_target | fishing | 1 | earns | Gather(gudgeon_spot×1) |
 | l14_wears_its_target | gearcrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_helmet×1) |
 | l14_wears_its_target | jewelrycrafting | 1 | earns | Gather(copper_rocks×60) → Craft(copper_bar×6) → Craft(copper_ring×1) |
