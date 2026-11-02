@@ -60,7 +60,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_room, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.heal_catalog import FOOD, POTION
@@ -175,9 +175,9 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
                         ctx: SelectionContext) -> int:
     """The chosen loadout's CARRY of `code` (docs/PLAN_consumable_utility.md
     increment 5): the food its recovery eats, `chosen_loadout.food_carry` units,
-    bounded by what this bag can hold of it (`food_room` over the bag's free
-    slots and quantity, the other keeps already in it; the keep prices nothing,
-    so no stock bounds it);
+    bounded by its share of this bag's room (`food_shares`: one room for all the
+    loadout's foods, over the bag's free slots and quantity, the other keeps
+    already in it; the keep prices nothing, so no stock bounds it);
     a potion it wears, `chosen_loadout.potion_carry` less the units already worn
     (the bag holds the rest until it is equipped). Every other consumable — and
     every one when no loadout is chosen (no fight ahead) — keeps 0 in the bag.
@@ -194,11 +194,11 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
     loadout = ctx.loadout
     if loadout is None:
         return 0
-    for food, eaten in loadout.food:
+    shares = food_shares([(eaten, state.inventory.get(food, 0)) for food, eaten in loadout.food],
+                         state.inventory_slots_free, state.inventory_free)
+    for (food, eaten), share in zip(loadout.food, shares, strict=True):
         if food == code:
-            room = food_room(state.inventory.get(code, 0), state.inventory_slots_free,
-                             state.inventory_free)
-            return food_carry(eaten, room, None)
+            return food_carry(eaten, share, None)
     for potion, used in loadout.potions:
         if potion == code:
             return max(0, potion_carry(used) - equipped_potion_qty(state, code))
@@ -436,8 +436,8 @@ def carried_keep(state: WorldState, game_data: GameData, ctx: SelectionContext) 
     `bankable`), and the slots the codes it leaves fill. The fight loop's room
     for drops is the bag cap less these units and less its own consumables'
     carry, which the loop counts itself (`loop_rate`, spec 2026-10-18 §2.10);
-    its room for a food is the bag less these units and slots and the other
-    carries (`chosen_loadout.food_room`, Task 8c). A held code the catalogue
+    its room for its foods is the bag less these units and slots and the
+    potion carry (`chosen_loadout.food_shares`, Task 8c). A held code the catalogue
     does not know raises: its kind decides whether the loop already counts it."""
     total = stacks = 0
     for code, held in state.inventory.items():

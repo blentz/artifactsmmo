@@ -5,7 +5,7 @@ from artifactsmmo_cli.ai.chosen_loadout import (
     CARRY_HORIZON_FIGHTS,
     ChosenLoadout,
     food_carry,
-    food_room,
+    food_shares,
     potion_carry,
 )
 from artifactsmmo_cli.ai.consumable_floor_core import REFILL_HORIZON_FIGHTS
@@ -46,14 +46,31 @@ def test_a_food_carry_from_held_stock_is_capped_by_the_stock() -> None:
     assert food_carry(1, 90, 30) == 20
 
 
-def test_the_food_room_is_the_slot_and_quantity_model() -> None:
+def test_one_food_s_share_is_the_slot_and_quantity_model() -> None:
     """(b) is read off `inventory_room.has_room`: a held stack grows on
     quantity alone, a new stack needs a free slot, and a bag with no room for
     it keeps only the units it holds."""
-    assert food_room(10, 0, 25) == 35      # held stack, no slot free: it grows
-    assert food_room(0, 1, 25) == 25       # a new stack takes the free slot
-    assert food_room(0, 0, 25) == 0        # a new stack with no slot
-    assert food_room(10, 3, -4) == 10      # past the cap: only what is held
+    assert food_shares([(2, 10)], 0, 25) == (35,)     # held stack, no slot free: it grows
+    assert food_shares([(2, 0)], 1, 25) == (25,)      # a new stack takes the free slot
+    assert food_shares([(2, 0)], 0, 25) == (0,)       # a new stack with no slot
+    assert food_shares([(2, 10)], 3, -4) == (10,)     # past the cap: only what is held
+
+
+def test_the_foods_share_one_room_by_what_a_fight_eats() -> None:
+    """Fix round 1: one room for all the foods, shared in proportion to the
+    units one fight eats of each, so no listing order or code decides it: 3
+    and 5 a fight in 16 units take 6 and 10, in either order."""
+    assert food_shares([(3, 0), (5, 0)], 2, 16) == (6, 10)
+    assert food_shares([(5, 0), (3, 0)], 2, 16) == (10, 6)
+    assert sum(food_shares([(3, 0), (5, 0), (2, 0)], 3, 17)) <= 17
+
+
+def test_new_stacks_without_a_slot_each_take_none() -> None:
+    """Two new stacks and one free slot: which would get it is no fact the bag
+    knows, so neither does; a food whose stack is held still takes the room."""
+    assert food_shares([(3, 0), (5, 0)], 1, 16) == (0, 0)
+    assert food_shares([(3, 4), (5, 0)], 0, 12) == (16, 0)
+    assert food_shares([(0, 0)], 1, 16) == (0,)
 
 
 def test_codes() -> None:

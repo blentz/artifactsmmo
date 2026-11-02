@@ -1953,27 +1953,36 @@ def runDropFitK (args : Array Json) : Json :=
   let r := Formal.DropChance.fitK samples
   Json.mkObj [("num", Json.num r.1), ("den", Json.num r.2)]
 
-/-- The foods of a recovery row: `count` at `[4]`, then `[restore, priceTag,
+/-- The foods of a recovery row: `count` at `[6]`, then `[restore, priceTag,
 price, held, room]` each, a tag of 0 meaning no replacement. -/
 def loopFoods (n : Nat → Nat) : List Formal.LoopRate.Food :=
-  (List.range (n 4)).map (fun i =>
-    (n (5 + 5 * i), (if n (6 + 5 * i) = 0 then none else some (n (7 + 5 * i))), n (8 + 5 * i),
-     n (9 + 5 * i)))
+  (List.range (n 6)).map (fun i =>
+    (n (7 + 5 * i), (if n (8 + 5 * i) = 0 then none else some (n (9 + 5 * i))), n (10 + 5 * i),
+     n (11 + 5 * i)))
 
 /-- The cheapest recovery (`Formal.LoopRate.recovery`), scaled seconds. Args:
-`[scale, eat, maxHp, missing, count, restore_0, priceTag_0, price_0, held_0, room_0, ...]`. -/
+`[scale, eat, maxHp, missing, qty, slots, count, restore_0, priceTag_0, price_0,
+held_0, room_0, ...]`. -/
 def runLoopRecovery (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
   Json.mkObj [("recovery", Json.num (Int.ofNat
-    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) (loopFoods n) (n 3))))]
+    (Formal.LoopRate.recovery (n 0) (n 1) (n 2) (loopFoods n) (n 3) (n 4) (n 5))))]
 
 /-- What a count vector costs (`Formal.LoopRate.planCost`), scaled seconds. Args:
 the `runLoopRecovery` row, then one count per food. -/
 def runLoopPlanCost (args : Array Json) : Json :=
   let n : Nat → Nat := fun k => (intArg args k).toNat
-  let counts := (List.range (n 4)).map (fun i => n (5 + 5 * n 4 + i))
+  let counts := (List.range (n 6)).map (fun i => n (7 + 5 * n 6 + i))
   Json.mkObj [("cost", Json.num (Int.ofNat
     (Formal.LoopRate.planCost (n 0) (n 1) (n 2) (loopFoods n) counts (n 3))))]
+
+/-- The foods' shares of the one room (`Formal.LoopRate.shares`). Args:
+`[slots, qFree, count, eaten_0, bag_0, ...]`. -/
+def runLoopShares (args : Array Json) : Json :=
+  let n : Nat → Nat := fun k => (intArg args k).toNat
+  let foods := (List.range (n 2)).map (fun i => (n (3 + 2 * i), n (4 + 2 * i)))
+  Json.mkObj [("shares", Json.arr ((Formal.LoopRate.shares foods (n 0) (n 1)).map
+    (fun v => Json.num (Int.ofNat v))).toArray)]
 
 /-- The consumed price (`Formal.LoopRate.consumedPrice`), scaled seconds. Args:
 `[count, used_0, priceTag_0, price_0, held_0, ...]`. Emits `none` and `cost`. -/
@@ -3237,6 +3246,8 @@ def runOne (item : Json) : Json :=
     runLoopTrips args
   else if kind == "loop_plan_cost" then
     runLoopPlanCost args
+  else if kind == "loop_shares" then
+    runLoopShares args
   else if kind == "loop_consumed" then
     runLoopConsumed args
   else if kind == "best_loadout_pick" then

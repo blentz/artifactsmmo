@@ -8,7 +8,7 @@ import pytest
 import artifactsmmo_cli.ai.loop_rate as loop_mod
 from artifactsmmo_cli.ai.actions.cost_core import DEPOSIT_SECONDS_PER_CODE, travel_seconds
 from artifactsmmo_cli.ai.boost_selection import project_equip
-from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, food_carry, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import CARRY_HORIZON_FIGHTS, food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.combat import combat_terms, fight_max_hp
 from artifactsmmo_cli.ai.fight_odds_core import win_probability
 from artifactsmmo_cli.ai.fight_outcome_core import fight_outcome
@@ -115,7 +115,7 @@ class TestLoop:
         # Five rounds, the player first: the kill is the ninth server turn.
         fight = _TIMING.seconds(Fraction(9), 0)
         assert rate.fight_seconds == fight
-        assert rate.recovery_seconds == recovery_seconds(100 - rate.hp_end, 100, [], EAT_SECONDS)
+        assert rate.recovery_seconds == recovery_seconds(100 - rate.hp_end, 100, [], EAT_SECONDS, 0, 0)
         assert rate.xp_per_second == rate.xp_per_kill / (fight + rate.recovery_seconds)
 
     def test_a_boost_is_projected_and_one_is_consumed(self) -> None:
@@ -211,10 +211,10 @@ class TestOdds:
         consumed = consumed_seconds([(outcome.used, Fraction(7), 1)])
         assert consumed is not None and consumed > 0
         # The bag's room for the apple: its cap less the potion carry past the
-        # five worn.
+        # five worn, and its slots less the potion's stack.
         room = 200 - (potion_carry(outcome.used) - 5)
         recovery, counts = recovery_choice(max_hp - outcome.hp_end // 10_000, max_hp,
-                                           [(30, Fraction(3), 1, room)], EAT_SECONDS)
+                                           [(30, Fraction(3), 1, room)], EAT_SECONDS, room, 19)
         xp = gd.xp_per_kill("ogre", 5)
         rate = _rate(state, gd, loadout, prices=prices, food=food)
         assert rate is not None and rate.p_win == 1
@@ -275,7 +275,7 @@ class TestOdds:
         p = win_probability(endings)
         assert 0 < p < 1
         recovery = sum((e.prob * recovery_seconds(100 - (e.hp_end // 10_000 if e.win else loop_mod.LOSS_HP),
-                                                  100, [], EAT_SECONDS) for e in endings), Fraction(0))
+                                                  100, [], EAT_SECONDS, 0, 0) for e in endings), Fraction(0))
         walk = travel_seconds((0, 0), (3, 4))
         assert rate is not None
         assert rate.p_win == p
@@ -671,9 +671,9 @@ class TestFoodRoom:
         assert missing > 30
         assert rate.eaten == (("crumb", 3),)
         assert rate.recovery_seconds == recovery_seconds(missing, rate.max_hp,
-                                                         [(10, Fraction(0), 0, 3)], EAT_SECONDS)
+                                                         [(10, Fraction(0), 0, 3)], EAT_SECONDS, 3, 20)
         assert rate.recovery_seconds > recovery_seconds(missing, rate.max_hp,
-                                                        [(10, Fraction(0), 0, 99)], EAT_SECONDS)
+                                                        [(10, Fraction(0), 0, 99)], EAT_SECONDS, 99, 20)
         assert not rate.runnable
 
     def test_a_food_with_no_slot_falls_back_to_rest(self) -> None:
@@ -687,12 +687,47 @@ class TestFoodRoom:
         assert full.eaten == () and slot.eaten
         assert full.recovery_seconds > slot.recovery_seconds
 
-    def test_a_food_carried_takes_a_slot_from_the_next(self) -> None:
-        """Two held foods with no replacement, both eaten a fight, and one slot
-        free past the keep: the first food's stack takes it, so the second
-        carries nothing, and a bag of the keep plus two units keeps one unit of
-        room for the drops."""
-        state = _state(**_WINS, inventory_max=7, inventory_slots_max=2)
+    def test_one_free_slot_is_one_food_never_two(self) -> None:
+        """Fix round 1, review scenario A: one slot free past the keep and 95
+        units of room; 3 held 10-HP crumbs with no replacement and 30-HP pies
+        at 5 s. With two stacks the recovery would eat three crumbs and a pie;
+        with one it eats the pies alone (3 + 2 × 5 s), and they carry: the loop
+        never prices a crumb the bag has no stack for. (c4b909fc priced the
+        crumbs AND a pie, the pie's carry 0.)"""
+        state = _state(**_WINS, inventory_max=100, inventory_slots_max=2)
+        food = (FoodOffer("crumb", 10, None, 3), FoodOffer("pie", 30, Fraction(5), 0))
+        rate = _trip_rate(state, _trip_gd(), food=food, carried=CarriedKeep(5, 1))
+        assert rate is not None
+        missing = rate.max_hp - rate.hp_end
+        offers = [(10, None, 3, 95), (30, Fraction(5), 0, 95)]
+        assert recovery_choice(missing, rate.max_hp, offers, EAT_SECONDS, 95, 2)[1] == (3, 1)
+        assert rate.eaten == (("pie", 2),)
+        assert rate.recovery_seconds == recovery_seconds(missing, rate.max_hp, offers, EAT_SECONDS, 95, 1)
+        assert rate.runnable
+        trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
+        assert rate.xp_per_second == rate.xp_per_kill / (
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / (95 - 2 * CARRY_HORIZON_FIGHTS))
+
+    def test_five_units_of_room_eat_five_units_a_fight(self) -> None:
+        """Review scenario B: a bag of five and two 10-HP foods at 1 s. The
+        foods a fight eats fit the bag together — five units in all, every food
+        eaten carrying its fight (`food_shares`) — where c4b909fc priced six
+        a fight (five of one and one of the other) in a bag of five. The five
+        fill the bag, so the loop does not run (the named residual)."""
+        state = _state(**_WINS, inventory_max=5)
+        food = (FoodOffer("crumb", 10, Fraction(1), 0), FoodOffer("rusk", 10, Fraction(1), 0))
+        rate = _trip_rate(state, _trip_gd(), food=food)
+        assert rate is not None
+        assert sum(n for _, n in rate.eaten) == 5
+        eaten = [n for _, n in rate.eaten]
+        assert all(share >= n for share, n in zip(food_shares([(n, 0) for n in eaten], 20, 5), eaten,
+                                                  strict=True))
+        assert not rate.runnable
+
+    def test_two_foods_with_two_slots_share_the_room(self) -> None:
+        """Two held foods with no replacement, both eaten a fight, and two
+        slots free past the keep: both carry their fight."""
+        state = _state(**_WINS, inventory_max=8, inventory_slots_max=3)
         food = (FoodOffer("bread", 50, None, 1), FoodOffer("crumb", 10, None, 1))
         rate = _trip_rate(state, _trip_gd(), food=food, carried=CarriedKeep(5, 1))
         assert rate is not None
@@ -700,4 +735,4 @@ class TestFoodRoom:
         assert rate.runnable
         trip = 2 * 50 + 2 * Fraction(DEPOSIT_SECONDS_PER_CODE)
         assert rate.xp_per_second == rate.xp_per_kill / (
-            rate.fight_seconds + rate.recovery_seconds + trip * 2 / (7 - 5 - 1))
+            rate.fight_seconds + rate.recovery_seconds + trip * 2 / (8 - 5 - 2))

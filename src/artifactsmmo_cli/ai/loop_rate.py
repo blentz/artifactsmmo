@@ -58,14 +58,26 @@ renewal-reward: `p_win x xp / (fight + expected recovery + consumed + walk)`.
   (`cost_core.DEPOSIT_SECONDS_PER_CODE`) per distinct drop code. A loop with
   drops and no room for them does not run (`LoopRate.runnable` False, no XP a
   second); one with no drops makes no trip and needs no bank.
-* FOOD ROOM (Task 8c, ruling C2-food) — a food's carry is bounded by what that
-  bag can hold of it (`chosen_loadout.food_room`: the cap and the slots less
-  the keep's units and stacks, the potion carry, and the foods before it in
-  menu order) and, for a food with no replacement, by the units held
-  (`food_carry`). The recovery eats no more of a food a fight than the room
-  the keep and the potion carry leave (`loop_rate_core.recovery_choice`), so a
-  food the bag cannot carry falls back to the other foods and to Rest, priced
-  in seconds."""
+* FOOD ROOM (Task 8c, ruling C2-food; fix round 1) — the room the keep and the
+  potion carry leave (the cap and the slots less the keep's units and stacks
+  and the potion carry's) is ONE room for every food. The recovery is searched
+  jointly in it (`loop_rate_core.recovery_choice`): the deepest ending's
+  cheapest recovery in that room names the units of each food the bag is
+  allotted a fight, and every ending eats within those units, so the foods a
+  fight eats always fit the bag together, and a food the bag cannot carry falls
+  back to the other foods and to Rest, priced in seconds. The foods' carries
+  share the room in proportion to the units a fight eats of each
+  (`chosen_loadout.food_shares`), each bounded by the horizon and, with no
+  replacement, the units held (`food_carry`): every food the loop eats carries
+  at least one fight's units, so the loop never prices eating a food the bag
+  does not hold.
+* RESIDUALS (named, not modelled). A carry the room bounds below the units the
+  fights between two bank visits eat runs out mid-loop; the loop still prices
+  eating it every fight, so R is overstated there (pricing the run-out as the
+  cheaper of resting it off or a refill trip needs the cadence of the run-out
+  phase, a new model). And the trips' room for the drops is quantity alone:
+  `trip_share` reads the units left, not the slots, so a bag whose stacks the
+  keep and the food fill reads room for a new drop code (predates Task 8c)."""
 
 import math
 from collections.abc import Mapping, Sequence
@@ -77,7 +89,7 @@ from artifactsmmo_cli.ai.actions.cost_core import (
     DEPOSIT_SECONDS_PER_CODE,
     travel_seconds,
 )
-from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_room, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.combat import fight_stats
 from artifactsmmo_cli.ai.consumable_price import replacement_price_of
 from artifactsmmo_cli.ai.fight_odds_core import win_probability as odds_win
@@ -254,19 +266,24 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
                   for (_, stock), (_, n) in zip(loadout, used_units, strict=True)]
     qty_free = stats.inventory_max - carried.units - sum(potion_bag)
     slots_free = state.inventory_slots_max - carried.stacks - sum(1 for u in potion_bag if u > 0)
-    room = food_room(0, slots_free, qty_free)
-    menu = [(f.restore, f.price, f.held, room) for f in food]
+    room, slots = max(0, qty_free), max(0, slots_free)
+    hp_ends = [e.hp_end // SCALE if e.win else LOSS_HP for e in endings]
+    # The bag's allotment a fight: the deepest ending's cheapest recovery in
+    # the one room. Every ending eats within it.
+    _, allotted = recovery_choice(max(max_hp - h for h in hp_ends), max_hp,
+                                  [(f.restore, f.price, f.held, room) for f in food],
+                                  EAT_SECONDS, room, slots)
+    menu = [(f.restore, f.price, f.held, units) for f, units in zip(food, allotted, strict=True)]
     eaten_mean = [Fraction(0)] * len(food)
     recovery_mean = consumed_mean = hp_end_mean = Fraction(0)
-    for e, used in zip(endings, drunk, strict=True):
+    for e, used, hp_end in zip(endings, drunk, hp_ends, strict=True):
         # A potion with no replacement is paid on its expectation (above), so no
         # single ending prices it: only the priced ones enter, and a priced
         # drink always has a price.
         consumed = consumed_seconds([(n, prices[code], held[code]) for code, n in used
                                      if prices[code] is not None])
         assert consumed is not None
-        hp_end = e.hp_end // SCALE if e.win else LOSS_HP
-        recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS)
+        recovery, counts = recovery_choice(max_hp - hp_end, max_hp, menu, EAT_SECONDS, room, slots)
         recovery_mean += e.prob * recovery
         consumed_mean += e.prob * consumed
         hp_end_mean += e.prob * hp_end
@@ -277,13 +294,11 @@ def loop_rate(state: WorldState, game_data: GameData, monster: str,
     fight = walk_seconds(state, game_data, monster, loadout, timing)
     eaten_offers = [(f, math.ceil(k)) for f, k in zip(food, eaten_mean, strict=True) if k > 0]
     eaten = tuple((f.code, n) for f, n in eaten_offers)
-    # Each eaten food carries what the bag has left for it, in menu order; one
-    # with no replacement carries no more than is held.
-    for f, n in eaten_offers:
-        units = food_carry(n, food_room(0, slots_free, qty_free),
-                           f.held if f.price is None else None)
-        qty_free -= units
-        slots_free -= 1 if units > 0 else 0
+    # The eaten foods share the one room; one with no replacement carries no
+    # more than is held.
+    shares = food_shares([(n, 0) for _, n in eaten_offers], slots_free, qty_free)
+    qty_free -= sum(food_carry(n, share, f.held if f.price is None else None)
+                    for (f, n), share in zip(eaten_offers, shares, strict=True))
     table = game_data.monster_drops(monster)
     per_fight = drops_per_fight(p_win, [
         drops.units_per_attempt(monster, item, drop_rate, low, high, stats.prospecting)

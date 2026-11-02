@@ -574,6 +574,10 @@ open Formal.PriorityBand
 #check @Formal.LoopRate.priced_le_unpriced        -- a replacement never slows recovery
 #check @Formal.LoopRate.room_mono                 -- more bag room never slows recovery (Task 8c)
 #check @Formal.LoopRate.no_room_skips             -- a food with no room falls back to the rest (Task 8c)
+#check @Formal.LoopRate.no_slot_rests             -- no stack left for a food: Rest (Task 8c fix 1)
+#check @Formal.LoopRate.no_qty_rests              -- no room left in the bag: Rest (Task 8c fix 1)
+#check @Formal.LoopRate.shares_sum_le             -- the foods' shares fit the one room (Task 8c fix 1)
+#check @Formal.LoopRate.share_covers              -- a room holding a fight gives each food its fight
 #check @Formal.LoopRate.recovery_le_planCost      -- recovery is the minimum over feasible plans
 #check @Formal.LoopRate.eatCost_held_zero         -- nothing held: the increment-3 eat cost
 #check @Formal.LoopRate.potionCost_held_zero      -- nothing held: every drink at its price

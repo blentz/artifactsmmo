@@ -16,8 +16,9 @@ reads the same pick for the fight's bag-room verdict, so the pick is computed
 once (ruling T14d-R m4); when that recovery eats nothing — Rest
 is the cheaper recovery — nothing is stocked. The stock is the food's carry
 (`chosen_loadout.food_carry`: one recovery's units × `CARRY_HORIZON_FIGHTS`,
-bounded by the bag's room for it and, when only held units are fetched, by
-them), the bag's units counting toward it. The grind's prep (`craft_plan_gen`) and
+bounded by its share of the bag's room, one room for all the loadout's foods,
+and, when only held units are fetched, by them), the bag's units counting
+toward it. The grind's prep (`craft_plan_gen`) and
 every fight step (`strategy_driver._fight_step_prep`) build the SAME goal (the
 MAINTAIN_CONSUMABLES rung that also built it retired 2026-10-10).
 
@@ -31,7 +32,7 @@ vampire with an empty slot — 17 of 34 lost.
 
 from dataclasses import replace
 
-from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, food_room, potion_carry
+from artifactsmmo_cli.ai.chosen_loadout import ChosenLoadout, food_carry, food_shares, potion_carry
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.food_producer import may_make_food
 from artifactsmmo_cli.ai.game_data import GameData
@@ -67,14 +68,17 @@ def heal_prep_goal(state: WorldState, game_data: GameData, ctx: SelectionContext
     target (Phase 2c-2b). A food with neither is skipped for the next one."""
     model = ObtainModel(state, game_data, ctx, ctx.now)
     made = dict(loadout.made_food)
-    for code, eaten in loadout.food:
+    # The bag takes only what it has room for (a new stack needs a free
+    # slot): a carry past it plans a Withdraw the server refuses, and the
+    # step waited (live HAL 2026-10-14, Withdraw(cooked_chicken×100) into
+    # 67 units of room, 1.5 h of Wait). One room for all the foods: each
+    # carries its share (`food_shares`), so the first stocked leaves the
+    # others theirs.
+    shares = food_shares([(eaten, state.inventory.get(code, 0)) for code, eaten in loadout.food],
+                         state.inventory_slots_free, state.inventory_free)
+    for (code, eaten), room in zip(loadout.food, shares, strict=True):
         bag = state.inventory.get(code, 0)
         held = bag + (state.bank_items or {}).get(code, 0)
-        # The bag takes only what it has room for (a new stack needs a free
-        # slot): a carry past it plans a Withdraw the server refuses, and the
-        # step waited (live HAL 2026-10-14, Withdraw(cooked_chicken×100) into
-        # 67 units of room, 1.5 h of Wait).
-        room = food_room(bag, state.inventory_slots_free, state.inventory_free)
         # Spec 2026-10-13 §1/§4: units past the held ones are MADE only when
         # the food beats Rest at replacement price and this character makes
         # the fleet's food; otherwise only what is held is fetched.
