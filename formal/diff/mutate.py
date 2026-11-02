@@ -4330,8 +4330,11 @@ def _execute_parallel(units: list[_Unit], survivors: list[str]) -> None:
     lease: queue.Queue[Path] = queue.Queue()
     # Each `w{k}` stands for `src`, so `tmp` stands for the repo root: a module
     # that finds committed data beside it (`fight_seconds_model.FIGHT_LOGS`,
-    # `commands/plan.py`'s scenarios) climbs to `tmp` and must find `tests` there.
+    # `commands/plan.py`'s scenarios) climbs to `tmp` and must find `tests` there,
+    # and `scenario.BASE_STATS` climbs to `tmp` for `formal/sim`'s base stats.
+    # Both are read only: a formal/sim target runs serially, in place.
     (tmp / "tests").symlink_to(ROOT / "tests", target_is_directory=True)
+    (tmp / "formal").symlink_to(ROOT / "formal", target_is_directory=True)
     try:
         for k in range(n):
             copy_root = tmp / f"w{k}"
@@ -5190,6 +5193,12 @@ WALK_GREY_MUTATIONS = [
     ("craft_plan_gen: the directive never licenses a grey drop",
      "            grey_verdicts[item] = grey_farm_allowed(item, state, game_data)",
      "            grey_verdicts[item] = False"),
+]
+# The drop leg fights only the walk's own dropper, which the walk admitted on
+# the same grey directive, so no served plan tells this mutant apart; the
+# broken-agreement raise does. Killed by tests/test_ai/test_craft_plan_gen.py
+# (test_a_walked_grey_dropper_the_directive_refuses_is_a_named_defect).
+DROP_LEG_GREY_MUTATIONS = [
     ("craft_plan_gen: the drop leg fights any grey dropper",
      "                                  allow_grey=grey_ok(step.item))",
      "                                  allow_grey=True)"),
@@ -14951,6 +14960,8 @@ def _collect_all_groups() -> None:
               "tests/test_ai/test_grind_heal_prep.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, WALK_GREY_MUTATIONS,
               "tests/test_ai/test_grey_farm.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, DROP_LEG_GREY_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, UPGRADE_GREY_EXEMPT_MUTATIONS,
               "tests/test_ai/scenarios/test_slot_coverage.py", survivors)
     run_group(OBTAIN_MODEL_POLICY_SRC, WALK_GREY_POLICY_MUTATIONS,

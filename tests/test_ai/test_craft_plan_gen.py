@@ -1024,6 +1024,18 @@ class TestDropLeafFightLeg:
         assert (vetoed.value.item, vetoed.value.monster) == ("feather", "chicken")
         assert self._drop_leg(state, _gd_drop_leaf(), _drop_leaf_actions()[:1]) is None
 
+    def test_a_walked_grey_dropper_the_directive_refuses_is_a_named_defect(self):
+        """At L12 the chicken is grey. The leg asks the oracle with the step's
+        own grey directive (`grey_ok(step.item)`, here False), so the oracle
+        refuses the grey dropper the walk served and the step raises by name;
+        a leg that let any grey dropper through would fight it instead."""
+        state = _fighter_state(level=12)
+        gd = _gd_drop_leaf()
+        assert gd.xp_per_kill("chicken", state.level) <= 0
+        with pytest.raises(UnservableDropRouteError) as vetoed:
+            self._drop_leg(state, gd, _drop_leaf_actions())
+        assert (vetoed.value.item, vetoed.value.monster) == ("feather", "chicken")
+
     def test_unwinnable_dropper_returns_none(self):
         """A dropper exists but is_winnable rejects it → relevant_actions
         emits no Fight → the generator falls back to A* honestly (the
