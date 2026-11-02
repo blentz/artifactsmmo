@@ -38,9 +38,9 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.decisions.root import resolve_root
 from artifactsmmo_cli.ai.gear_objective import _GEAR_SLOTS, gear_objective
-from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.progression.meta_goal import ReachCharLevel, no_decline
 from artifactsmmo_cli.ai.progression.objective import CharacterObjective
+from artifactsmmo_cli.ai.scenario import SCENARIOS, scenario_state
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.test_gear_objective_arming_diff import BUNDLE
 from tests.test_ai.fixtures import TIMED_NO_PROFILE_CONTEXT

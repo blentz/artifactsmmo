@@ -22,7 +22,6 @@ from enum import Enum
 from artifactsmmo_cli.ai.fleet_work import supply_due, turn_in_due
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.progression.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -35,6 +34,7 @@ from artifactsmmo_cli.ai.progression.means import (
     MeansKind,
 )
 from artifactsmmo_cli.ai.progression.means import _fires as _means_fires
+from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
